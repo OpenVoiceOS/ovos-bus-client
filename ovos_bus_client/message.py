@@ -10,8 +10,21 @@ except ImportError:
         return text
 
 
-class Message(_MycroftMessage):
+class _MessageMeta(type):
+    """ To override isinstance checks we need to use a metaclass """
+    def __instancecheck__(self, instance):
+        return isinstance(instance, _MycroftMessage)
+
+
+class Message(_MycroftMessage, metaclass=_MessageMeta):
     """Mycroft specific Message class."""
+
+    def __eq__(self, other):
+        if not isinstance(other, _MycroftMessage):
+            return False
+        return other.msg_type == self.msg_type and \
+               other.data == self.data and \
+               other.context == self.context
 
     def utterance_remainder(self):
         """
@@ -33,3 +46,14 @@ class Message(_MycroftMessage):
                 # Substitute only whole words matching the token
                 utt = re.sub(r'\b' + token.get("key", "") + r"\b", "", utt)
         return normalize(utt)
+
+
+if __name__ == "__main__":
+    m1 = _MycroftMessage("")
+    m2 = Message("")
+    print(m1 == m2)
+    print(m2 == m1)
+    print(isinstance(m1, _MycroftMessage))
+    print(isinstance(m1, Message))
+    print(isinstance(m2, _MycroftMessage))
+    print(isinstance(m2, Message))
