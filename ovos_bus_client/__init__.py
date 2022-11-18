@@ -11,10 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .client.client import MessageBusClient
-from .message import Message
-from .send_func import send
-from .conf import client_from_config
+from ovos_bus_client.client.client import MessageBusClient
+from ovos_bus_client.message import Message
+from ovos_bus_client.send_func import send
+from ovos_bus_client.session import Session, SessionManager, UtteranceState
+from ovos_bus_client.conf import client_from_config
 
 """
 Mycroft Messagebus Client.

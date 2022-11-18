@@ -16,7 +16,7 @@ def required(requirements_file):
 
 setup(
     name='ovos-bus-client',
-    version='0.0.1',
+    version='0.0.2',
     packages=['ovos_bus_client',
               'ovos_bus_client.client',
               'ovos_bus_client.util'],

@@ -2,7 +2,7 @@ from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.util import create_echo_function
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
-
+from ovos_bus_client.conf import load_message_bus_config
 from mycroft_bus_client.client.client import MessageBusClient as _MycroftBusClient, MessageBusClientConf
 from ovos_bus_client.session import Session, SessionManager
 
