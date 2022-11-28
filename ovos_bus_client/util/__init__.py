@@ -15,6 +15,22 @@
 """
 Tools and constructs that are useful together with the messagebus.
 """
-from mycroft_bus_client.util import *
+from mycroft_bus_client.util import EventScheduler, create_echo_function
+from ovos_bus_client.message import dig_for_message
+from ovos_bus_client.session import SessionManager
 
-__all__ = [EventScheduler, create_echo_function]
+
+def get_message_lang(message=None):
+    message = message or dig_for_message()
+    if not message:
+        return None
+    # old style lang param
+    lang = message.data.get("lang") or message.context.get("lang")
+
+    # new style session lang
+    if not lang and "session_id" in message.context or "session" in message.context:
+        sess = SessionManager.get(message)
+        lang = sess.lang
+
+    return lang
+

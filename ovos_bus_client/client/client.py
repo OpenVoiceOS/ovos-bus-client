@@ -26,7 +26,9 @@ class MessageBusClient(_MycroftBusClient):
             message (Message): Message to send
         """
         if "session" not in message.context:
-            message.context["session"] = SessionManager.get(message)
+            sess = SessionManager.get(message)
+            message.context["session"] = sess
+            sess.update_history(message)
         return super().emit(message)
 
 

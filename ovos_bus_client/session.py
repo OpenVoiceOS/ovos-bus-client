@@ -6,6 +6,7 @@ from uuid import uuid4
 from ovos_bus_client.message import dig_for_message
 from ovos_utils.log import LOG
 from ovos_config.config import Configuration
+from ovos_config.locale import get_default_lang
 
 
 class UtteranceState(str, enum.Enum):
@@ -19,8 +20,9 @@ class Session:
     """
 
     def __init__(self, session_id=None, expiration_seconds=None, active_skills=None, history=None,
-                 max_time=5, max_messages=5, utterance_states=None):
+                 max_time=5, max_messages=5, utterance_states=None, lang=None):
         self.session_id = session_id or str(uuid4())
+        self.lang = lang or get_default_lang()
         self.active_skills = active_skills or []  # [skill_id , timestamp]
         self.history = history or []  # [Message , timestamp]
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
@@ -99,7 +101,8 @@ class Session:
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
-            "history": self.history
+            "history": self.history,
+            "lang": self.lang
         }
 
     def update_history(self, message=None):
@@ -116,17 +119,21 @@ class Session:
         max_time = data.get("max_time") or 5
         max_messages = data.get("max_messages") or 5
         states = data.get("utterance_states") or {}
+        lang = data.get("lang")
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
                        history=history,
                        max_time=max_time,
+                       lang=lang,
                        max_messages=max_messages)
 
     @staticmethod
     def from_message(message=None):
         message = message or dig_for_message()
         if message:
+            lang = message.context.get("lang") or \
+                   message.data.get("lang")
             sid = None
             if "session_id" in message.context:
                 sid = message.context["session_id"]
@@ -134,11 +141,20 @@ class Session:
                 sess = message.context["session"]
                 if sid and "session_id" not in sess:
                     sess["session_id"] = sid
-                return Session.from_dict(sess)
+                if "lang" not in sess:
+                    sess["lang"] = lang
+                sess = Session.from_dict(sess)
             elif sid:
-                return SessionManager.sessions.get(sid) or Session(sid)
-        # new session
-        return Session()
+                sess = SessionManager.sessions.get(sid) or \
+                       Session(sid)
+                if lang:
+                    sess.lang = lang
+            else:
+                sess = Session(lang=lang)
+        else:
+            # new session
+            sess = Session()
+        return sess
 
 
 class SessionManager:

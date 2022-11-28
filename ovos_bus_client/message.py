@@ -19,6 +19,9 @@ class _MessageMeta(type):
 class Message(_MycroftMessage, metaclass=_MessageMeta):
     """Mycroft specific Message class."""
 
+    def __instancecheck__(self, instance):
+        return isinstance(instance, _MycroftMessage)
+
     def __eq__(self, other):
         if not isinstance(other, _MycroftMessage):
             return False
@@ -26,6 +29,8 @@ class Message(_MycroftMessage, metaclass=_MessageMeta):
                other.data == self.data and \
                other.context == self.context
 
+
+class IntentMessage(Message):
     def utterance_remainder(self):
         """
         DEPRECATED - mycroft-core hack, used by some skills in the wild
