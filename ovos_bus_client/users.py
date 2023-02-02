@@ -157,7 +157,8 @@ class UserData:
                  preferences=None, location=None):
         self.user_id = user_id or str(uuid4())
         self.session = session or SessionManager.get()
-        self.preferences = _config2preferences(preferences)
+        self.preferences = _config2preferences(preferences)  # equivalent to a mycroft.conf per user
+        location = location or self.preferences.get("location")
         self.location = _config2location(location)
 
     def as_dict(self):
