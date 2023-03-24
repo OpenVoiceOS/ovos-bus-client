@@ -5,7 +5,7 @@ This code is re-used in both to load config values.
 """
 import json
 
-from mycroft.util.log import LOG
+from ovos_utils.log import LOG
 from ovos_config.config import Configuration
 from mycroft_bus_client.client.client import MessageBusClientConf
 
