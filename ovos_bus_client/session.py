@@ -96,26 +96,32 @@ class Session:
         self.active_skills = []  # [skill_id , timestamp]
         self.history = []  # [Message , timestamp]
 
-    def as_dict(self):
+    def serialize(self):
+        # safe for json dumping
         return {
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
-            "history": self.history,
+            # serialize message objects
+            "history": [(m.serialize(), t) for m, t in self.history],
             "lang": self.lang
         }
 
     def update_history(self, message=None):
         message = message or dig_for_message()
         if message:
-            self.history.append(message)
+            self.history.append((message, time.time()))
         self._prune_history()
 
     @staticmethod
-    def from_dict(data):
+    def deserialize(data):
         uid = data.get("session_id")
         active = data.get("active_skills") or []
         history = data.get("history") or []
+        # recreate Message objects
+        for idx, (m, ts) in enumerate(history):
+            if hasattr(m, "deserialize"):
+                history[idx] = (m.deserialize(), ts)
         max_time = data.get("max_time") or 5
         max_messages = data.get("max_messages") or 5
         states = data.get("utterance_states") or {}
@@ -143,7 +149,7 @@ class Session:
                     sess["session_id"] = sid
                 if "lang" not in sess:
                     sess["lang"] = lang
-                sess = Session.from_dict(sess)
+                sess = Session.deserialize(sess)
             elif sid:
                 sess = SessionManager.sessions.get(sid) or \
                        Session(sid)

@@ -25,7 +25,6 @@ import json
 import re
 from copy import deepcopy
 from typing import Optional
-
 from ovos_utils.log import LOG
 
 try:
@@ -93,9 +92,27 @@ class Message(metaclass=_MessageMeta):
         Returns:
             str: a json string representation of the message.
         """
+
+        def serialize_item(x):
+            try:
+                if hasattr(x, "serialize"):
+                    return x.serialize()
+            except:
+                pass
+            if isinstance(x, list):
+                for idx, it in enumerate(x):
+                    x[idx] = serialize_item(x)
+            if isinstance(x, dict):
+                for k,v in x.items():
+                   x[k] = serialize_item(v)
+            return x
+
+        # handle Session and Message objects
+        data = {k: serialize_item(v) for k, v in self.data.items()}
+        ctxt = {k: serialize_item(v) for k, v in self.context.items()}
         return json.dumps({'type': self.msg_type,
-                           'data': self.data,
-                           'context': self.context})
+                           'data': data,
+                           'context': ctxt})
 
     @staticmethod
     def deserialize(value):

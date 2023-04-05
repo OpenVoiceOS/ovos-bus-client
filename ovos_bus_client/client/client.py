@@ -147,7 +147,7 @@ class MessageBusClient:
         """
         if "session" not in message.context:
             sess = SessionManager.get(message)
-            message.context["session"] = sess
+            message.context["session"] = sess.serialize()
             sess.update_history(message)
 
         if not self.connected_event.wait(10):
