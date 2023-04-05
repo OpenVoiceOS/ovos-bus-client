@@ -101,9 +101,9 @@ class Message(metaclass=_MessageMeta):
                 pass
             if isinstance(x, list):
                 for idx, it in enumerate(x):
-                    x[idx] = serialize_item(x)
+                    x[idx] = serialize_item(it)
             if isinstance(x, dict):
-                for k,v in x.items():
+                for k, v in x.items():
                    x[k] = serialize_item(v)
             return x
 
