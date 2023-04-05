@@ -16,6 +16,7 @@ from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import SessionManager
 from ovos_bus_client.util import create_echo_function
+from ovos_bus_client.conf import load_message_bus_config
 
 MessageBusClientConf = namedtuple('MessageBusClientConf',
                                   ['host', 'port', 'route', 'ssl'])
@@ -29,10 +30,24 @@ class MessageBusClient:
     like the pyee EventEmitter and tries to offer as much convenience as
     possible to the developer.
     """
+    # minimize reading of the .conf
+    _config_cache = None
 
-    def __init__(self, host='0.0.0.0', port=8181, route='/core', ssl=False,
-                 emitter=None):
-        self.config = MessageBusClientConf(host, port, route, ssl)
+    def __init__(self, host=None, port=None, route=None, ssl=None,
+                 emitter=None, cache=False):
+        config_overrides = dict(host=host or "0.0.0.0",
+                                port=port or 8181,
+                                route=route or '/core',
+                                ssl=ssl or False)
+        if cache and self._config_cache:
+            config = self._config_cache
+        else:
+            config = load_message_bus_config(**config_overrides)
+            if cache:
+                MessageBusClient._config_cache = config
+
+        self.config = MessageBusClientConf(config.host, config.port,
+                                           config.route, config.ssl)
         self.emitter = emitter or ExecutorEventEmitter()
         self.client = self.create_client()
         self.retry = 5
