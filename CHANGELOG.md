@@ -1,8 +1,16 @@
 # Changelog
 
-## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
+## [V0.0.3a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a6) (2023-04-05)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a2...HEAD)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a5...V0.0.3a6)
+
+## [V0.0.3a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a5) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a4...V0.0.3a5)
+
+## [V0.0.3a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a4) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a2...V0.0.3a4)
 
 **Fixed bugs:**
 
