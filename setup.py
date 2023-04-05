@@ -1,6 +1,4 @@
 import os
-from setuptools import setup
-import os
 import os.path
 
 from setuptools import setup
@@ -70,5 +68,12 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
-    ]
+    ],
+    entry_points={
+        'console_scripts': [
+            'ovos-listen=ovos_bus_client.scripts:ovos_listen',
+            'ovos-speak=ovos_bus_client.scripts:ovos_speak',
+            'ovos-say-to=ovos_bus_client.scripts:ovos_say_to',
+        ]
+    }
 )
