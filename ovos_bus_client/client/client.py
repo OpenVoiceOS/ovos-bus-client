@@ -46,7 +46,6 @@ class MessageBusClient:
             if cache:
                 MessageBusClient._config_cache = config
 
-        print(config)
         self.config = MessageBusClientConf(config.host, config.port,
                                            config.route, config.ssl)
         self.emitter = emitter or ExecutorEventEmitter()
