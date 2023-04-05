@@ -2,19 +2,19 @@
 
 ## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/240929a2eb70a305f6622070e6c953ec32986565...HEAD)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a2...HEAD)
 
 **Fixed bugs:**
 
 - Fix issue \#2 [\#4](https://github.com/OpenVoiceOS/ovos-bus-client/pull/4) ([goldyfruit](https://github.com/goldyfruit))
 
+## [V0.0.3a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a2) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/240929a2eb70a305f6622070e6c953ec32986565...V0.0.3a2)
+
 **Closed issues:**
 
 - Dependancy with mycroft.util.log  [\#2](https://github.com/OpenVoiceOS/ovos-bus-client/issues/2)
-
-**Merged pull requests:**
-
-- refactor/replace-mycroft-bus-client [\#5](https://github.com/OpenVoiceOS/ovos-bus-client/pull/5) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
