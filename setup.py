@@ -23,7 +23,7 @@ def required(requirements_file):
 def get_version():
     """ Find the version of ovos-core"""
     version = None
-    version_file = os.path.join(BASEDIR, 'ovos_audio', 'version.py')
+    version_file = os.path.join(BASEDIR, 'ovos_bus_client', 'version.py')
     major, minor, build, alpha = (None, None, None, None)
     with open(version_file) as f:
         for line in f:
