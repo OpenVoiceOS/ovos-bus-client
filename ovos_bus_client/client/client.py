@@ -1,7 +1,6 @@
 import json
 import time
 import traceback
-from collections import namedtuple
 from threading import Event, Thread
 from uuid import uuid4
 
@@ -16,10 +15,7 @@ from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import SessionManager
 from ovos_bus_client.util import create_echo_function
-from ovos_bus_client.conf import load_message_bus_config
-
-MessageBusClientConf = namedtuple('MessageBusClientConf',
-                                  ['host', 'port', 'route', 'ssl'])
+from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 
 
 class MessageBusClient:

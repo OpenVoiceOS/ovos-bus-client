@@ -4,13 +4,14 @@ The message bus event handler and client use basically the same configuration.
 This code is re-used in both to load config values.
 """
 import json
+from collections import namedtuple
 
 from ovos_utils.log import LOG
 from ovos_config.config import Configuration
-from mycroft_bus_client.client.client import MessageBusClientConf
 
 # mycroft-core had this duplicated with both names...
-MessageBusConfig = MessageBusClientConf
+MessageBusConfig = MessageBusClientConf = namedtuple('MessageBusClientConf',
+                                  ['host', 'port', 'route', 'ssl'])
 
 
 def load_message_bus_config(**overrides):
