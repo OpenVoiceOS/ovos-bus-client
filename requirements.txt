@@ -1,2 +1,2 @@
-ovos-config
-ovos-utils
+ovos-config~=0.0,>=0.0.8a2
+ovos-utils~=0.0, >=0.0.31a3
