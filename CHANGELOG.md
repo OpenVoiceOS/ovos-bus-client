@@ -8,6 +8,14 @@
 
 - Fix issue \#2 [\#4](https://github.com/OpenVoiceOS/ovos-bus-client/pull/4) ([goldyfruit](https://github.com/goldyfruit))
 
+**Closed issues:**
+
+- PyPi version vs GitHub version [\#3](https://github.com/OpenVoiceOS/ovos-bus-client/issues/3)
+
+**Merged pull requests:**
+
+- feat/default\_values\_from\_config [\#6](https://github.com/OpenVoiceOS/ovos-bus-client/pull/6) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [V0.0.3a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a2) (2023-04-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/240929a2eb70a305f6622070e6c953ec32986565...V0.0.3a2)
