@@ -18,13 +18,18 @@ The scheduler module allows setting up scheduled messages.
 A scheduled message will be kept and not sent until the system clock time
 criteria is met.
 """
+
 import json
+import shutil
 import time
+from os.path import isfile, join, expanduser
 from threading import Thread, Lock
-from os.path import isfile, expanduser
+
+from ovos_config.config import Configuration
+from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
+from ovos_utils.log import LOG
 
 from ovos_bus_client.message import Message
-from ovos_utils.log import LOG
 
 
 def repeat_time(sched_time, repeat):
@@ -53,7 +58,8 @@ class EventScheduler(Thread):
         schedule_file:  Path to file used to store pending events to on
                         shutdown.
     """
-    def __init__(self, bus, schedule_file=None):
+
+    def __init__(self, bus, schedule_file='schedule.json', autostart=True):
         super().__init__()
 
         self.events = {}
@@ -61,13 +67,28 @@ class EventScheduler(Thread):
 
         self.bus = bus
         self.is_running = True
-        if schedule_file:
-            self.schedule_file = expanduser(schedule_file)
-            self.load()
-        else:
-            self.schedule_file = None
 
-        self.start()
+        core_conf = Configuration()
+        data_dir = core_conf.get('data_dir') or get_xdg_data_save_path()
+        old_schedule_path = join(expanduser(data_dir), schedule_file)
+
+        self.schedule_file = join(get_xdg_config_save_path(), schedule_file)
+        if isfile(old_schedule_path):
+            shutil.move(old_schedule_path, self.schedule_file)
+
+        if self.schedule_file:
+            self.load()
+
+        self.bus.on('mycroft.scheduler.schedule_event',
+                    self.schedule_event_handler)
+        self.bus.on('mycroft.scheduler.remove_event',
+                    self.remove_event_handler)
+        self.bus.on('mycroft.scheduler.update_event',
+                    self.update_event_handler)
+        self.bus.on('mycroft.scheduler.get_event',
+                    self.get_event_handler)
+        if autostart:
+            self.start()
 
     def load(self):
         """Load json data with active events from json file."""
@@ -98,18 +119,20 @@ class EventScheduler(Thread):
             pending_messages = []
             for event in self.events:
                 current_time = time.time()
-                evt = self.events[event]
+                e = self.events[event]
                 # Get scheduled times that has passed
-                passed = [(t, r, d) for (t, r, d) in evt if t <= current_time]
+                passed = [(t, r, d, c) for
+                          (t, r, d, c) in e if t <= current_time]
                 # and remaining times that we're still waiting for
-                remaining = [(t, r, d) for t, r, d in evt if t > current_time]
+                remaining = [(t, r, d, c) for
+                             t, r, d, c in e if t > current_time]
                 # Trigger registered methods
-                for sched_time, repeat, data in passed:
-                    pending_messages.append(Message(event, data))
+                for sched_time, repeat, data, context in passed:
+                    pending_messages.append(Message(event, data, context))
                     # if this is a repeated event add a new trigger time
                     if repeat:
                         next_time = repeat_time(sched_time, repeat)
-                        remaining.append((next_time, repeat, data))
+                        remaining.append((next_time, repeat, data, context))
                 # update list of events
                 self.events[event] = remaining
 
@@ -120,7 +143,8 @@ class EventScheduler(Thread):
         for msg in pending_messages:
             self.bus.emit(msg)
 
-    def schedule_event(self, event, sched_time, repeat=None, data=None):
+    def schedule_event(self, event, sched_time, repeat=None,
+                       data=None, context=None):
         """Add event to pending event schedule.
 
         Arguments:
@@ -128,6 +152,9 @@ class EventScheduler(Thread):
             sched_time ([type]): [description]
             repeat ([type], optional): Defaults to None. [description]
             data ([type], optional): Defaults to None. [description]
+            context (dict, optional): context (dict, optional): message
+                                      context to send when the
+                                      handler is called
         """
         data = data or {}
         with self.event_lock:
@@ -136,12 +163,33 @@ class EventScheduler(Thread):
 
             # Don't schedule if the event is repeating and already scheduled
             if repeat and event in self.events:
-                LOG.debug('Repeating event {} is already scheduled, discarding'
-                          .format(event))
+                LOG.debug(f'Repeating event {event} is already scheduled, discarding')
             else:
                 # add received event and time
-                event_list.append((sched_time, repeat, data))
+                event_list.append((sched_time, repeat, data, context))
                 self.events[event] = event_list
+
+    def schedule_event_handler(self, message):
+        """Messagebus interface to the schedule_event method.
+        Required data in the message envelope is
+            event: event to emit
+            time:  time to emit the event
+
+        Optional data is
+            repeat: repeat interval
+            data:   data to send along with the event
+        """
+        event = message.data.get('event')
+        sched_time = message.data.get('time')
+        repeat = message.data.get('repeat')
+        data = message.data.get('data')
+        context = message.context
+        if event and sched_time:
+            self.schedule_event(event, sched_time, repeat, data, context)
+        elif not event:
+            LOG.error('Scheduled event name not provided')
+        else:
+            LOG.error('Scheduled event time not provided')
 
     def remove_event(self, event):
         """Remove an event from the list of scheduled events.
@@ -152,6 +200,11 @@ class EventScheduler(Thread):
         with self.event_lock:
             if event in self.events:
                 self.events.pop(event)
+
+    def remove_event_handler(self, message):
+        """Messagebus interface to the remove_event method."""
+        event = message.data.get('event')
+        self.remove_event(event)
 
     def update_event(self, event, data):
         """Change an existing events data.
@@ -166,8 +219,27 @@ class EventScheduler(Thread):
         with self.event_lock:
             # if there is an active event with this name
             if len(self.events.get(event, [])) > 0:
-                event_time, repeat, _ = self.events[event][0]
-                self.events[event][0] = (event_time, repeat, data)
+                time, repeat, _, context = self.events[event][0]
+                self.events[event][0] = (time, repeat, data, context)
+
+    def update_event_handler(self, message):
+        """Messagebus interface to the update_event method."""
+        event = message.data.get('event')
+        data = message.data.get('data')
+        self.update_event(event, data)
+
+    def get_event_handler(self, message):
+        """Messagebus interface to get_event.
+
+        Emits another event sending event status.
+        """
+        event_name = message.data.get("name")
+        event = None
+        with self.event_lock:
+            if event_name in self.events:
+                event = self.events[event_name]
+        emitter_name = f'mycroft.event_status.callback.{event_name}'
+        self.bus.emit(message.reply(emitter_name, data=event))
 
     def store(self):
         """Write current schedule to disk."""
@@ -191,11 +263,15 @@ class EventScheduler(Thread):
     def shutdown(self):
         """Stop the running thread."""
         self.is_running = False
+        # Remove listeners
+        self.bus.remove_all_listeners('mycroft.scheduler.schedule_event')
+        self.bus.remove_all_listeners('mycroft.scheduler.remove_event')
+        self.bus.remove_all_listeners('mycroft.scheduler.update_event')
         # Wait for thread to finish
         self.join()
         # Prune event list in preparation for saving
         self.clear_repeating()
         self.clear_empty()
         # Store all pending scheduled events
-        if self.schedule_file:
-            self.store()
+        self.store()
+
