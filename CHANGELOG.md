@@ -1,5 +1,9 @@
 # Changelog
 
+## [V0.0.3a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a10) (2023-04-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a9...V0.0.3a10)
+
 ## [V0.0.3a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a9) (2023-04-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a8...V0.0.3a9)
@@ -22,7 +26,7 @@
 
 ## [V0.0.3a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a4) (2023-04-05)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a2...V0.0.3a4)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/240929a2eb70a305f6622070e6c953ec32986565...V0.0.3a4)
 
 **Fixed bugs:**
 
@@ -31,18 +35,11 @@
 **Closed issues:**
 
 - PyPi version vs GitHub version [\#3](https://github.com/OpenVoiceOS/ovos-bus-client/issues/3)
+- Dependancy with mycroft.util.log  [\#2](https://github.com/OpenVoiceOS/ovos-bus-client/issues/2)
 
 **Merged pull requests:**
 
 - feat/default\_values\_from\_config [\#6](https://github.com/OpenVoiceOS/ovos-bus-client/pull/6) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.3a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a2) (2023-04-05)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/240929a2eb70a305f6622070e6c953ec32986565...V0.0.3a2)
-
-**Closed issues:**
-
-- Dependancy with mycroft.util.log  [\#2](https://github.com/OpenVoiceOS/ovos-bus-client/issues/2)
 
 
 
