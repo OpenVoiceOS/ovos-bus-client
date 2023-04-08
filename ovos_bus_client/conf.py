@@ -7,7 +7,7 @@ import json
 
 from ovos_utils.log import LOG
 from ovos_config.config import Configuration
-from mycroft_bus_client.client.client import MessageBusClientConf
+from ovos_bus_client.client.client import MessageBusClientConf
 
 # mycroft-core had this duplicated with both names...
 MessageBusConfig = MessageBusClientConf
