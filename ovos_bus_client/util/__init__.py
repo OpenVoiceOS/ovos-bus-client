@@ -15,7 +15,8 @@
 """
 Tools and constructs that are useful together with the messagebus.
 """
-from mycroft_bus_client.util import EventScheduler, create_echo_function
+from ovos_bus_client.util.scheduler import EventScheduler
+from ovos_bus_client.util.utils import create_echo_function
 from ovos_bus_client.message import dig_for_message
 from ovos_bus_client.session import SessionManager
 
