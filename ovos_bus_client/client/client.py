@@ -18,7 +18,18 @@ from ovos_bus_client.util import create_echo_function
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 
 
-class MessageBusClient:
+try:
+    from mycroft_bus_client import MessageBusClient as _MessageBusClientBase
+except ImportError:
+    # TODO - code in the wild does isinstance checks
+    # this conditional subclassing should be removed ASAP, it is only here for the migration period
+    # mycroft_bus_client is abandonware until further notice from MycroftAI
+
+    class _MessageBusClientBase:
+        pass
+
+
+class MessageBusClient(_MessageBusClientBase):
     """The Mycroft Messagebus Client
 
     The Messagebus client connects to the Mycroft messagebus service

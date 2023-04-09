@@ -16,8 +16,18 @@ from threading import Lock, Event
 from uuid import uuid4
 import time
 
+try:
+    from mycroft_bus_client.client.collector import MessageCollector as _MessageCollectorBase
+except ImportError:
+    # TODO - code in the wild does isinstance checks
+    # this conditional subclassing should be removed ASAP, it is only here for the migration period
+    # mycroft_bus_client is abandonware until further notice from MycroftAI
 
-class MessageCollector:
+    class _MessageCollectorBase:
+        pass
+
+
+class MessageCollector(_MessageCollectorBase):
     """Collect multiple response.
 
     This class encapsulates the logic for collecting messages from

@@ -35,6 +35,23 @@ except ImportError:
         return text
 
 
+try:
+    from mycroft_bus_client.message import Message as _MsgBase, \
+        CollectionMessage as _CollectionMsgBase
+
+except ImportError:
+
+    # TODO - code in the wild does isinstance checks
+    # this conditional subclassing should be removed ASAP, it is only here for the migration period
+    # mycroft_bus_client is abandonware until further notice from MycroftAI
+
+    class _MsgBase:
+        pass
+
+    class _CollectionMsgBase(_MsgBase):
+        pass
+
+
 class _MessageMeta(type):
     """ To override isinstance checks we need to use a metaclass """
 
@@ -47,7 +64,7 @@ class _MessageMeta(type):
             return super().__instancecheck__(instance)
 
 
-class Message(metaclass=_MessageMeta):
+class Message(_MsgBase, metaclass=_MessageMeta):
     """Holds and manipulates data sent over the websocket
 
         Message objects will be used to send information back and forth
@@ -71,13 +88,7 @@ class Message(metaclass=_MessageMeta):
         self.context = context or {}
 
     def __eq__(self, other):
-        is_inst = isinstance(other, Message)
-        try:
-            from mycroft_bus_client.message import Message as _MycroftMessage
-            is_inst = is_inst or isinstance(other, _MycroftMessage)
-        except ImportError:
-            pass
-        if not is_inst:
+        if not isinstance(other, Message):
             return False
         return other.msg_type == self.msg_type and \
             other.data == self.data and \
@@ -267,7 +278,7 @@ def dig_for_message(max_records: int = 10) -> Optional[Message]:
     return None
 
 
-class CollectionMessage(Message):
+class CollectionMessage(Message, _CollectionMsgBase):
     """Extension of the Message class for use with collect handlers.
 
     The class provides the convenience methods success and failure to report
@@ -357,16 +368,6 @@ class CollectionMessage(Message):
                                       data,
                                       self.context)
         return response_message
-
-
-# monkey patch any existing mycroft-bus-client to pass isinstance checks
-try:
-    import mycroft_bus_client
-    mycroft_bus_client.message.Message = Message
-    mycroft_bus_client.Message = Message
-    mycroft_bus_client.message.CollectionMessage = CollectionMessage
-except ImportError:
-    pass
 
 
 if __name__ == "__main__":
