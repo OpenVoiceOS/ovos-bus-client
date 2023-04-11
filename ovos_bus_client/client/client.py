@@ -42,10 +42,7 @@ class MessageBusClient(_MessageBusClientBase):
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
                  emitter=None, cache=False):
-        config_overrides = dict(host=host or "0.0.0.0",
-                                port=port or 8181,
-                                route=route or '/core',
-                                ssl=ssl or False)
+        config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
         if cache and self._config_cache:
             config = self._config_cache
         else:
