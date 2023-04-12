@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a16...HEAD)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a17...HEAD)
+
+**Fixed bugs:**
+
+- fix/message\_serialize\_gui [\#8](https://github.com/OpenVoiceOS/ovos-bus-client/pull/8) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.3a17](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a17) (2023-04-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a16...V0.0.3a17)
 
 **Fixed bugs:**
 
