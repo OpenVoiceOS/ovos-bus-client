@@ -26,6 +26,7 @@ import re
 from copy import deepcopy
 from typing import Optional
 from ovos_utils.log import LOG
+from ovos_utils.gui import _GUIDict
 
 try:
     from lingua_franca.parse import normalize
@@ -113,7 +114,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             if isinstance(x, list):
                 for idx, it in enumerate(x):
                     x[idx] = serialize_item(it)
-            if isinstance(x, dict):
+            if isinstance(x, dict) and not isinstance(x, _GUIDict):
                 for k, v in x.items():
                    x[k] = serialize_item(v)
             return x
