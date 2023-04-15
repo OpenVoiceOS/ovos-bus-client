@@ -28,7 +28,7 @@ from typing import Optional
 from binascii import hexlify, unhexlify
 from ovos_utils.gui import _GUIDict
 from ovos_utils.log import LOG
-from ovos_utis.security import encrypt, decrypt
+from ovos_utils.security import encrypt, decrypt
 from ovos_config.config import Configuration
 
 try:
