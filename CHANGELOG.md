@@ -2,7 +2,19 @@
 
 ## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a17...HEAD)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a18...HEAD)
+
+**Fixed bugs:**
+
+- fix session [\#10](https://github.com/OpenVoiceOS/ovos-bus-client/pull/10) ([JarbasAl](https://github.com/JarbasAl))
+
+**Closed issues:**
+
+- Session ID error [\#9](https://github.com/OpenVoiceOS/ovos-bus-client/issues/9)
+
+## [V0.0.3a18](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a18) (2023-04-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a17...V0.0.3a18)
 
 **Fixed bugs:**
 
