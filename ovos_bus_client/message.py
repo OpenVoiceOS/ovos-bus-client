@@ -82,6 +82,8 @@ class Message(_MsgBase, metaclass=_MessageMeta):
     """
     # if set all messages are AES encrypted
     _secret_key = Configuration().get("websocket", {}).get("secret_key")
+    # if set to False, will refuse to deserialize unencrypted messages for processing
+    _allow_unencrypted = Configuration().get("websocket", {}).get("allow_unencrypted", _secret_key is None)
 
     def __init__(self, msg_type, data=None, context=None):
         """Used to construct a message object
@@ -151,8 +153,11 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             value(str): This is the string received from the websocket
         """
         obj = json.loads(value)
-        if Message._secret_key and 'ciphertext' in obj:
-            obj = decrypt_from_dict(obj)
+        if Message._secret_key:
+            if 'ciphertext' in obj:
+                obj = decrypt_from_dict(obj)
+            elif not Message._allow_unencrypted:
+                raise RuntimeError("got an unencrypted message, configured to refuse")
         return Message(obj.get('type') or '',
                        obj.get('data') or {},
                        obj.get('context') or {})
