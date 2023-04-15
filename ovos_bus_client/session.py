@@ -183,9 +183,9 @@ class SessionManager:
         sess = SessionManager.default_session
         message = message or dig_for_message()
 
-        if not SessionManager.default_session or SessionManager.default_session.expired():
-            if SessionManager.default_session is not None:
-                SessionManager.sessions.pop(SessionManager.default_session.session_id)
+        if not sess or sess.expired():
+            if sess is not None and sess.session_id in SessionManager.sessions:
+                SessionManager.sessions.pop(sess.session_id)
             sess = SessionManager.reset_default_session()
         if message:
             sess = Session.from_message(message)
