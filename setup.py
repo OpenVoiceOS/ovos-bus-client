@@ -1,5 +1,9 @@
 import os
+import os.path
+
 from setuptools import setup
+
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
 
 
 def required(requirements_file):
@@ -14,9 +18,34 @@ def required(requirements_file):
                 if pkg.strip() and not pkg.startswith("#")]
 
 
+def get_version():
+    """ Find the version of ovos-core"""
+    version = None
+    version_file = os.path.join(BASEDIR, 'ovos_bus_client', 'version.py')
+    major, minor, build, alpha = (None, None, None, None)
+    with open(version_file) as f:
+        for line in f:
+            if 'VERSION_MAJOR' in line:
+                major = line.split('=')[1].strip()
+            elif 'VERSION_MINOR' in line:
+                minor = line.split('=')[1].strip()
+            elif 'VERSION_BUILD' in line:
+                build = line.split('=')[1].strip()
+            elif 'VERSION_ALPHA' in line:
+                alpha = line.split('=')[1].strip()
+
+            if ((major and minor and build and alpha) or
+                    '# END_VERSION_BLOCK' in line):
+                break
+    version = f"{major}.{minor}.{build}"
+    if int(alpha):
+        version += f"a{alpha}"
+    return version
+
+
 setup(
     name='ovos-bus-client',
-    version='0.0.2',
+    version=get_version(),
     packages=['ovos_bus_client',
               'ovos_bus_client.client',
               'ovos_bus_client.util'],
@@ -39,5 +68,12 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
-    ]
+    ],
+    entry_points={
+        'console_scripts': [
+            'ovos-listen=ovos_bus_client.scripts:ovos_listen',
+            'ovos-speak=ovos_bus_client.scripts:ovos_speak',
+            'ovos-say-to=ovos_bus_client.scripts:ovos_say_to',
+        ]
+    }
 )

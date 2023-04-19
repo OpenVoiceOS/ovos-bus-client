@@ -4,13 +4,14 @@ The message bus event handler and client use basically the same configuration.
 This code is re-used in both to load config values.
 """
 import json
+from collections import namedtuple
 
-from mycroft.util.log import LOG
+from ovos_utils.log import LOG
 from ovos_config.config import Configuration
-from mycroft_bus_client.client.client import MessageBusClientConf
 
 # mycroft-core had this duplicated with both names...
-MessageBusConfig = MessageBusClientConf
+MessageBusConfig = MessageBusClientConf = namedtuple('MessageBusClientConf',
+                                  ['host', 'port', 'route', 'ssl'])
 
 
 def load_message_bus_config(**overrides):
@@ -25,10 +26,10 @@ def load_message_bus_config(**overrides):
         raise
     else:
         mb_config = MessageBusConfig(
-            host=overrides.get('host') or websocket_configs.get('host'),
-            port=overrides.get('port') or websocket_configs.get('port'),
-            route=overrides.get('route') or websocket_configs.get('route'),
-            ssl=overrides.get('ssl') or config.get('ssl')
+            host=overrides.get('host') or websocket_configs.get('host') or "127.0.0.1",
+            port=overrides.get('port') or websocket_configs.get('port') or 8181,
+            route=overrides.get('route') or websocket_configs.get('route') or "/core",
+            ssl=overrides.get('ssl') or config.get('ssl') or False
         )
         if not all([mb_config.host, mb_config.port, mb_config.route]):
             error_msg = 'Missing one or more websocket configs'
