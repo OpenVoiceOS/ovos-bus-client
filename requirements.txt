@@ -1,4 +1,4 @@
-ovos-config~=0.0,>=0.0.8a3
-ovos-utils~=0.0, >=0.0.31a6
+ovos-config~=0.0,>=0.0.8
+ovos-utils~=0.0, >=0.0.32
 websocket-client>=0.54.0
 pyee>=8.1.0, < 9.0.0
