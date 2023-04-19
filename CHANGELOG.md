@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.3a22](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.3a22) (2023-04-19)
+## [0.0.3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.3) (2023-04-19)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a21...0.0.3a22)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a22...0.0.3)
+
+**Merged pull requests:**
+
+- Remove deprecated automations [\#15](https://github.com/OpenVoiceOS/ovos-bus-client/pull/15) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.3a22](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a22) (2023-04-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a21...V0.0.3a22)
 
 **Merged pull requests:**
 
