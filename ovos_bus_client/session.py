@@ -288,17 +288,24 @@ class IntentContextManager:
     How to manage a session's lifecycle is not captured here.
     """
 
-    def __init__(self, timeout, frame_stack=None):
+    def __init__(self, timeout=None, frame_stack=None,
+                 greedy=None, keywords=None, max_frames=None):
 
         config = Configuration().get('context', {})
-        timeout = timeout or config.get('timeout', 2)
+        if timeout is None:
+            timeout = config.get('timeout', 2)
+        if greedy is None:
+            greedy = config.get('greedy', False)
+        if keywords is None:
+            keywords = config.get('keywords', [])
+        if max_frames is None:
+            max_frames = config.get('max_frames', 3)
+
         self.frame_stack = frame_stack or []
         self.timeout = timeout * 60  # minutes to seconds
-
-        # Context related initializations
-        self.context_keywords = config.get('keywords', [])
-        self.context_max_frames = config.get('max_frames', 3)
-        self.context_greedy = config.get('greedy', False)
+        self.context_keywords = keywords
+        self.context_max_frames = max_frames
+        self.context_greedy = greedy
 
     def serialize(self):
         return {"timeout": self.timeout,
