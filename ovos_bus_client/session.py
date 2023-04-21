@@ -292,6 +292,13 @@ class IntentContextManager:
         self.frame_stack = frame_stack or []
         self.timeout = timeout * 60  # minutes to seconds
 
+        config = Configuration().get('context', {})
+        # Context related initializations
+        self.context_keywords = config.get('keywords', [])
+        self.context_max_frames = config.get('max_frames', 3)
+        self.context_timeout = config.get('timeout', 2)
+        self.context_greedy = config.get('greedy', False)
+
     def serialize(self):
         return {"timeout": self.timeout,
                 "frame_stack": [s.serialize() for s in self.frame_stack]}
@@ -301,6 +308,28 @@ class IntentContextManager:
         timeout = data["timeout"]
         framestack = [IntentContextManagerFrame.deserialize(f) for f in data["frame_stack"]]
         return IntentContextManager(timeout, framestack)
+
+    def update_context(self, entities):
+        """Updates context with keyword from the intent.
+
+        entity(dict): Format example...
+                   {'data': 'Entity tag as <str>',
+                    'key': 'entity proper name as <str>',
+                    'confidence': <float>'
+                   }
+                               
+        Args:
+            entities (list): Intent to scan for keywords
+        """
+        for context_entity in entities:
+            #  entity(dict): Format example...
+            #   {'data': 'Entity tag as <str>',
+            #   'key': 'entity proper name as <str>',
+            #   'confidence': <float>' }
+            if self.context_greedy:
+                self.inject_context(context_entity)
+            elif context_entity['data'][0][1] in self.context_keywords:
+                self.inject_context(context_entity)
 
     def clear_context(self):
         """Remove all contexts."""
@@ -318,12 +347,12 @@ class IntentContextManager:
     def inject_context(self, entity, metadata=None):
         """
         Args:
-            entity(object): Format example...
-                               {'data': 'Entity tag as <str>',
-                                'key': 'entity proper name as <str>',
-                                'confidence': <float>'
-                               }
-            metadata(object): dict, arbitrary metadata about entity injected
+            entity(dict): Format example...
+                       {'data': 'Entity tag as <str>',
+                        'key': 'entity proper name as <str>',
+                        'confidence': <float>'
+                       }
+            metadata(dict): arbitrary metadata about entity injected
         """
         metadata = metadata or {}
         try:
