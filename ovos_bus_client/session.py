@@ -289,14 +289,15 @@ class IntentContextManager:
     """
 
     def __init__(self, timeout, frame_stack=None):
+
+        config = Configuration().get('context', {})
+        timeout = timeout or config.get('timeout', 2)
         self.frame_stack = frame_stack or []
         self.timeout = timeout * 60  # minutes to seconds
 
-        config = Configuration().get('context', {})
         # Context related initializations
         self.context_keywords = config.get('keywords', [])
         self.context_max_frames = config.get('max_frames', 3)
-        self.context_timeout = config.get('timeout', 2)
         self.context_greedy = config.get('greedy', False)
 
     def serialize(self):
