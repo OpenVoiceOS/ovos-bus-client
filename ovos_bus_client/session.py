@@ -20,7 +20,7 @@ class Session:
     """
 
     def __init__(self, session_id=None, expiration_seconds=None, active_skills=None, history=None,
-                 max_time=5, max_messages=5, utterance_states=None, lang=None):
+                 max_time=5, max_messages=5, utterance_states=None, lang=None, context=None):
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
         self.active_skills = active_skills or []  # [skill_id , timestamp]
@@ -32,6 +32,7 @@ class Session:
         if expiration_seconds is None:
             expiration_seconds = Configuration().get('session', {}).get("ttl", -1)
         self.expiration_seconds = expiration_seconds
+        self.context = context or IntentContextManager(timeout=self.touch_time + expiration_seconds)
 
     @property
     def active(self):
@@ -103,7 +104,8 @@ class Session:
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
             "history": self.history,
-            "lang": self.lang
+            "lang": self.lang,
+            "context": self.context.serialize()
         }
 
     def update_history(self, message=None):
@@ -121,13 +123,15 @@ class Session:
         max_messages = data.get("max_messages") or 5
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
+        context = IntentContextManager.deserialize(data["context"])
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
                        history=history,
                        max_time=max_time,
                        lang=lang,
-                       max_messages=max_messages)
+                       max_messages=max_messages,
+                       context=context)
 
     @staticmethod
     def from_message(message=None):
@@ -212,3 +216,194 @@ class SessionManager:
         :return: None
         """
         SessionManager.get(message).touch()
+
+
+class IntentContextManagerFrame:
+    """
+    Manages entities and context for a single frame of conversation.
+    Provides simple equality querying.
+    Attributes:
+        entities(list): Entities that belong to ContextManagerFrame
+        metadata(object): metadata to describe context belonging to ContextManagerFrame
+    """
+
+    def __init__(self, entities=None, metadata=None):
+        """
+        Initialize ContextManagerFrame
+        Args:
+            entities(list): List of Entities...
+            metadata(object): metadata to describe context?
+        """
+        self.entities = entities or []
+        self.metadata = metadata or {}
+
+    def serialize(self):
+        return {"entities": self.entities,
+                "metadata": self.metadata}
+
+    @staticmethod
+    def deserialize(data):
+        return IntentContextManagerFrame(**data)
+
+    def metadata_matches(self, query=None):
+        """
+        Returns key matches to metadata
+        Asserts that the contents of query exist within (logical subset of)
+        metadata in this frame.
+        Args:
+            query(dict): metadata for matching
+        Returns:
+            bool:
+                True: when key count in query is > 0 and all keys in query in
+                    self.metadata
+                False: if key count in query is <= 0 or any key in query not
+                    found in self.metadata
+        """
+        query = query or {}
+        result = len(query.keys()) > 0
+        for key in query.keys():
+            result = result and query[key] == self.metadata.get(key)
+
+        return result
+
+    def merge_context(self, tag, metadata):
+        """
+        merge into contextManagerFrame new entity and metadata.
+        Appends tag as new entity and adds keys in metadata to keys in
+        self.metadata.
+        Args:
+            tag(str): entity to be added to self.entities
+            metadata(dict): metadata contains keys to be added to self.metadata
+        """
+        self.entities.append(tag)
+        for k, v in metadata.items():
+            if k not in self.metadata:
+                self.metadata[k] = v
+
+
+class IntentContextManager:
+    """Context Manager
+
+    Use to track context throughout the course of a conversational session.
+    How to manage a session's lifecycle is not captured here.
+    """
+
+    def __init__(self, timeout, frame_stack=None):
+        self.frame_stack = frame_stack or []
+        self.timeout = timeout * 60  # minutes to seconds
+
+    def serialize(self):
+        return {"timeout": self.timeout,
+                "frame_stack": [s.serialize() for s in self.frame_stack]}
+
+    @staticmethod
+    def deserialize(data):
+        timeout = data["timeout"]
+        framestack = [IntentContextManagerFrame.deserialize(f) for f in data["frame_stack"]]
+        return IntentContextManager(timeout, framestack)
+
+    def clear_context(self):
+        """Remove all contexts."""
+        self.frame_stack = []
+
+    def remove_context(self, context_id):
+        """Remove a specific context entry.
+
+        Args:
+            context_id (str): context entry to remove
+        """
+        self.frame_stack = [(f, t) for (f, t) in self.frame_stack
+                            if context_id in f.entities[0].get('data', [])]
+
+    def inject_context(self, entity, metadata=None):
+        """
+        Args:
+            entity(object): Format example...
+                               {'data': 'Entity tag as <str>',
+                                'key': 'entity proper name as <str>',
+                                'confidence': <float>'
+                               }
+            metadata(object): dict, arbitrary metadata about entity injected
+        """
+        metadata = metadata or {}
+        try:
+            if self.frame_stack:
+                top_frame = self.frame_stack[0]
+            else:
+                top_frame = None
+            if top_frame and top_frame[0].metadata_matches(metadata):
+                top_frame[0].merge_context(entity, metadata)
+            else:
+                frame = IntentContextManagerFrame(entities=[entity],
+                                                  metadata=metadata.copy())
+                self.frame_stack.insert(0, (frame, time.time()))
+        except (IndexError, KeyError):
+            pass
+
+    @staticmethod
+    def _strip_result(context_features):
+        """Keep only the latest instance of each keyword.
+
+        Arguments
+            context_features (iterable): context features to check.
+        """
+        stripped = []
+        processed = []
+        for feature in context_features:
+            keyword = feature['data'][0][1]
+            if keyword not in processed:
+                stripped.append(feature)
+                processed.append(keyword)
+        return stripped
+
+    def get_context(self, max_frames=None, missing_entities=None):
+        """ Constructs a list of entities from the context.
+
+        Args:
+            max_frames(int): maximum number of frames to look back
+            missing_entities(list of str): a list or set of tag names,
+            as strings
+
+        Returns:
+            list: a list of entities
+        """
+        missing_entities = missing_entities or []
+
+        relevant_frames = [frame[0] for frame in self.frame_stack if
+                           time.time() - frame[1] < self.timeout]
+        if not max_frames or max_frames > len(relevant_frames):
+            max_frames = len(relevant_frames)
+
+        missing_entities = list(missing_entities)
+        context = []
+        last = ''
+        depth = 0
+        entity = {}
+        for i in range(max_frames):
+            frame_entities = [entity.copy() for entity in
+                              relevant_frames[i].entities]
+            for entity in frame_entities:
+                entity['confidence'] = entity.get('confidence', 1.0) \
+                                       / (2.0 + depth)
+            context += frame_entities
+
+            # Update depth
+            if entity['origin'] != last or entity['origin'] == '':
+                depth += 1
+            last = entity['origin']
+
+        result = []
+        if missing_entities:
+            for entity in context:
+                if entity.get('data') in missing_entities:
+                    result.append(entity)
+                    # NOTE: this implies that we will only ever get one
+                    # of an entity kind from context, unless specified
+                    # multiple times in missing_entities. Cannot get
+                    # an arbitrary number of an entity kind.
+                    missing_entities.remove(entity.get('data'))
+        else:
+            result = context
+
+        # Only use the latest  keyword
+        return self._strip_result(result)
