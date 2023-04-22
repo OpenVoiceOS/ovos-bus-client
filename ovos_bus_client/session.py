@@ -174,6 +174,18 @@ class SessionManager:
         return SessionManager.default_session
 
     @staticmethod
+    def update(sess: Session, make_default: bool = False):
+        """
+        Update the last_touch timestamp on the current session
+
+        :return: None
+        """
+        sess.touch()
+        SessionManager.sessions[sess.session_id] = sess
+        if make_default:
+            SessionManager.default_session = sess
+
+    @staticmethod
     def get(message=None):
         """
         get the active session.
@@ -193,10 +205,10 @@ class SessionManager:
         return sess
 
     @staticmethod
-    def touch():
+    def touch(message=None):
         """
         Update the last_touch timestamp on the current session
 
         :return: None
         """
-        SessionManager.get().touch()
+        SessionManager.get(message).touch()

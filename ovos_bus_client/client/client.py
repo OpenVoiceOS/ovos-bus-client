@@ -13,7 +13,7 @@ from websocket import (WebSocketApp,
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.message import Message, CollectionMessage
-from ovos_bus_client.session import SessionManager
+from ovos_bus_client.session import SessionManager, Session
 from ovos_bus_client.util import create_echo_function
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 
@@ -137,6 +137,7 @@ class MessageBusClient(_MessageBusClientBase):
         else:
             message = args[1]
         parsed_message = Message.deserialize(message)
+        SessionManager.update(Session.from_message(parsed_message))
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
 
