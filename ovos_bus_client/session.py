@@ -174,7 +174,7 @@ class SessionManager:
         return SessionManager.default_session
 
     @staticmethod
-    def update(sess: Session, make_default: bool = True):
+    def update(sess: Session, make_default: bool = False):
         """
         Update the last_touch timestamp on the current session
 
