@@ -1,12 +1,13 @@
 # Changelog
 
-## [0.0.4a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a2) (2023-04-22)
+## [V0.0.4a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a2) (2023-04-22)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a1...0.0.4a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a1...V0.0.4a2)
 
 **Implemented enhancements:**
 
 - refactor/session\_context [\#19](https://github.com/OpenVoiceOS/ovos-bus-client/pull/19) ([JarbasAl](https://github.com/JarbasAl))
+- feat/crypto [\#11](https://github.com/OpenVoiceOS/ovos-bus-client/pull/11) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [V0.0.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a1) (2023-04-22)
 
