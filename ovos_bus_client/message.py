@@ -25,8 +25,11 @@ import json
 import re
 from copy import deepcopy
 from typing import Optional
-from ovos_utils.log import LOG
+from binascii import hexlify, unhexlify
 from ovos_utils.gui import _GUIDict
+from ovos_utils.log import LOG
+from ovos_utils.security import encrypt, decrypt
+from ovos_config.config import Configuration
 
 try:
     from lingua_franca.parse import normalize
@@ -34,7 +37,6 @@ except ImportError:
     # optional LF import
     def normalize(text, *args, **kwargs):
         return text
-
 
 try:
     from mycroft_bus_client.message import Message as _MsgBase, \
@@ -48,6 +50,7 @@ except ImportError:
 
     class _MsgBase:
         pass
+
 
     class _CollectionMsgBase(_MsgBase):
         pass
@@ -77,6 +80,10 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         context: info about the message not part of data such as source,
             destination or domain.
     """
+    # if set all messages are AES encrypted
+    _secret_key = Configuration().get("websocket", {}).get("secret_key")
+    # if set to False, will refuse to deserialize unencrypted messages for processing
+    _allow_unencrypted = Configuration().get("websocket", {}).get("allow_unencrypted", _secret_key is None)
 
     def __init__(self, msg_type, data=None, context=None):
         """Used to construct a message object
@@ -116,15 +123,18 @@ class Message(_MsgBase, metaclass=_MessageMeta):
                     x[idx] = serialize_item(it)
             if isinstance(x, dict) and not isinstance(x, _GUIDict):
                 for k, v in x.items():
-                   x[k] = serialize_item(v)
+                    x[k] = serialize_item(v)
             return x
 
         # handle Session and Message objects
         data = {k: serialize_item(v) for k, v in self.data.items()}
         ctxt = {k: serialize_item(v) for k, v in self.context.items()}
-        return json.dumps({'type': self.msg_type,
-                           'data': data,
-                           'context': ctxt})
+
+        msg = json.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
+        if self._secret_key:
+            payload = encrypt_as_dict(msg)
+            return json.dumps(payload)
+        return msg
 
     @staticmethod
     def deserialize(value):
@@ -143,6 +153,11 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             value(str): This is the string received from the websocket
         """
         obj = json.loads(value)
+        if Message._secret_key:
+            if 'ciphertext' in obj:
+                obj = decrypt_from_dict(obj)
+            elif not Message._allow_unencrypted:
+                raise RuntimeError("got an unencrypted message, configured to refuse")
         return Message(obj.get('type') or '',
                        obj.get('data') or {},
                        obj.get('context') or {})
@@ -256,6 +271,23 @@ class Message(_MsgBase, metaclass=_MessageMeta):
                 # Substitute only whole words matching the token
                 utt = re.sub(r'\b' + token.get("key", "") + r"\b", "", utt)
         return normalize(utt)
+
+
+def encrypt_as_dict(data, nonce=None):
+    ciphertext, tag, nonce = encrypt(data, nonce=nonce)
+    return {"ciphertext": hexlify(ciphertext).decode('utf-8'),
+            "tag": hexlify(tag).decode('utf-8'),
+            "nonce": hexlify(nonce).decode('utf-8')}
+
+
+def decrypt_from_dict(data):
+    ciphertext = unhexlify(data["ciphertext"])
+    if data.get("tag") is None:  # web crypto
+        ciphertext, tag = ciphertext[:-16], ciphertext[-16:]
+    else:
+        tag = unhexlify(data["tag"])
+    nonce = unhexlify(data["nonce"])
+    return decrypt(ciphertext, tag, nonce)
 
 
 def dig_for_message(max_records: int = 10) -> Optional[Message]:
@@ -380,5 +412,6 @@ if __name__ == "__main__":
     print(m2 == m1)
     print(isinstance(m1, _MycroftMessage))
     print(isinstance(m1, Message))
-    print(isinstance(m2, _MycroftMessage))  # can't fix this one without the monkey patching, its defined in the class at mycroft_bus_client
+    print(isinstance(m2,
+                     _MycroftMessage))  # can't fix this one without the monkey patching, its defined in the class at mycroft_bus_client
     print(isinstance(m2, Message))
