@@ -15,7 +15,7 @@ from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
 from ovos_bus_client.session import SessionManager, Session
 from ovos_bus_client.util import create_echo_function
-from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
+from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
 
 
 try:
@@ -341,6 +341,13 @@ class MessageBusClient(_MessageBusClientBase):
 
 
 class GUIWebsocketClient(MessageBusClient):
+
+    def __init__(self, host=None, port=None, route=None, ssl=None,
+                 emitter=None, cache=False):
+        config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
+        config = load_gui_message_bus_config(**config_overrides)
+        super().__init__(host=config.host, port=config.port, route=config.route,
+                         ssl=config.ssl, emitter=emitter, cache=cache)
 
     def emit(self, message):
         """Send a message onto the message bus.

@@ -25,10 +25,39 @@ def load_message_bus_config(**overrides):
         LOG.error('No websocket configs found ({})'.format(repr(ke)))
         raise
     else:
+        overrides = overrides or {}
+        websocket_configs = websocket_configs or {}
         mb_config = MessageBusConfig(
             host=overrides.get('host') or websocket_configs.get('host') or "127.0.0.1",
             port=overrides.get('port') or websocket_configs.get('port') or 8181,
             route=overrides.get('route') or websocket_configs.get('route') or "/core",
+            ssl=overrides.get('ssl') or config.get('ssl') or False
+        )
+        if not all([mb_config.host, mb_config.port, mb_config.route]):
+            error_msg = 'Missing one or more websocket configs'
+            LOG.error(error_msg)
+            raise ValueError(error_msg)
+
+    return mb_config
+
+
+def load_gui_message_bus_config(**overrides):
+    """Load the bits of device configuration needed to run the message bus."""
+    LOG.info('Loading message bus configs')
+    config = Configuration()
+
+    try:
+        websocket_configs = config['gui']
+    except KeyError as ke:
+        LOG.error('No gui configs found ({})'.format(repr(ke)))
+        raise
+    else:
+        overrides = overrides or {}
+        websocket_configs = websocket_configs or {}
+        mb_config = MessageBusConfig(
+            host=overrides.get('host') or websocket_configs.get('host') or "127.0.0.1",
+            port=overrides.get('port') or websocket_configs.get('port') or 18181,
+            route=overrides.get('route') or websocket_configs.get('route') or "/",
             ssl=overrides.get('ssl') or config.get('ssl') or False
         )
         if not all([mb_config.host, mb_config.port, mb_config.route]):
