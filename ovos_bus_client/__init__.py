@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ovos_bus_client.client.client import MessageBusClient, GUIWebsocketClient
-from ovos_bus_client.message import Message
+from ovos_bus_client.message import Message, GUIMessage
 from ovos_bus_client.send_func import send
 from ovos_bus_client.session import Session, SessionManager, UtteranceState
 from ovos_bus_client.conf import client_from_config
@@ -30,6 +30,7 @@ clients connected to the bus.
 __all__ = [
     MessageBusClient,
     GUIWebsocketClient,
+    GUIMessage,
     Message,
     send,
     client_from_config
