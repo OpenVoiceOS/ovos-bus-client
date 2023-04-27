@@ -12,10 +12,10 @@ from websocket import (WebSocketApp,
 
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
-from ovos_bus_client.message import Message, CollectionMessage
+from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
 from ovos_bus_client.session import SessionManager, Session
 from ovos_bus_client.util import create_echo_function
-from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
+from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
 
 
 try:
@@ -338,6 +338,57 @@ class MessageBusClient(_MessageBusClientBase):
         t.daemon = True
         t.start()
         return t
+
+
+class GUIWebsocketClient(MessageBusClient):
+
+    def __init__(self, host=None, port=None, route=None, ssl=None,
+                 emitter=None, cache=False):
+        config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
+        config = load_gui_message_bus_config(**config_overrides)
+        super().__init__(host=config.host, port=config.port, route=config.route,
+                         ssl=config.ssl, emitter=emitter, cache=cache)
+
+    def emit(self, message):
+        """Send a message onto the message bus.
+
+        This will both send the message to the local process using the
+        event emitter and onto the Mycroft websocket for other processes.
+
+        Args:
+            message (GUIMessage): Message to send
+        """
+
+        if not self.connected_event.wait(10):
+            if not self.started_running:
+                raise ValueError('You must execute run_forever() '
+                                 'before emitting messages')
+            self.connected_event.wait()
+
+        try:
+            if hasattr(message, 'serialize'):
+                self.client.send(message.serialize())
+            else:
+                self.client.send(json.dumps(message.__dict__))
+        except WebSocketConnectionClosedException:
+            LOG.warning('Could not send %s message because connection '
+                        'has been closed', message.msg_type)
+
+    def on_message(self, *args):
+        """Handle incoming websocket message.
+
+        Args:
+            message (str): GUI protocol bus message
+        """
+        if len(args) == 1:
+            message = args[0]
+        else:
+            message = args[1]
+
+        self.emitter.emit('message', message)
+
+        parsed_message = GUIMessage.deserialize(message)
+        self.emitter.emit(parsed_message.msg_type, parsed_message)
 
 
 def echo():

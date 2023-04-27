@@ -91,9 +91,13 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         Message objects will be used to send information back and forth
         between processes of mycroft service, voice, skill and cli
         """
+        data = data or {}
+        context = context or {}
+        assert isinstance(data, dict)
+        assert isinstance(context, dict)
         self.msg_type = msg_type
-        self.data = data or {}
-        self.context = context or {}
+        self.data = data
+        self.context = context
 
     def __eq__(self, other):
         if not isinstance(other, Message):
@@ -111,7 +115,18 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         Returns:
             str: a json string representation of the message.
         """
+        # handle Session and Message objects
+        data = self._json_dump(self.data)
+        ctxt = self._json_dump(self.context)
 
+        msg = json.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
+        if self._secret_key:
+            payload = encrypt_as_dict(msg)
+            return json.dumps(payload)
+        return msg
+
+    @staticmethod
+    def _json_dump(value):
         def serialize_item(x):
             try:
                 if hasattr(x, "serialize"):
@@ -125,16 +140,23 @@ class Message(_MsgBase, metaclass=_MessageMeta):
                 for k, v in x.items():
                     x[k] = serialize_item(v)
             return x
+        assert isinstance(value, dict)
+        data = {k: serialize_item(v) for k, v in value.items()}
+        return data
 
-        # handle Session and Message objects
-        data = {k: serialize_item(v) for k, v in self.data.items()}
-        ctxt = {k: serialize_item(v) for k, v in self.context.items()}
-
-        msg = json.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
-        if self._secret_key:
-            payload = encrypt_as_dict(msg)
-            return json.dumps(payload)
-        return msg
+    @staticmethod
+    def _json_load(value):
+        if isinstance(value, str):
+            obj = json.loads(value)
+        else:
+            obj = value
+        assert isinstance(obj, dict)
+        if Message._secret_key:
+            if 'ciphertext' in obj:
+                obj = decrypt_from_dict(obj)
+            elif not Message._allow_unencrypted:
+                raise RuntimeError("got an unencrypted message, configured to refuse")
+        return obj
 
     @staticmethod
     def deserialize(value):
@@ -152,12 +174,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             int the function.
             value(str): This is the string received from the websocket
         """
-        obj = json.loads(value)
-        if Message._secret_key:
-            if 'ciphertext' in obj:
-                obj = decrypt_from_dict(obj)
-            elif not Message._allow_unencrypted:
-                raise RuntimeError("got an unencrypted message, configured to refuse")
+        obj = Message._json_load(value)
         return Message(obj.get('type') or '',
                        obj.get('data') or {},
                        obj.get('context') or {})
@@ -401,6 +418,33 @@ class CollectionMessage(Message, _CollectionMsgBase):
                                       data,
                                       self.context)
         return response_message
+
+
+class GUIMessage(Message):
+    def __init__(self, msg_type, **kwargs):
+        super().__init__(msg_type, data=kwargs)
+
+    def serialize(self):
+        """This returns a string of the message info.
+
+        This makes it easy to send over a websocket. This uses
+        json dumps to generate the string with type, data and context
+
+        Returns:
+            str: a json string representation of the message.
+        """
+        data = self._json_dump(self.data)
+        msg = json.dumps({'type': self.msg_type, **data})
+        if self._secret_key:
+            payload = encrypt_as_dict(msg)
+            return json.dumps(payload)
+        return msg
+
+    @staticmethod
+    def deserialize(value):
+        value = Message._json_load(value)
+        msg_type = value.pop("type")
+        return GUIMessage(msg_type, **value)
 
 
 if __name__ == "__main__":
