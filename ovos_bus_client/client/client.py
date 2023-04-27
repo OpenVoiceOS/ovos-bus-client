@@ -12,7 +12,7 @@ from websocket import (WebSocketApp,
 
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
-from ovos_bus_client.message import Message, CollectionMessage
+from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
 from ovos_bus_client.session import SessionManager, Session
 from ovos_bus_client.util import create_echo_function
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
@@ -379,9 +379,9 @@ class GUIWebsocketClient(MessageBusClient):
             message = args[1]
 
         self.emitter.emit('message', message)
-        message = json.loads(message)
 
-        self.emitter.emit(message["type"], message)
+        parsed_message = GUIMessage.deserialize(message)
+        self.emitter.emit(parsed_message.msg_type, parsed_message)
 
 
 def echo():
