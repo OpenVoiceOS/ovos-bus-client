@@ -342,6 +342,31 @@ class MessageBusClient(_MessageBusClientBase):
 
 class GUIWebsocketClient(MessageBusClient):
 
+    def emit(self, message):
+        """Send a message onto the message bus.
+
+        This will both send the message to the local process using the
+        event emitter and onto the Mycroft websocket for other processes.
+
+        Args:
+            message (GUIMessage): Message to send
+        """
+
+        if not self.connected_event.wait(10):
+            if not self.started_running:
+                raise ValueError('You must execute run_forever() '
+                                 'before emitting messages')
+            self.connected_event.wait()
+
+        try:
+            if hasattr(message, 'serialize'):
+                self.client.send(message.serialize())
+            else:
+                self.client.send(json.dumps(message.__dict__))
+        except WebSocketConnectionClosedException:
+            LOG.warning('Could not send %s message because connection '
+                        'has been closed', message.msg_type)
+
     def on_message(self, *args):
         """Handle incoming websocket message.
 
