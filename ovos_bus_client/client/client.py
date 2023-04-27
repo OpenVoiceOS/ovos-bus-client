@@ -340,6 +340,25 @@ class MessageBusClient(_MessageBusClientBase):
         return t
 
 
+class GUIWebsocketClient(MessageBusClient):
+
+    def on_message(self, *args):
+        """Handle incoming websocket message.
+
+        Args:
+            message (str): GUI protocol bus message
+        """
+        if len(args) == 1:
+            message = args[0]
+        else:
+            message = args[1]
+
+        self.emitter.emit('message', message)
+        message = json.loads(message)
+
+        self.emitter.emit(message["type"], message)
+
+
 def echo():
     """Echo function repeating all input from a user."""
     message_bus_client = MessageBusClient()
