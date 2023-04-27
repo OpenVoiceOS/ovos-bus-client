@@ -1,6 +1,7 @@
 import json
 import time
 import traceback
+from os import getpid
 from threading import Event, Thread
 from uuid import uuid4
 
@@ -12,11 +13,10 @@ from websocket import (WebSocketApp,
 
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
+from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
 from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
 from ovos_bus_client.session import SessionManager, Session
 from ovos_bus_client.util import create_echo_function
-from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
-
 
 try:
     from mycroft_bus_client import MessageBusClient as _MessageBusClientBase
@@ -343,7 +343,8 @@ class MessageBusClient(_MessageBusClientBase):
 class GUIWebsocketClient(MessageBusClient):
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
-                 emitter=None, cache=False):
+                 emitter=None, cache=False, client_name="ovos-gui-client"):
+        self.gui_id = f"{client_name}_{getpid()}"
         config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
         config = load_gui_message_bus_config(**config_overrides)
         super().__init__(host=config.host, port=config.port, route=config.route,
@@ -373,6 +374,11 @@ class GUIWebsocketClient(MessageBusClient):
         except WebSocketConnectionClosedException:
             LOG.warning('Could not send %s message because connection '
                         'has been closed', message.msg_type)
+
+    def on_open(self, *args):
+        super().on_open(*args)
+        self.emit(GUIMessage("mycroft.gui.connected",
+                             gui_id=self.gui_id))
 
     def on_message(self, *args):
         """Handle incoming websocket message.
