@@ -24,6 +24,9 @@ jobs:
     - name: Install repo
       run: |
         pip install .
+    - name: Install test dependencies
+      run: |
+        pip install -r test/requirements.txt
     - name: Generate coverage report
       run: |
         pip install pytest
