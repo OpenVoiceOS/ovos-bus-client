@@ -111,7 +111,9 @@ class Session:
     def update_history(self, message=None):
         message = message or dig_for_message()
         if message:
-            self.history.append((message.serialize(), time.time()))
+            m = message.as_dict
+            m["context"] = {}  # clear personal data
+            self.history.append((m, time.time()))
         self._prune_history()
 
     @staticmethod

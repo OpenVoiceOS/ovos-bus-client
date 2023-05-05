@@ -125,6 +125,10 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             return json.dumps(payload)
         return msg
 
+    @property
+    def as_dict(self):
+        return json.loads(self.serialize())
+
     @staticmethod
     def _json_dump(value):
         def serialize_item(x):
