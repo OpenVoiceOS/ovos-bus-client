@@ -14,6 +14,10 @@ class UtteranceState(str, enum.Enum):
     RESPONSE = "response"
 
 
+def _get_valid_langs():
+    return list(set([get_default_lang()] + Configuration().get("secondary_langs'", [])))
+
+
 class Session:
     """
     An class representing a Mycroft Session Identifier
@@ -23,9 +27,6 @@ class Session:
                  max_time=5, max_messages=5, utterance_states=None, lang=None, context=None, valid_langs=None):
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
-
-        def _get_valid_langs():
-            return list(set([get_default_lang()] + Configuration().get("secondary_langs'", [])))
 
         self.valid_languages = valid_langs or _get_valid_langs()
         self.active_skills = active_skills or []  # [skill_id , timestamp]
