@@ -20,9 +20,14 @@ class Session:
     """
 
     def __init__(self, session_id=None, expiration_seconds=None, active_skills=None, history=None,
-                 max_time=5, max_messages=5, utterance_states=None, lang=None, context=None):
+                 max_time=5, max_messages=5, utterance_states=None, lang=None, context=None, valid_langs=None):
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
+
+        def _get_valid_langs():
+            return list(set([get_default_lang()] + Configuration().get("secondary_langs'", [])))
+
+        self.valid_languages = valid_langs or _get_valid_langs()
         self.active_skills = active_skills or []  # [skill_id , timestamp]
         self.history = history or []  # [Message , timestamp]
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
@@ -105,6 +110,7 @@ class Session:
             "session_id": self.session_id,
             "history": self.history,
             "lang": self.lang,
+            "valid_languages": self.valid_languages,
             "context": self.context.serialize()
         }
 
@@ -125,6 +131,7 @@ class Session:
         max_messages = data.get("max_messages") or 5
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
+        valid_langs = data.get("valid_languages") or _get_valid_langs()
         context = IntentContextManager.deserialize(data["context"])
         return Session(uid,
                        active_skills=active,
@@ -132,6 +139,7 @@ class Session:
                        history=history,
                        max_time=max_time,
                        lang=lang,
+                       valid_langs=valid_langs,
                        max_messages=max_messages,
                        context=context)
 
