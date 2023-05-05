@@ -118,7 +118,7 @@ class Session:
         message = message or dig_for_message()
         if message:
             m = message.as_dict
-            # m["context"] = {}  # clear personal data
+            m["context"] = {}  # clear personal data
             self.history.append((m, time.time()))
         self._prune_history()
 
