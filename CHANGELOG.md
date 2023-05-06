@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.0.4a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a8) (2023-05-05)
+## [V0.0.4a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a8) (2023-05-05)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a7...0.0.4a8)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a7...V0.0.4a8)
 
 **Implemented enhancements:**
 
