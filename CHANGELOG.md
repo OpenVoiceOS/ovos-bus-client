@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.4a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a10) (2023-05-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a9...0.0.4a10)
+
+**Fixed bugs:**
+
+- fix/mycroft\_compat [\#26](https://github.com/OpenVoiceOS/ovos-bus-client/pull/26) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.4a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a9) (2023-05-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a8...V0.0.4a9)
+
 ## [V0.0.4a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a8) (2023-05-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a7...V0.0.4a8)
