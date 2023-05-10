@@ -1,5 +1,6 @@
 import enum
 import time
+import json
 from threading import Lock
 from uuid import uuid4
 
@@ -118,7 +119,11 @@ class Session:
     def update_history(self, message=None):
         message = message or dig_for_message()
         if message:
-            m = message.as_dict
+            try:
+                m = message.as_dict
+            except:
+                m = json.loads(message.serialize())
+                LOG.warning("mycroft-bus-client has been deprecated, please update your imports to use ovos-bus-client")
             m["context"] = {}  # clear personal data
             self.history.append((m, time.time()))
         self._prune_history()
