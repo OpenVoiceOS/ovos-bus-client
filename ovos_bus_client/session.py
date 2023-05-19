@@ -152,6 +152,13 @@ class Session:
 
     @staticmethod
     def from_message(message=None):
+        """
+        Get a Session for the given message. If no session in message context,
+        SessionManager.default_session is returned.
+        If SessionManager.default_session is None, a default session is created
+        @param message: Message to get session for
+        @return: Session object
+        """
         message = message or dig_for_message()
         if message:
             lang = message.context.get("lang") or \
@@ -173,6 +180,9 @@ class Session:
                     sess.lang = lang
             else:
                 sess = SessionManager.default_session
+                if not sess:
+                    LOG.debug(f"Creating default session on reference")
+                    sess = SessionManager.reset_default_session()
                 if sess and sess.lang != lang:
                     sess.lang = lang
                     LOG.info(f"Updated default session lang to: {lang}")
