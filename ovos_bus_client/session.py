@@ -173,10 +173,16 @@ class Session:
                     sess.lang = lang
             else:
                 sess = Session(lang=lang)
+                LOG.debug(f"Created new session: {sess}")
         else:
             # new session
+            LOG.warning(f"No message found, creating a new session")
             sess = Session()
-        # TODO: What if `sess` is expired?
+        if sess.expired():
+            # TODO: Is this the right thing to do?
+            LOG.warning(f"Resolved session expired {sess.session_id}")
+            SessionManager.sessions.pop(sess.session_id, None)
+            sess = Session(sess.lang)
         return sess
 
 
@@ -236,7 +242,7 @@ class SessionManager:
 
         # A message exists, get a real session
         if message:
-            LOG.info(f"Getting session for message")
+            LOG.info(f"Getting session for message: {message.msg_type}")
             sess = Session.from_message(message)
             SessionManager.sessions[sess.session_id] = sess
             return sess
