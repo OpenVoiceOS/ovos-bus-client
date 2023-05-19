@@ -180,7 +180,7 @@ class Session:
 
 class SessionManager:
     """ Keeps track of the current active session. """
-    default_session = None
+    default_session: Session = None
     __lock = Lock()
     sessions = {}
 
@@ -189,6 +189,7 @@ class SessionManager:
         with SessionManager.__lock:
             sess = Session()
             LOG.info(f"New Default Session Start: {sess.session_id}")
+            SessionManager.sessions.pop(SessionManager.default_session.session_id)
             SessionManager.default_session = sess
             SessionManager.sessions[sess.session_id] = sess
         return SessionManager.default_session

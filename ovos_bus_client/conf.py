@@ -16,7 +16,7 @@ MessageBusConfig = MessageBusClientConf = namedtuple('MessageBusClientConf',
 
 def load_message_bus_config(**overrides):
     """Load the bits of device configuration needed to run the message bus."""
-    LOG.info('Loading message bus configs')
+    LOG.debug('Loading message bus configs')
     config = Configuration()
 
     try:
