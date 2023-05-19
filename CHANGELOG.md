@@ -1,8 +1,20 @@
 # Changelog
 
-## [0.0.4a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a10) (2023-05-10)
+## [0.0.4a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a11) (2023-05-19)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a9...0.0.4a10)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a10...0.0.4a11)
+
+**Fixed bugs:**
+
+- Update logging and troubleshoot memory usage [\#27](https://github.com/OpenVoiceOS/ovos-bus-client/pull/27) ([NeonDaniel](https://github.com/NeonDaniel))
+
+**Closed issues:**
+
+- Minor Code Cleanup [\#17](https://github.com/OpenVoiceOS/ovos-bus-client/issues/17)
+
+## [V0.0.4a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a10) (2023-05-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a9...V0.0.4a10)
 
 **Fixed bugs:**
 
