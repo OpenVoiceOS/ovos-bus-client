@@ -173,14 +173,14 @@ class Session:
                     sess.lang = lang
             else:
                 sess = SessionManager.default_session
-                if sess.lang != lang:
+                if sess and sess.lang != lang:
                     sess.lang = lang
                     LOG.info(f"Updated default session lang to: {lang}")
         else:
             # new session
             LOG.warning(f"No message found, using default session")
             sess = SessionManager.default_session
-        if sess.expired():
+        if sess and sess.expired():
             LOG.debug(f"Resolved session expired {sess.session_id}")
             sess.touch()
         return sess
@@ -248,8 +248,11 @@ class SessionManager:
         if message:
             LOG.debug(f"Check for session in message")
             msg_sess = Session.from_message(message)
-            SessionManager.sessions[msg_sess.session_id] = msg_sess
-            return msg_sess
+            if msg_sess:
+                SessionManager.sessions[msg_sess.session_id] = msg_sess
+                return msg_sess
+            else:
+                LOG.debug(f"No session from message.")
         LOG.debug(f"No message, use default session")
 
         # Default session, check if it needs to be (re)-created
