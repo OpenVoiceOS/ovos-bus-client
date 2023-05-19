@@ -176,6 +176,7 @@ class Session:
         else:
             # new session
             sess = Session()
+        # TODO: What if `sess` is expired?
         return sess
 
 
@@ -202,6 +203,11 @@ class SessionManager:
         with SessionManager.__lock:
             sess = Session()
             LOG.info(f"New Default Session Start: {sess.session_id}")
+            if SessionManager.default_session.session_id in \
+                    SessionManager.sessions:
+                LOG.error(f"Expired default session unexpectedly in sessions")
+                SessionManager.sessions.pop(
+                    SessionManager.default_session.session_id)
             SessionManager.default_session = sess
             SessionManager.sessions[sess.session_id] = sess
         return SessionManager.default_session
@@ -225,17 +231,23 @@ class SessionManager:
 
         :return: An active session
         """
-        SessionManager.prune_sessions()
         sess = SessionManager.default_session
         message = message or dig_for_message()
 
-        if not sess or sess.expired():
-            if sess is not None and sess.session_id in SessionManager.sessions:
-                SessionManager.sessions.pop(sess.session_id)
-            sess = SessionManager.reset_default_session()
+        # A message exists, get a real session
         if message:
+            LOG.info(f"Getting session for message")
             sess = Session.from_message(message)
             SessionManager.sessions[sess.session_id] = sess
+            return sess
+
+        # Default session, check if it needs to be (re)-created
+        if not sess or sess.expired():
+            if sess is not None and sess.session_id in SessionManager.sessions:
+                LOG.debug(f"Removing expired default: {sess.session_id}")
+                SessionManager.sessions.pop(sess.session_id)
+            sess = SessionManager.reset_default_session()
+
         return sess
 
     @staticmethod
