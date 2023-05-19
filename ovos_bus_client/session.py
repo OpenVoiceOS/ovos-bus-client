@@ -179,10 +179,8 @@ class Session:
             LOG.warning(f"No message found, creating a new session")
             sess = Session()
         if sess.expired():
-            # TODO: Is this the right thing to do?
-            LOG.warning(f"Resolved session expired {sess.session_id}")
-            SessionManager.sessions.pop(sess.session_id, None)
-            sess = Session(sess.lang)
+            LOG.debug(f"Resolved session expired {sess.session_id}")
+            sess.touch()
         return sess
 
 
@@ -197,6 +195,10 @@ class SessionManager:
         """
         Discard any expired sessions
         """
+        # TODO: Consider when to prune sessions; an event or callback scheduled
+        #   on `touch`, periodically scheduled event, or triggered on some
+        #   interaction with `SessionManager` (ideally threaded to not slow
+        #   down references
         SessionManager.sessions = {sid: s for sid, s in
                                    SessionManager.sessions.items()
                                    if not s.expired}
