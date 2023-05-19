@@ -248,10 +248,9 @@ class SessionManager:
         if message:
             LOG.debug(f"Check for session in message")
             msg_sess = Session.from_message(message)
-            if msg_sess.session_id in SessionManager.sessions:
-                SessionManager.sessions[msg_sess.session_id] = msg_sess
-                return msg_sess
-            LOG.debug(f"No session for message, use default")
+            SessionManager.sessions[msg_sess.session_id] = msg_sess
+            return msg_sess
+        LOG.debug(f"No message, use default session")
 
         # Default session, check if it needs to be (re)-created
         if not sess or sess.expired():
