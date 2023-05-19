@@ -213,6 +213,8 @@ class SessionManager:
         with SessionManager.__lock:
             sess = Session()
             LOG.info(f"New Default Session Start: {sess.session_id}")
+            if not SessionManager.default_session:
+                SessionManager.default_session = sess
             if SessionManager.default_session.session_id in \
                     SessionManager.sessions:
                 LOG.debug(f"Removing expired default session from sessions")
@@ -229,6 +231,8 @@ class SessionManager:
 
         :return: None
         """
+        if not sess:
+            raise ValueError(f"Expected Session and got None")
         sess.touch()
         SessionManager.sessions[sess.session_id] = sess
         if make_default:
