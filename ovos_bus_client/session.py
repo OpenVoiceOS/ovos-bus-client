@@ -3,8 +3,9 @@ import time
 import json
 from threading import Lock
 from uuid import uuid4
+from typing import Optional
 
-from ovos_bus_client.message import dig_for_message
+from ovos_bus_client.message import dig_for_message, Message
 from ovos_utils.log import LOG
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
@@ -151,6 +152,13 @@ class Session:
 
     @staticmethod
     def from_message(message=None):
+        """
+        Get a Session for the given message. If no session in message context,
+        SessionManager.default_session is returned.
+        If SessionManager.default_session is None, a default session is created
+        @param message: Message to get session for
+        @return: Session object
+        """
         message = message or dig_for_message()
         if message:
             lang = message.context.get("lang") or \
@@ -171,24 +179,57 @@ class Session:
                 if lang:
                     sess.lang = lang
             else:
-                sess = Session(lang=lang)
+                sess = SessionManager.default_session
+                if not sess:
+                    LOG.debug(f"Creating default session on reference")
+                    sess = SessionManager.reset_default_session()
+                if sess and lang and sess.lang != lang:
+                    sess.lang = lang
+                    LOG.info(f"Updated default session lang to: {lang}")
         else:
             # new session
-            sess = Session()
+            LOG.warning(f"No message found, using default session")
+            sess = SessionManager.default_session
+        if sess and sess.expired():
+            LOG.debug(f"Resolved session expired {sess.session_id}")
+            sess.touch()
         return sess
 
 
 class SessionManager:
     """ Keeps track of the current active session. """
-    default_session = None
+    default_session: Session = None
     __lock = Lock()
     sessions = {}
 
     @staticmethod
-    def reset_default_session():
+    def prune_sessions():
+        """
+        Discard any expired sessions
+        """
+        # TODO: Consider when to prune sessions; an event or callback scheduled
+        #   on `touch`, periodically scheduled event, or triggered on some
+        #   interaction with `SessionManager` (ideally threaded to not slow
+        #   down references
+        SessionManager.sessions = {sid: s for sid, s in
+                                   SessionManager.sessions.items()
+                                   if not s.expired}
+
+    @staticmethod
+    def reset_default_session() -> Session:
+        """
+        Define and return a new default_session
+        """
         with SessionManager.__lock:
             sess = Session()
             LOG.info(f"New Default Session Start: {sess.session_id}")
+            if not SessionManager.default_session:
+                SessionManager.default_session = sess
+            if SessionManager.default_session.session_id in \
+                    SessionManager.sessions:
+                LOG.debug(f"Removing expired default session from sessions")
+                SessionManager.sessions.pop(
+                    SessionManager.default_session.session_id)
             SessionManager.default_session = sess
             SessionManager.sessions[sess.session_id] = sess
         return SessionManager.default_session
@@ -200,13 +241,15 @@ class SessionManager:
 
         :return: None
         """
+        if not sess:
+            raise ValueError(f"Expected Session and got None")
         sess.touch()
         SessionManager.sessions[sess.session_id] = sess
         if make_default:
             SessionManager.default_session = sess
 
     @staticmethod
-    def get(message=None):
+    def get(message: Optional[Message] = None) -> Session:
         """
         get the active session.
 
@@ -215,17 +258,28 @@ class SessionManager:
         sess = SessionManager.default_session
         message = message or dig_for_message()
 
+        # A message exists, get a real session
+        if message:
+            LOG.debug(f"Check for session in message")
+            msg_sess = Session.from_message(message)
+            if msg_sess:
+                SessionManager.sessions[msg_sess.session_id] = msg_sess
+                return msg_sess
+            else:
+                LOG.debug(f"No session from message.")
+        LOG.debug(f"No message, use default session")
+
+        # Default session, check if it needs to be (re)-created
         if not sess or sess.expired():
             if sess is not None and sess.session_id in SessionManager.sessions:
+                LOG.debug(f"Removing expired default: {sess.session_id}")
                 SessionManager.sessions.pop(sess.session_id)
             sess = SessionManager.reset_default_session()
-        if message:
-            sess = Session.from_message(message)
-            SessionManager.sessions[sess.session_id] = sess
+
         return sess
 
     @staticmethod
-    def touch(message=None):
+    def touch(message: Message = None):
         """
         Update the last_touch timestamp on the current session
 

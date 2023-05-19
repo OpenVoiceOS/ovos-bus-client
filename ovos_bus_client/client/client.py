@@ -82,7 +82,7 @@ class MessageBusClient(_MessageBusClientBase):
 
         A Basic message with the name "open" is forwarded to the emitter.
         """
-        LOG.info("Connected")
+        LOG.debug("Connected")
         self.connected_event.set()
         self.emitter.emit("open")
         # Restore reconnect timer to 5 seconds on sucessful connect
