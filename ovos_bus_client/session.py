@@ -213,7 +213,7 @@ class SessionManager:
             LOG.info(f"New Default Session Start: {sess.session_id}")
             if SessionManager.default_session.session_id in \
                     SessionManager.sessions:
-                LOG.error(f"Expired default session unexpectedly in sessions")
+                LOG.debug(f"Removing expired default session from sessions")
                 SessionManager.sessions.pop(
                     SessionManager.default_session.session_id)
             SessionManager.default_session = sess
@@ -244,7 +244,7 @@ class SessionManager:
 
         # A message exists, get a real session
         if message:
-            LOG.info(f"Check for session in message")
+            LOG.debug(f"Check for session in message")
             msg_sess = Session.from_message(message)
             if msg_sess.session_id in SessionManager.sessions:
                 SessionManager.sessions[msg_sess.session_id] = msg_sess
