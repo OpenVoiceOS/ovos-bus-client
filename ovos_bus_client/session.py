@@ -183,7 +183,7 @@ class Session:
                 if not sess:
                     LOG.debug(f"Creating default session on reference")
                     sess = SessionManager.reset_default_session()
-                if sess and sess.lang != lang:
+                if sess and lang and sess.lang != lang:
                     sess.lang = lang
                     LOG.info(f"Updated default session lang to: {lang}")
         else:
