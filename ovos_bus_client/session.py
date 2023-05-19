@@ -3,8 +3,9 @@ import time
 import json
 from threading import Lock
 from uuid import uuid4
+from typing import Optional
 
-from ovos_bus_client.message import dig_for_message
+from ovos_bus_client.message import dig_for_message, Message
 from ovos_utils.log import LOG
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
@@ -185,11 +186,22 @@ class SessionManager:
     sessions = {}
 
     @staticmethod
-    def reset_default_session():
+    def prune_sessions():
+        """
+        Discard any expired sessions
+        """
+        SessionManager.sessions = {sid: s for sid, s in
+                                   SessionManager.sessions.items()
+                                   if not s.expired}
+
+    @staticmethod
+    def reset_default_session() -> Session:
+        """
+        Define and return a new default_session
+        """
         with SessionManager.__lock:
             sess = Session()
             LOG.info(f"New Default Session Start: {sess.session_id}")
-            SessionManager.sessions.pop(SessionManager.default_session.session_id)
             SessionManager.default_session = sess
             SessionManager.sessions[sess.session_id] = sess
         return SessionManager.default_session
@@ -207,12 +219,13 @@ class SessionManager:
             SessionManager.default_session = sess
 
     @staticmethod
-    def get(message=None):
+    def get(message: Optional[Message] = None) -> Session:
         """
         get the active session.
 
         :return: An active session
         """
+        SessionManager.prune_sessions()
         sess = SessionManager.default_session
         message = message or dig_for_message()
 
@@ -226,7 +239,7 @@ class SessionManager:
         return sess
 
     @staticmethod
-    def touch(message=None):
+    def touch(message: Message = None):
         """
         Update the last_touch timestamp on the current session
 
