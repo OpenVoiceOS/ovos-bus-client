@@ -242,10 +242,12 @@ class SessionManager:
 
         # A message exists, get a real session
         if message:
-            LOG.info(f"Getting session for message: {message.msg_type}")
-            sess = Session.from_message(message)
-            SessionManager.sessions[sess.session_id] = sess
-            return sess
+            LOG.info(f"Check for session in message")
+            msg_sess = Session.from_message(message)
+            if msg_sess.session_id in SessionManager.sessions:
+                SessionManager.sessions[msg_sess.session_id] = msg_sess
+                return msg_sess
+            LOG.debug(f"No session for message, use default")
 
         # Default session, check if it needs to be (re)-created
         if not sess or sess.expired():
