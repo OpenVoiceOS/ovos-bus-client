@@ -50,7 +50,7 @@ class TestIntentContextManager(unittest.TestCase):
         context_manager = IntentContextManager()
         self.assertEqual(context_manager.frame_stack, list())
         self.assertIsInstance(context_manager.timeout, int)
-        self.assertIsInstance(context_manager.keywords, list)
+        self.assertIsInstance(context_manager.context_keywords, list)
         self.assertIsInstance(context_manager.context_max_frames, int)
         self.assertIsInstance(context_manager.context_greedy, bool)
         self.assertNotEqual(context_manager, self.context_manager)
