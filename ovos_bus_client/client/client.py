@@ -424,6 +424,8 @@ def echo():
     """
     Echo function repeating all input from a user.
     """
+    # TODO: Deprecate in 0.1.0
+    LOG.warning("This function is deprecated and will be removed in v0.1.0.")
     message_bus_client = MessageBusClient()
 
     def repeat_utterance(message):

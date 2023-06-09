@@ -15,10 +15,11 @@
 """
 Small utils and tools to use with the Messagebus.
 """
-import json
+
 import logging
 from typing import Callable, Optional, Union
 from ovos_bus_client.message import Message
+from ovos_utils.log import LOG
 
 
 def create_echo_function(name: Optional[str]) -> \
@@ -32,6 +33,8 @@ def create_echo_function(name: Optional[str]) -> \
     Returns:
         func: The echo function
     """
+    # TODO: Deprecate in 0.1.0
+    LOG.warning("This function is deprecated and will be removed in v0.1.0.")
     log = logging.getLogger(name)
 
     def echo(message: Union[Message, str]):
