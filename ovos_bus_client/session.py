@@ -3,7 +3,7 @@ import time
 import json
 from threading import Lock
 from uuid import uuid4
-from typing import Optional, List, Tuple, Union
+from typing import Optional, List, Tuple, Union, Iterable
 
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_utils.log import LOG
@@ -36,13 +36,17 @@ class IntentContextManagerFrame:
     def serialize(self) -> dict:
         """
         Get a dict representation of this frame
-        @return:
         """
         return {"entities": self.entities,
                 "metadata": self.metadata}
 
     @staticmethod
     def deserialize(data: dict):
+        """
+        Build an IntentContextManagerFrame from serialized data
+        @param data: serialized (dict) frame data
+        @return: IntentContextManagerFrame for the specified data
+        """
         return IntentContextManagerFrame(**data)
 
     def metadata_matches(self, query: dict = None) -> bool:
@@ -111,19 +115,29 @@ class IntentContextManager:
         self.context_max_frames = max_frames
         self.context_greedy = greedy
 
-    def serialize(self):
+    def serialize(self) -> dict:
+        """
+        Get a dict representation of this IntentContextManager
+        """
         return {"timeout": self.timeout,
-                "frame_stack": [s.serialize() for s in self.frame_stack]}
+                "frame_stack": [(s.serialize(), t) for (s, t)
+                                in self.frame_stack]}
 
     @staticmethod
-    def deserialize(data):
+    def deserialize(data: dict):
+        """
+        Build an IntentContextManager from serialized data
+        @param data: serialized (dict) data
+        @return: IntentContextManager for the specified data
+        """
         timeout = data["timeout"]
-        framestack = [(IntentContextManagerFrame.deserialize(f), time.time())
-                      for f in data["frame_stack"]]
+        framestack = [(IntentContextManagerFrame.deserialize(f), t)
+                      for (f, t) in data["frame_stack"]]
         return IntentContextManager(timeout, framestack)
 
-    def update_context(self, entities):
-        """Updates context with keyword from the intent.
+    def update_context(self, entities: dict):
+        """
+        Updates context with keyword from the intent.
 
         entity(dict): Format example...
                    {'data': 'Entity tag as <str>',
@@ -144,7 +158,7 @@ class IntentContextManager:
         """Remove all contexts."""
         self.frame_stack = []
 
-    def remove_context(self, context_id):
+    def remove_context(self, context_id: str):
         """Remove a specific context entry.
 
         Args:
@@ -153,8 +167,10 @@ class IntentContextManager:
         self.frame_stack = [(f, t) for (f, t) in self.frame_stack
                             if context_id in f.entities[0].get('data', [])]
 
-    def inject_context(self, entity, metadata=None):
+    def inject_context(self, entity: dict, metadata: dict = None):
         """
+        Add context to the first frame in the stack. If no frame metadata
+        doesn't match the passed metadata then a new one is inserted.
         Args:
             entity(dict): Format example...
                        {'data': 'Entity tag as <str>',
@@ -179,7 +195,7 @@ class IntentContextManager:
             pass
 
     @staticmethod
-    def _strip_result(context_features):
+    def _strip_result(context_features: Iterable):
         """Keep only the latest instance of each keyword.
 
         Arguments
@@ -194,8 +210,10 @@ class IntentContextManager:
                 processed.append(keyword)
         return stripped
 
-    def get_context(self, max_frames=None, missing_entities=None):
-        """ Constructs a list of entities from the context.
+    def get_context(self, max_frames: int = None,
+                    missing_entities: List[str] = None):
+        """
+        Constructs a list of entities from the context.
 
         Args:
             max_frames(int): maximum number of frames to look back
@@ -493,7 +511,7 @@ class SessionManager:
         # TODO: Consider when to prune sessions; an event or callback scheduled
         #   on `touch`, periodically scheduled event, or triggered on some
         #   interaction with `SessionManager` (ideally threaded to not slow
-        #   down references
+        #   down references)
         SessionManager.sessions = {sid: s for sid, s in
                                    SessionManager.sessions.items()
                                    if not s.expired}
@@ -521,8 +539,8 @@ class SessionManager:
     def update(sess: Session, make_default: bool = False):
         """
         Update the last_touch timestamp on the current session
-
-        :return: None
+        @param sess: Session to update
+        @param make_default: if true, set default_session to sess
         """
         if not sess:
             raise ValueError(f"Expected Session and got None")
@@ -534,9 +552,10 @@ class SessionManager:
     @staticmethod
     def get(message: Optional[Message] = None) -> Session:
         """
-        get the active session.
+        Get the active session for a given Message
 
-        :return: An active session
+        @param message: Message to get session for
+        @return: Session from message or default_session
         """
         sess = SessionManager.default_session
         message = message or dig_for_message()
@@ -566,8 +585,6 @@ class SessionManager:
         """
         Update the last_touch timestamp on the current session
 
-        :return: None
+        @param message: Message to get Session for to update
         """
         SessionManager.get(message).touch()
-
-

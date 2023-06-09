@@ -1,4 +1,5 @@
 import unittest
+
 from time import time, sleep
 
 
@@ -41,7 +42,64 @@ class TestIntentContextManagerFrame(unittest.TestCase):
 
 
 class TestIntentContextManager(unittest.TestCase):
-    pass
+    from ovos_bus_client.session import IntentContextManager
+    context_manager = IntentContextManager()
+
+    def test_init(self):
+        from ovos_bus_client.session import IntentContextManager
+        context_manager = IntentContextManager()
+        self.assertEqual(context_manager.frame_stack, list())
+        self.assertIsInstance(context_manager.timeout, int)
+        self.assertIsInstance(context_manager.keywords, list)
+        self.assertIsInstance(context_manager.context_max_frames, int)
+        self.assertIsInstance(context_manager.context_greedy, bool)
+        self.assertNotEqual(context_manager, self.context_manager)
+
+    def test_serialize_deserialize(self):
+        from ovos_bus_client.session import IntentContextManagerFrame, \
+            IntentContextManager
+
+        # Serialize with a frame
+        self.context_manager.frame_stack.insert(0, (IntentContextManagerFrame(),
+                                                    time()))
+        serialized = self.context_manager.serialize()
+        self.assertEqual(serialized['timeout'], self.context_manager.timeout)
+        self.assertEqual(len(serialized['frame_stack']),
+                         len(self.context_manager.frame_stack))
+        for frame in serialized['frame_stack']:
+            self.assertIsInstance(frame[0], dict)
+            self.assertIsInstance(frame[1], float)
+
+        # Times and serialized frames should be equal
+        new_manager = IntentContextManager.deserialize(serialized)
+        self.assertEqual(new_manager.frame_stack[0][0].serialize(),
+                         self.context_manager.frame_stack[0][0].serialize())
+        self.assertEqual(new_manager.frame_stack[0][1],
+                         self.context_manager.frame_stack[0][1])
+
+    def test_update_context(self):
+        # TODO
+        pass
+
+    def test_clear_context(self):
+        # TODO
+        pass
+
+    def test_remove_context(self):
+        # TODO
+        pass
+
+    def test_inject_context(self):
+        # TODO
+        pass
+
+    def test_strip_result(self):
+        # TODO
+        pass
+
+    def test_get_context(self):
+        # TODO
+        pass
 
 
 class TestSession(unittest.TestCase):
@@ -135,5 +193,29 @@ class TestSession(unittest.TestCase):
 
 
 class TestSessionManager(unittest.TestCase):
-    # TODO
-    pass
+    from ovos_bus_client.session import SessionManager
+
+    def test_prune_sessions(self):
+        # TODO
+        self.SessionManager.prune_sessions()
+
+    def test_reset_default_session(self):
+        from ovos_bus_client.session import Session
+        session = self.SessionManager.reset_default_session()
+        self.assertIsInstance(session, Session)
+        self.assertEqual(session, self.SessionManager.default_session)
+        # TODO
+
+    def test_update(self):
+        # TODO
+        pass
+
+    def test_get(self):
+        from ovos_bus_client.session import Session
+        session = self.SessionManager.get()
+        self.assertIsInstance(session, Session)
+        # TODO
+
+    def test_touch(self):
+        # TODO
+        pass
