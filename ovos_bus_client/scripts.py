@@ -7,7 +7,8 @@ import sys
 
 
 def ovos_speak():
-    if (args_count := len(sys.argv)) == 2:
+    args_count = len(sys.argv)
+    if args_count == 2:
         utt = sys.argv[1]
         lang = Configuration().get("lang", "en-us")
     elif args_count == 3:
@@ -23,7 +24,8 @@ def ovos_speak():
 
 
 def ovos_say_to():
-    if (args_count := len(sys.argv)) == 2:
+    args_count = len(sys.argv)
+    if args_count == 2:
         utt = sys.argv[1]
         lang = Configuration().get("lang", "en-us")
     elif args_count == 3:
