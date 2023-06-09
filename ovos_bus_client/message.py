@@ -85,7 +85,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
     # if set to False, will refuse to deserialize unencrypted messages for processing
     _allow_unencrypted = Configuration().get("websocket", {}).get("allow_unencrypted", _secret_key is None)
 
-    def __init__(self, msg_type, data=None, context=None):
+    def __init__(self, msg_type: str, data: dict = None, context: dict = None):
         """Used to construct a message object
 
         Message objects will be used to send information back and forth
@@ -106,7 +106,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             other.data == self.data and \
             other.context == self.context
 
-    def serialize(self):
+    def serialize(self) -> str:
         """This returns a string of the message info.
 
         This makes it easy to send over a websocket. This uses
@@ -126,7 +126,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         return msg
 
     @property
-    def as_dict(self):
+    def as_dict(self) -> dict:
         return json.loads(self.serialize())
 
     @staticmethod
@@ -163,8 +163,9 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         return obj
 
     @staticmethod
-    def deserialize(value):
-        """This takes a string and constructs a message object.
+    def deserialize(value: str) -> _MsgBase:
+        """
+        This takes a string and constructs a message object.
 
         This makes it easy to take strings from the websocket and create
         a message object.  This uses json loads to get the info and generate
@@ -183,8 +184,9 @@ class Message(_MsgBase, metaclass=_MessageMeta):
                        obj.get('data') or {},
                        obj.get('context') or {})
 
-    def forward(self, msg_type, data=None):
-        """ Keep context and forward message
+    def forward(self, msg_type: str, data: dict = None) -> _MsgBase:
+        """
+        Keep context and forward message
 
         This will take the same parameters as a message object but use
         the current message object as a reference.  It will copy the context
@@ -200,8 +202,10 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         data = data or {}
         return Message(msg_type, data, context=self.context)
 
-    def reply(self, msg_type, data=None, context=None):
-        """Construct a reply message for a given message
+    def reply(self, msg_type: str, data: dict = None,
+              context: dict = None) -> _MsgBase:
+        """
+        Construct a reply message for a given message
 
         This will take the same parameters as a message object but use
         the current message object as a reference.  It will copy the context
@@ -234,8 +238,9 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             new_context['source'] = s
         return Message(msg_type, data, context=new_context)
 
-    def response(self, data=None, context=None):
-        """Construct a response message for the message
+    def response(self, data: dict = None, context: dict = None) -> _MsgBase:
+        """
+        Construct a response message for the message
 
         Constructs a reply with the data and appends the expected
         ".response" to the message
@@ -248,7 +253,8 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         """
         return self.reply(self.msg_type + '.response', data, context)
 
-    def publish(self, msg_type, data, context=None):
+    def publish(self, msg_type: str, data: dict,
+                context: dict = None) -> _MsgBase:
         """
         Copy the original context and add passed in context.  Delete
         any target in the new context. Return a new message object with
@@ -256,7 +262,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
 
         Args:
             msg_type (str): type of message
-            data (dict): date to send with message
+            data (dict): data to send with message
             context: context added to existing context
 
         Returns:
@@ -294,14 +300,16 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         return normalize(utt)
 
 
-def encrypt_as_dict(data, nonce=None):
+def encrypt_as_dict(data: str, nonce=None) -> dict:
+    # TODO: Missing `key` param
     ciphertext, tag, nonce = encrypt(data, nonce=nonce)
     return {"ciphertext": hexlify(ciphertext).decode('utf-8'),
             "tag": hexlify(tag).decode('utf-8'),
             "nonce": hexlify(nonce).decode('utf-8')}
 
 
-def decrypt_from_dict(data):
+def decrypt_from_dict(data: dict) -> str:
+    # TODO: Missing `key` param
     ciphertext = unhexlify(data["ciphertext"])
     if data.get("tag") is None:  # web crypto
         ciphertext, tag = ciphertext[:-16], ciphertext[-16:]
@@ -449,17 +457,3 @@ class GUIMessage(Message):
         value = Message._json_load(value)
         msg_type = value.pop("type")
         return GUIMessage(msg_type, **value)
-
-
-if __name__ == "__main__":
-    from mycroft_bus_client.message import Message as _MycroftMessage
-
-    m1 = _MycroftMessage("")
-    m2 = Message("")
-    print(m1 == m2)
-    print(m2 == m1)
-    print(isinstance(m1, _MycroftMessage))
-    print(isinstance(m1, Message))
-    print(isinstance(m2,
-                     _MycroftMessage))  # can't fix this one without the monkey patching, its defined in the class at mycroft_bus_client
-    print(isinstance(m2, Message))
