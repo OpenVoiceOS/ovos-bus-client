@@ -22,33 +22,30 @@ def _get_valid_langs() -> List[str]:
 
 
 class IntentContextManagerFrame:
-    """
-    Manages entities and context for a single frame of conversation.
-    Provides simple equality querying.
-    Attributes:
-        entities(list): Entities that belong to ContextManagerFrame
-        metadata(object): metadata to describe context belonging to ContextManagerFrame
-    """
-
-    def __init__(self, entities=None, metadata=None):
+    def __init__(self, entities: List[dict] = None, metadata: dict = None):
         """
-        Initialize ContextManagerFrame
-        Args:
-            entities(list): List of Entities...
-            metadata(object): metadata to describe context?
+        Manages entities and context for a single frame of conversation.
+        Provides simple equality querying.
+        Attributes:
+            entities(list): Entities that belong to ContextManagerFrame
+            metadata(object): metadata to describe context belonging to ContextManagerFrame
         """
         self.entities = entities or []
         self.metadata = metadata or {}
 
-    def serialize(self):
+    def serialize(self) -> dict:
+        """
+        Get a dict representation of this frame
+        @return:
+        """
         return {"entities": self.entities,
                 "metadata": self.metadata}
 
     @staticmethod
-    def deserialize(data):
+    def deserialize(data: dict):
         return IntentContextManagerFrame(**data)
 
-    def metadata_matches(self, query=None):
+    def metadata_matches(self, query: dict = None) -> bool:
         """
         Returns key matches to metadata
         Asserts that the contents of query exist within (logical subset of)
@@ -69,13 +66,13 @@ class IntentContextManagerFrame:
 
         return result
 
-    def merge_context(self, tag, metadata):
+    def merge_context(self, tag: dict, metadata: dict):
         """
         merge into contextManagerFrame new entity and metadata.
         Appends tag as new entity and adds keys in metadata to keys in
         self.metadata.
         Args:
-            tag(str): entity to be added to self.entities
+            tag(dict): entity to be added to self.entities
             metadata(dict): metadata contains keys to be added to self.metadata
         """
         self.entities.append(tag)
@@ -85,14 +82,18 @@ class IntentContextManagerFrame:
 
 
 class IntentContextManager:
-    """Context Manager
+    """
+    Context Manager
 
     Use to track context throughout the course of a conversational session.
     How to manage a session's lifecycle is not captured here.
     """
 
-    def __init__(self, timeout=None, frame_stack=None,
-                 greedy=None, keywords=None, max_frames=None):
+    def __init__(self, timeout: int = None,
+                 frame_stack: List[Tuple[IntentContextManagerFrame,
+                                         float]] = None,
+                 greedy: bool = None, keywords: List[str] = None,
+                 max_frames: int = None):
 
         config = Configuration().get('context', {})
         if timeout is None:
@@ -117,7 +118,8 @@ class IntentContextManager:
     @staticmethod
     def deserialize(data):
         timeout = data["timeout"]
-        framestack = [IntentContextManagerFrame.deserialize(f) for f in data["frame_stack"]]
+        framestack = [(IntentContextManagerFrame.deserialize(f), time.time())
+                      for f in data["frame_stack"]]
         return IntentContextManager(timeout, framestack)
 
     def update_context(self, entities):
@@ -133,10 +135,6 @@ class IntentContextManager:
             entities (list): Intent to scan for keywords
         """
         for context_entity in entities:
-            #  entity(dict): Format example...
-            #   {'data': 'Entity tag as <str>',
-            #   'key': 'entity proper name as <str>',
-            #   'confidence': <float>' }
             if self.context_greedy:
                 self.inject_context(context_entity)
             elif context_entity['data'][0][1] in self.context_keywords:

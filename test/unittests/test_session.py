@@ -15,7 +15,32 @@ class TestSessionModule(unittest.TestCase):
 
 
 class TestIntentContextManagerFrame(unittest.TestCase):
-    # TODO
+    def test_serialize_deserialize(self):
+        from ovos_bus_client.session import IntentContextManagerFrame
+        test_entities = [{'key': 'e1'}, {'key': 2}, {'key': 'entity'}]
+        test_metadata = {'test': True,
+                         'metadata': {'test': True}}
+        frame = IntentContextManagerFrame(test_entities, test_metadata)
+        self.assertEqual(frame.entities, test_entities)
+        self.assertEqual(frame.metadata, test_metadata)
+        serialized = frame.serialize()
+        self.assertEqual(serialized, {'entities': test_entities,
+                                      'metadata': test_metadata})
+
+        new_frame = IntentContextManagerFrame.deserialize(serialized)
+        new_serialized = new_frame.serialize()
+        self.assertEqual(serialized, new_serialized)
+
+    def test_metadata_matches(self):
+        from ovos_bus_client.session import IntentContextManagerFrame
+        # TODO
+
+    def test_merge_context(self):
+        from ovos_bus_client.session import IntentContextManagerFrame
+        # TODO
+
+
+class TestIntentContextManager(unittest.TestCase):
     pass
 
 
