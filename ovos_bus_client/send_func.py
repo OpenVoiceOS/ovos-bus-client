@@ -5,7 +5,7 @@ from ovos_bus_client.client import MessageBusClient
 from ovos_bus_client.message import Message
 
 
-def send(message_to_send, data_to_send=None):
+def send(message_to_send: str, data_to_send: dict = None):
     """Send a single message over the websocket.
 
     Args:

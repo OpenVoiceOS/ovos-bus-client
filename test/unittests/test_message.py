@@ -1,3 +1,5 @@
+import unittest
+
 from time import time
 from unittest import TestCase
 import json
@@ -57,6 +59,14 @@ class TestMessage(TestCase):
         self.assertEqual(json.dumps(source.context, sort_keys=True),
                          json.dumps(reassembled.context, sort_keys=True))
 
+    def test_as_dict(self):
+        pass
+        # TODO
+
+    def test_forward(self):
+        pass
+        # TODO
+
     def test_response(self):
         """Assert that the .response is added to the message type for response.
         """
@@ -67,6 +77,10 @@ class TestMessage(TestCase):
         self.assertEqual(response_msg.msg_type, "test_type.response")
         self.assertEqual(response_msg.data, {})
         self.assertEqual(response_msg.context, source.context)
+
+    def test_publish(self):
+        pass
+        # TODO
 
     def test_reply(self):
         """Assert that the source and destination are swapped"""
@@ -84,6 +98,12 @@ class TestMessage(TestCase):
         # assert that .response calls .reply internally as stated in docstrings
         response_msg = source.response()
         self.assertEqual(response_msg.context, reply_msg.context)
+
+
+class TestFunctions(unittest.TestCase):
+    def test_encrypt_decrypt(self):
+        from ovos_bus_client.message import encrypt_as_dict, decrypt_from_dict
+        # TODO
 
     def test_dig_for_message_simple(self):
         test_msg = Message("test message", {"test": "data"}, {"time": time()})
@@ -123,3 +143,25 @@ class TestMessage(TestCase):
         # Message that should be ignored
         _ = Message("test message", {"test": "data"}, {"time": time()})
         self.assertIsNone(dig_for_message())
+
+    def test_class_patching(self):
+        from mycroft_bus_client.message import Message as _MycroftMessage
+
+        m1 = _MycroftMessage("")
+        m2 = Message("")
+        self.assertEqual(m1, m2)
+        self.assertEqual(m2, m1)
+        self.assertIsInstance(m1, _MycroftMessage)
+        self.assertIsInstance(m1, Message)
+        self.assertIsInstance(m2, _MycroftMessage)
+        self.assertIsInstance(m2, Message)
+
+
+class TestCollectionMessage(unittest.TestCase):
+    # TODO
+    pass
+
+
+class TestGUIMessage(unittest.TestCase):
+    # TODO
+    pass
