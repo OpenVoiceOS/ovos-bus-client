@@ -56,7 +56,7 @@ jobs:
           pip install -r test/requirements.txt
       - name: Run unittests
         run: |
-          pytest --cov=ovos_bus_client --cov-report xml test/unittests
+          pytest --cov=ovos_bus_client --cov-report=xml test/unittests
           # NOTE: additional pytest invocations should also add the --cov-append flag
           #       or they will overwrite previous invocations' coverage reports
           #       (for an example, see OVOS Skill Manager's workflow)
