@@ -121,7 +121,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
 
         msg = json.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
         if self._secret_key:
-            payload = encrypt_as_dict(msg)
+            payload = encrypt_as_dict(self._secret_key, msg)
             return json.dumps(payload)
         return msg
 
@@ -157,7 +157,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         assert isinstance(obj, dict)
         if Message._secret_key:
             if 'ciphertext' in obj:
-                obj = decrypt_from_dict(obj)
+                obj = decrypt_from_dict(Message._secret_key, obj)
             elif not Message._allow_unencrypted:
                 raise RuntimeError("got an unencrypted message, configured to refuse")
         return obj
@@ -300,23 +300,21 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         return normalize(utt)
 
 
-def encrypt_as_dict(data: str, nonce=None) -> dict:
-    # TODO: Missing `key` param
-    ciphertext, tag, nonce = encrypt(data, nonce=nonce)
+def encrypt_as_dict(key: str, data: str, nonce=None) -> dict:
+    ciphertext, tag, nonce = encrypt(key, data, nonce=nonce)
     return {"ciphertext": hexlify(ciphertext).decode('utf-8'),
             "tag": hexlify(tag).decode('utf-8'),
             "nonce": hexlify(nonce).decode('utf-8')}
 
 
-def decrypt_from_dict(data: dict) -> str:
-    # TODO: Missing `key` param
+def decrypt_from_dict(key: str, data: dict) -> str:
     ciphertext = unhexlify(data["ciphertext"])
     if data.get("tag") is None:  # web crypto
         ciphertext, tag = ciphertext[:-16], ciphertext[-16:]
     else:
         tag = unhexlify(data["tag"])
     nonce = unhexlify(data["nonce"])
-    return decrypt(ciphertext, tag, nonce)
+    return decrypt(key, ciphertext, tag, nonce)
 
 
 def dig_for_message(max_records: int = 10) -> Optional[Message]:
@@ -448,7 +446,7 @@ class GUIMessage(Message):
         data = self._json_dump(self.data)
         msg = json.dumps({'type': self.msg_type, **data})
         if self._secret_key:
-            payload = encrypt_as_dict(msg)
+            payload = encrypt_as_dict(self._secret_key, msg)
             return json.dumps(payload)
         return msg
 
