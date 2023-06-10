@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.4a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a13) (2023-06-09)
+## [0.0.4a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a14) (2023-06-10)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a12...0.0.4a13)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a13...0.0.4a14)
+
+**Fixed bugs:**
+
+- Pass keys to encrypt/decrypt methods [\#34](https://github.com/OpenVoiceOS/ovos-bus-client/pull/34) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.4a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a13) (2023-06-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a12...V0.0.4a13)
 
 **Closed issues:**
 
