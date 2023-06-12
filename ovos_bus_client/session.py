@@ -418,16 +418,19 @@ class Session:
             try:
                 m = message.as_dict
             except AttributeError:
-                m = json.loads(message.serialize())
-                LOG.warning("mycroft-bus-client has been deprecated, "
-                            "please update your imports to use ovos-bus-client")
                 import inspect
                 stack = inspect.stack()
+                call_info = "Unknown Origin"
                 for call in stack:
                     module = inspect.getmodule(call.frame)
                     name = module.__name__ if module else call.filename
-                    LOG.warning("This reference is deprecated - "
-                                f"{name}:{call.lineno}")
+                    if not name.startswith('ovos_bus_client'):
+                        call_info = f"{name}:{call.lineno}"
+                        break
+                LOG.warning("mycroft-bus-client has been deprecated, "
+                            "please update your imports to use ovos-bus-client "
+                            f"- {call_info}")
+                m = json.loads(message.serialize())
             except Exception as e:
                 LOG.exception(e)
                 m = json.loads(message.serialize())
