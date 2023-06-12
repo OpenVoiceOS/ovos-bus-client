@@ -417,10 +417,17 @@ class Session:
         if message:
             try:
                 m = message.as_dict
-            except:
+            except Exception as e:
+                LOG.warning(e)
                 m = json.loads(message.serialize())
                 LOG.warning("mycroft-bus-client has been deprecated, "
                             "please update your imports to use ovos-bus-client")
+                import inspect
+                call = inspect.stack()[1]
+                module = inspect.getmodule(call.frame)
+                name = module.__name__ if module else call.filename
+                LOG.warning("This reference is deprecated - "
+                            f"{name}:{call.lineno}")
             m["context"] = {}  # clear personal data
             self.history.append((m, time.time()))
         self._prune_history()
