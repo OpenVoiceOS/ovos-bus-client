@@ -6,7 +6,7 @@ from uuid import uuid4
 from typing import Optional, List, Tuple, Union, Iterable
 
 from ovos_bus_client.message import dig_for_message, Message
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 
@@ -418,18 +418,9 @@ class Session:
             try:
                 m = message.as_dict
             except AttributeError:
-                import inspect
-                stack = inspect.stack()
-                call_info = "Unknown Origin"
-                for call in stack:
-                    module = inspect.getmodule(call.frame)
-                    name = module.__name__ if module else call.filename
-                    if not name.startswith('ovos_bus_client'):
-                        call_info = f"{name}:{call.lineno}"
-                        break
-                LOG.warning("mycroft-bus-client has been deprecated, "
-                            "please update your imports to use ovos-bus-client "
-                            f"- {call_info}")
+                log_deprecation("mycroft-bus-client has been deprecated, please"
+                                " update your imports to use ovos-bus-client",
+                                "0.0.4")
                 m = json.loads(message.serialize())
             except Exception as e:
                 LOG.exception(e)
