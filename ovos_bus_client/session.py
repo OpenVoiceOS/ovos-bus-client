@@ -6,7 +6,7 @@ from uuid import uuid4
 from typing import Optional, List, Tuple, Union, Iterable
 
 from ovos_bus_client.message import dig_for_message, Message
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 
@@ -417,10 +417,15 @@ class Session:
         if message:
             try:
                 m = message.as_dict
-            except:
+            except AttributeError:
+                log_deprecation("mycroft-bus-client has been deprecated, please"
+                                " update your imports to use ovos-bus-client",
+                                "0.0.4",
+                                excluded_package_refs=["ovos_bus_client"])
                 m = json.loads(message.serialize())
-                LOG.warning("mycroft-bus-client has been deprecated, "
-                            "please update your imports to use ovos-bus-client")
+            except Exception as e:
+                LOG.exception(e)
+                m = json.loads(message.serialize())
             m["context"] = {}  # clear personal data
             self.history.append((m, time.time()))
         self._prune_history()
