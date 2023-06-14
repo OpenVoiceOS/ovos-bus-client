@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.4a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a14) (2023-06-10)
+## [0.0.4a15](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a15) (2023-06-14)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a13...0.0.4a14)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a14...0.0.4a15)
+
+**Merged pull requests:**
+
+- Improved deprecation logging [\#35](https://github.com/OpenVoiceOS/ovos-bus-client/pull/35) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.4a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a14) (2023-06-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a13...V0.0.4a14)
 
 **Fixed bugs:**
 
