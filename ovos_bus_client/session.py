@@ -420,7 +420,8 @@ class Session:
             except AttributeError:
                 log_deprecation("mycroft-bus-client has been deprecated, please"
                                 " update your imports to use ovos-bus-client",
-                                "0.0.4")
+                                "0.0.4",
+                                excluded_package_refs=["ovos_bus_client"])
                 m = json.loads(message.serialize())
             except Exception as e:
                 LOG.exception(e)
