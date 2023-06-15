@@ -1,8 +1,20 @@
 # Changelog
 
-## [0.0.4a15](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a15) (2023-06-14)
+## [0.0.4a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a16) (2023-06-15)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a14...0.0.4a15)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a15...0.0.4a16)
+
+**Closed issues:**
+
+- Bump dependency that restricts version of PyYAML [\#28](https://github.com/OpenVoiceOS/ovos-bus-client/issues/28)
+
+**Merged pull requests:**
+
+- Prepare for Release [\#36](https://github.com/OpenVoiceOS/ovos-bus-client/pull/36) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.4a15](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a15) (2023-06-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a14...V0.0.4a15)
 
 **Merged pull requests:**
 
