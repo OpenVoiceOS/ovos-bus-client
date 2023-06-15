@@ -32,7 +32,7 @@ from threading import Thread, Lock
 
 from ovos_config.config import Configuration
 from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
-from ovos_utils.log import LOG, log_deprecation
+from ovos_utils.log import LOG, log_deprecation, deprecated
 from ovos_utils.messagebus import FakeBus
 from ovos_utils.events import create_basic_wrapper
 from ovos_bus_client.message import Message
@@ -664,7 +664,7 @@ class EventSchedulerInterface:
         self.skill_id = skill_id
 
     @property
-    @deprecated("self.sched_id has been deprecated! use self.skill_id instead",
+    @deprecated("self.name has been deprecated! use self.skill_id instead",
                 "0.1.0")
     def name(self):
         """DEPRECATED: do not use, method only for api backwards compatibility
@@ -673,7 +673,7 @@ class EventSchedulerInterface:
         return self.skill_id
 
     @name.setter
-    @deprecated("self.sched_id has been deprecated! use self.skill_id instead",
+    @deprecated("self.name has been deprecated! use self.skill_id instead",
                 "0.1.0")
     def name(self, skill_id):
         """DEPRECATED: do not use, method only for api backwards compatibility
