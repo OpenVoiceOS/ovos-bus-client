@@ -27,7 +27,7 @@ from copy import deepcopy
 from typing import Optional
 from binascii import hexlify, unhexlify
 from ovos_utils.gui import _GUIDict
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, deprecated
 from ovos_utils.security import encrypt, decrypt
 from ovos_config.config import Configuration
 
@@ -278,6 +278,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
 
         return Message(msg_type, data, context=new_context)
 
+    @deprecated("This method is deprecated with no replacement", "0.1.0")
     def utterance_remainder(self):
         """
         DEPRECATED - mycroft-core hack, used by some skills in the wild
@@ -291,7 +292,6 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         Returns:
             str: Leftover words or None if not an utterance.
         """
-        LOG.warning("Message.utterance_remainder has been deprecated!")
         utt = normalize(self.data.get("utterance", ""))
         if utt and "__tags__" in self.data:
             for token in self.data["__tags__"]:
