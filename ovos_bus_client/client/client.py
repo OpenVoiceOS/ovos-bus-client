@@ -7,7 +7,7 @@ from os import getpid
 from threading import Event, Thread
 from uuid import uuid4
 
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, deprecated
 from pyee import ExecutorEventEmitter
 from websocket import (WebSocketApp,
                        WebSocketConnectionClosedException,
@@ -420,12 +420,12 @@ class GUIWebsocketClient(MessageBusClient):
         self.emitter.emit(parsed_message.msg_type, parsed_message)
 
 
+@deprecated("No direct replacement", "0.1.0")
 def echo():
     """
     Echo function repeating all input from a user.
     """
     # TODO: Deprecate in 0.1.0
-    LOG.warning("This function is deprecated and will be removed in v0.1.0.")
     message_bus_client = MessageBusClient()
 
     def repeat_utterance(message):
@@ -435,7 +435,3 @@ def echo():
     message_bus_client.on('message', create_echo_function(None))
     message_bus_client.on('recognizer_loop:utterance', repeat_utterance)
     message_bus_client.run_forever()
-
-
-if __name__ == "__main__":
-    echo()

@@ -32,7 +32,7 @@ from threading import Thread, Lock
 
 from ovos_config.config import Configuration
 from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation, deprecated
 from ovos_utils.messagebus import FakeBus
 from ovos_utils.events import create_basic_wrapper
 from ovos_bus_client.message import Message
@@ -422,9 +422,11 @@ class EventSchedulerInterface:
     def __init__(self, name=None, sched_id=None, bus=None, skill_id=None):
         # NOTE: can not rename or move sched_id/name arguments to keep api compatibility
         if name:
-            LOG.warning("name argument has been deprecated! use skill_id instead")
+            log_deprecation("name argument has been deprecated! "
+                            "use skill_id instead", "0.1.0")
         if sched_id:
-            LOG.warning("sched_id argument has been deprecated! use skill_id instead")
+            log_deprecation("sched_id argument has been deprecated! "
+                            "use skill_id instead", "0.1.0")
 
         self.skill_id = skill_id or sched_id or name or self.__class__.__name__
         self.bus = bus
@@ -644,34 +646,38 @@ class EventSchedulerInterface:
         self.events.clear()
 
     @property
+    @deprecated("self.sched_id has been deprecated! use self.skill_id instead",
+                "0.1.0")
     def sched_id(self):
         """DEPRECATED: do not use, method only for api backwards compatibility
         Logs a warning and returns self.skill_id
         """
-        LOG.warning("self.sched_id has been deprecated! use self.skill_id instead")
         return self.skill_id
 
     @sched_id.setter
+    @deprecated("self.sched_id has been deprecated! use self.skill_id instead",
+                "0.1.0")
     def sched_id(self, skill_id):
         """DEPRECATED: do not use, method only for api backwards compatibility
         Logs a warning and sets self.skill_id
         """
-        LOG.warning("self.sched_id has been deprecated! use self.skill_id instead")
         self.skill_id = skill_id
 
     @property
+    @deprecated("self.name has been deprecated! use self.skill_id instead",
+                "0.1.0")
     def name(self):
         """DEPRECATED: do not use, method only for api backwards compatibility
         Logs a warning and returns self.skill_id
         """
-        LOG.warning("self.name has been deprecated! use self.skill_id instead")
         return self.skill_id
 
     @name.setter
+    @deprecated("self.name has been deprecated! use self.skill_id instead",
+                "0.1.0")
     def name(self, skill_id):
         """DEPRECATED: do not use, method only for api backwards compatibility
         Logs a warning and sets self.skill_id
         """
-        LOG.warning("self.name has been deprecated! use self.skill_id instead")
         self.skill_id = skill_id
 
