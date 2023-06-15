@@ -420,7 +420,7 @@ class GUIWebsocketClient(MessageBusClient):
         self.emitter.emit(parsed_message.msg_type, parsed_message)
 
 
-@deprecated("Bus monitoring moved to `neon-mana-utils`", "0.1.0")
+@deprecated("No direct replacement", "0.1.0")
 def echo():
     """
     Echo function repeating all input from a user.

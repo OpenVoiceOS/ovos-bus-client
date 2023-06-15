@@ -19,10 +19,10 @@ Small utils and tools to use with the Messagebus.
 import logging
 from typing import Callable, Optional, Union
 from ovos_bus_client.message import Message
-from ovos_utils.log import LOG, deprecated
+from ovos_utils.log import deprecated
 
 
-@deprecated("Bus monitoring moved to `neon-mana-utils`", "0.1.0")
+@deprecated("No direct replacement", "0.1.0")
 def create_echo_function(name: Optional[str]) -> \
         Callable[[Union[Message, str]], None]:
     """
