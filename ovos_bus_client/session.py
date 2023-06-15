@@ -582,6 +582,9 @@ class SessionManager:
                 LOG.debug(f"Removing expired default: {sess.session_id}")
                 SessionManager.sessions.pop(sess.session_id)
             sess = SessionManager.reset_default_session()
+        else:
+            # Existing default, make sure lang is in sync with Configuration
+            sess.lang = Configuration().get('lang') or sess.lang
 
         return sess
 

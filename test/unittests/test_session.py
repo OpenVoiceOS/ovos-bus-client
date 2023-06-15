@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from time import time, sleep
 
@@ -210,11 +211,19 @@ class TestSessionManager(unittest.TestCase):
         # TODO
         pass
 
-    def test_get(self):
+    @patch("ovos_bus_client.session.Configuration")
+    def test_get(self, config):
+        config.return_value = {'lang': 'en-us'}
+        self.assertEqual(config(), {'lang': 'en-us'})
         from ovos_bus_client.session import Session
         session = self.SessionManager.get()
         self.assertIsInstance(session, Session)
-        # TODO
+        self.assertEqual(session.lang, 'en-us')
+        config.return_value = {'lang': 'es-es'}
+
+        session = self.SessionManager.get()
+        self.assertIsInstance(session, Session)
+        self.assertEqual(session.lang, 'es-es')
 
     def test_touch(self):
         # TODO
