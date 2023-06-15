@@ -1,8 +1,20 @@
 # Changelog
 
-## [0.0.4a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a16) (2023-06-15)
+## [0.0.4a17](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.4a17) (2023-06-15)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a15...0.0.4a16)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a16...0.0.4a17)
+
+**Closed issues:**
+
+- Handle Configuration changes [\#31](https://github.com/OpenVoiceOS/ovos-bus-client/issues/31)
+
+**Merged pull requests:**
+
+- Add configured `lang` handling for default session with unit test [\#38](https://github.com/OpenVoiceOS/ovos-bus-client/pull/38) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.4a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a16) (2023-06-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a15...V0.0.4a16)
 
 **Closed issues:**
 
