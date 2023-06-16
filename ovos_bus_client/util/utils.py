@@ -15,33 +15,41 @@
 """
 Small utils and tools to use with the Messagebus.
 """
-import json
+
 import logging
+from typing import Callable, Optional, Union
+from ovos_bus_client.message import Message
+from ovos_utils.log import deprecated
 
 
-def create_echo_function(name):
-    """Standard logging mechanism for Mycroft processes.
+@deprecated("No direct replacement", "0.1.0")
+def create_echo_function(name: Optional[str]) -> \
+        Callable[[Union[Message, str]], None]:
+    """
+    Standard logging mechanism for Mycroft processes.
 
-    This creats
     Arguments:
         name (str): Reference name of the process
 
     Returns:
         func: The echo function
     """
+    # TODO: Deprecate in 0.1.0
     log = logging.getLogger(name)
 
-    def echo(message):
+    def echo(message: Union[Message, str]):
         try:
-            msg = json.loads(message)
-            msg_type = msg.get("type", "")
+            if isinstance(message, str):
+                msg = Message.deserialize(message)
+            else:
+                msg = message
             # do not log tokens from registration messages
-            if msg_type == "registration":
-                msg["data"]["token"] = None
-                message = json.dumps(msg)
+            if msg.msg_type == "registration":
+                msg.data["token"] = None
+                message = msg.serialize()
         except Exception as exc:
-            log.info("Error: %s", repr(exc), exc_info=True)
+            log.info(f"Error: {exc}", exc_info=True)
 
         # Listen for messages and echo them for logging
-        log.info("BUS: %s", repr(message))
+        log.info(f"BUS: {message}")
     return echo

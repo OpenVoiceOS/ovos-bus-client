@@ -9,14 +9,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
+
+import unittest
 from unittest.mock import Mock
 
 from pyee import ExecutorEventEmitter
 
-from ovos_bus_client import MessageBusClient, Message
+from ovos_bus_client.message import Message
+from ovos_bus_client.client.client import MessageBusClient, GUIWebsocketClient
 from ovos_bus_client.client import MessageWaiter, MessageCollector
-
 
 WS_CONF = {
     'websocket': {
@@ -28,25 +29,117 @@ WS_CONF = {
 }
 
 
-class TestMessageBusClient:
+class TestClient(unittest.TestCase):
+    def test_echo(self):
+        from ovos_bus_client.client.client import echo
+        # TODO
+
+    def test_inheritance(self):
+        from mycroft_bus_client.client import MessageBusClient as _Client
+        self.assertTrue(issubclass(MessageBusClient, _Client))
+
+
+class TestMessageBusClient(unittest.TestCase):
+    from ovos_bus_client.client.client import MessageBusClient
+    client = MessageBusClient()
+
     def test_build_url(self):
         url = MessageBusClient.build_url('localhost', 1337, '/core', False)
-        assert url == 'ws://localhost:1337/core'
+        self.assertEqual(url, 'ws://localhost:1337/core')
         ssl_url = MessageBusClient.build_url('sslhost', 443, '/core', True)
-        assert ssl_url == 'wss://sslhost:443/core'
+        self.assertEqual(ssl_url, 'wss://sslhost:443/core')
 
     def test_create_client(self):
-        mc = MessageBusClient()
-        assert mc.client.url == 'ws://0.0.0.0:8181/core'
+        self.assertEqual(self.client.client.url, 'ws://0.0.0.0:8181/core')
+        self.assertIsInstance(self.client.emitter, ExecutorEventEmitter)
 
-    def test_create_client_default_executor(self):
-        mc = MessageBusClient()
-        assert type(mc.emitter) == ExecutorEventEmitter
-
-    def test_create_client_custom_executor(self):
         mock_emitter = Mock()
         mc = MessageBusClient(emitter=mock_emitter)
-        assert mc.emitter == mock_emitter
+        self.assertEqual(mc.emitter, mock_emitter)
+
+    def test_on_open(self):
+        # TODO
+        pass
+
+    def test_on_close(self):
+        # TODO
+        pass
+
+    def test_on_error(self):
+        # TODO
+        pass
+
+    def test_on_message(self):
+        # TODO
+        pass
+
+    def test_emit(self):
+        # TODO
+        pass
+
+    def test_collect_responses(self):
+        # TODO
+        pass
+
+    def test_on_collect(self):
+        # TODO
+        pass
+
+    def test_wait_for_message(self):
+        # TODO
+        pass
+
+    def test_wait_for_response(self):
+        # TODO
+        pass
+
+    def test_on(self):
+        # TODO
+        pass
+
+    def test_once(self):
+        # TODO
+        pass
+
+    def test_remove(self):
+        # TODO
+        pass
+
+    def test_remove_all_listeners(self):
+        # TODO
+        pass
+
+    def test_run_forever(self):
+        # TODO
+        pass
+
+    def test_close(self):
+        # TODO
+        pass
+
+    def test_run_in_thread(self):
+        # TODO
+        pass
+
+
+class TestGuiWebsocketClient(unittest.TestCase):
+    client = GUIWebsocketClient()
+
+    def test_gui_client_init(self):
+        self.assertIsInstance(self.client, MessageBusClient)
+        self.assertIsInstance(self.client.gui_id, str)
+
+    def test_emit(self):
+        # TODO
+        pass
+
+    def test_on_open(self):
+        # TODO
+        pass
+
+    def test_on_message(self):
+        # TODO
+        pass
 
 
 class TestMessageWaiter:

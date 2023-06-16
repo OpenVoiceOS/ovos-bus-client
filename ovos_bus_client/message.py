@@ -25,8 +25,11 @@ import json
 import re
 from copy import deepcopy
 from typing import Optional
-from ovos_utils.log import LOG
+from binascii import hexlify, unhexlify
 from ovos_utils.gui import _GUIDict
+from ovos_utils.log import LOG, deprecated
+from ovos_utils.security import encrypt, decrypt
+from ovos_config.config import Configuration
 
 try:
     from lingua_franca.parse import normalize
@@ -34,7 +37,6 @@ except ImportError:
     # optional LF import
     def normalize(text, *args, **kwargs):
         return text
-
 
 try:
     from mycroft_bus_client.message import Message as _MsgBase, \
@@ -48,6 +50,7 @@ except ImportError:
 
     class _MsgBase:
         pass
+
 
     class _CollectionMsgBase(_MsgBase):
         pass
@@ -77,16 +80,24 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         context: info about the message not part of data such as source,
             destination or domain.
     """
+    # if set all messages are AES encrypted
+    _secret_key = Configuration().get("websocket", {}).get("secret_key")
+    # if set to False, will refuse to deserialize unencrypted messages for processing
+    _allow_unencrypted = Configuration().get("websocket", {}).get("allow_unencrypted", _secret_key is None)
 
-    def __init__(self, msg_type, data=None, context=None):
+    def __init__(self, msg_type: str, data: dict = None, context: dict = None):
         """Used to construct a message object
 
         Message objects will be used to send information back and forth
         between processes of mycroft service, voice, skill and cli
         """
+        data = data or {}
+        context = context or {}
+        assert isinstance(data, dict)
+        assert isinstance(context, dict)
         self.msg_type = msg_type
-        self.data = data or {}
-        self.context = context or {}
+        self.data = data
+        self.context = context
 
     def __eq__(self, other):
         if not isinstance(other, Message):
@@ -95,7 +106,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             other.data == self.data and \
             other.context == self.context
 
-    def serialize(self):
+    def serialize(self) -> str:
         """This returns a string of the message info.
 
         This makes it easy to send over a websocket. This uses
@@ -104,7 +115,22 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         Returns:
             str: a json string representation of the message.
         """
+        # handle Session and Message objects
+        data = self._json_dump(self.data)
+        ctxt = self._json_dump(self.context)
 
+        msg = json.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
+        if self._secret_key:
+            payload = encrypt_as_dict(self._secret_key, msg)
+            return json.dumps(payload)
+        return msg
+
+    @property
+    def as_dict(self) -> dict:
+        return json.loads(self.serialize())
+
+    @staticmethod
+    def _json_dump(value):
         def serialize_item(x):
             try:
                 if hasattr(x, "serialize"):
@@ -116,19 +142,30 @@ class Message(_MsgBase, metaclass=_MessageMeta):
                     x[idx] = serialize_item(it)
             if isinstance(x, dict) and not isinstance(x, _GUIDict):
                 for k, v in x.items():
-                   x[k] = serialize_item(v)
+                    x[k] = serialize_item(v)
             return x
-
-        # handle Session and Message objects
-        data = {k: serialize_item(v) for k, v in self.data.items()}
-        ctxt = {k: serialize_item(v) for k, v in self.context.items()}
-        return json.dumps({'type': self.msg_type,
-                           'data': data,
-                           'context': ctxt})
+        assert isinstance(value, dict)
+        data = {k: serialize_item(v) for k, v in value.items()}
+        return data
 
     @staticmethod
-    def deserialize(value):
-        """This takes a string and constructs a message object.
+    def _json_load(value):
+        if isinstance(value, str):
+            obj = json.loads(value)
+        else:
+            obj = value
+        assert isinstance(obj, dict)
+        if Message._secret_key:
+            if 'ciphertext' in obj:
+                obj = decrypt_from_dict(Message._secret_key, obj)
+            elif not Message._allow_unencrypted:
+                raise RuntimeError("got an unencrypted message, configured to refuse")
+        return obj
+
+    @staticmethod
+    def deserialize(value: str) -> _MsgBase:
+        """
+        This takes a string and constructs a message object.
 
         This makes it easy to take strings from the websocket and create
         a message object.  This uses json loads to get the info and generate
@@ -142,13 +179,14 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             int the function.
             value(str): This is the string received from the websocket
         """
-        obj = json.loads(value)
+        obj = Message._json_load(value)
         return Message(obj.get('type') or '',
                        obj.get('data') or {},
                        obj.get('context') or {})
 
-    def forward(self, msg_type, data=None):
-        """ Keep context and forward message
+    def forward(self, msg_type: str, data: dict = None) -> _MsgBase:
+        """
+        Keep context and forward message
 
         This will take the same parameters as a message object but use
         the current message object as a reference.  It will copy the context
@@ -164,8 +202,10 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         data = data or {}
         return Message(msg_type, data, context=self.context)
 
-    def reply(self, msg_type, data=None, context=None):
-        """Construct a reply message for a given message
+    def reply(self, msg_type: str, data: dict = None,
+              context: dict = None) -> _MsgBase:
+        """
+        Construct a reply message for a given message
 
         This will take the same parameters as a message object but use
         the current message object as a reference.  It will copy the context
@@ -198,8 +238,9 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             new_context['source'] = s
         return Message(msg_type, data, context=new_context)
 
-    def response(self, data=None, context=None):
-        """Construct a response message for the message
+    def response(self, data: dict = None, context: dict = None) -> _MsgBase:
+        """
+        Construct a response message for the message
 
         Constructs a reply with the data and appends the expected
         ".response" to the message
@@ -212,7 +253,8 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         """
         return self.reply(self.msg_type + '.response', data, context)
 
-    def publish(self, msg_type, data, context=None):
+    def publish(self, msg_type: str, data: dict,
+                context: dict = None) -> _MsgBase:
         """
         Copy the original context and add passed in context.  Delete
         any target in the new context. Return a new message object with
@@ -220,7 +262,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
 
         Args:
             msg_type (str): type of message
-            data (dict): date to send with message
+            data (dict): data to send with message
             context: context added to existing context
 
         Returns:
@@ -236,6 +278,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
 
         return Message(msg_type, data, context=new_context)
 
+    @deprecated("This method is deprecated with no replacement", "0.1.0")
     def utterance_remainder(self):
         """
         DEPRECATED - mycroft-core hack, used by some skills in the wild
@@ -249,13 +292,29 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         Returns:
             str: Leftover words or None if not an utterance.
         """
-        LOG.warning("Message.utterance_remainder has been deprecated!")
         utt = normalize(self.data.get("utterance", ""))
         if utt and "__tags__" in self.data:
             for token in self.data["__tags__"]:
                 # Substitute only whole words matching the token
                 utt = re.sub(r'\b' + token.get("key", "") + r"\b", "", utt)
         return normalize(utt)
+
+
+def encrypt_as_dict(key: str, data: str, nonce=None) -> dict:
+    ciphertext, tag, nonce = encrypt(key, data, nonce=nonce)
+    return {"ciphertext": hexlify(ciphertext).decode('utf-8'),
+            "tag": hexlify(tag).decode('utf-8'),
+            "nonce": hexlify(nonce).decode('utf-8')}
+
+
+def decrypt_from_dict(key: str, data: dict) -> str:
+    ciphertext = unhexlify(data["ciphertext"])
+    if data.get("tag") is None:  # web crypto
+        ciphertext, tag = ciphertext[:-16], ciphertext[-16:]
+    else:
+        tag = unhexlify(data["tag"])
+    nonce = unhexlify(data["nonce"])
+    return decrypt(key, ciphertext, tag, nonce)
 
 
 def dig_for_message(max_records: int = 10) -> Optional[Message]:
@@ -371,14 +430,28 @@ class CollectionMessage(Message, _CollectionMsgBase):
         return response_message
 
 
-if __name__ == "__main__":
-    from mycroft_bus_client.message import Message as _MycroftMessage
+class GUIMessage(Message):
+    def __init__(self, msg_type, **kwargs):
+        super().__init__(msg_type, data=kwargs)
 
-    m1 = _MycroftMessage("")
-    m2 = Message("")
-    print(m1 == m2)
-    print(m2 == m1)
-    print(isinstance(m1, _MycroftMessage))
-    print(isinstance(m1, Message))
-    print(isinstance(m2, _MycroftMessage))  # can't fix this one without the monkey patching, its defined in the class at mycroft_bus_client
-    print(isinstance(m2, Message))
+    def serialize(self):
+        """This returns a string of the message info.
+
+        This makes it easy to send over a websocket. This uses
+        json dumps to generate the string with type, data and context
+
+        Returns:
+            str: a json string representation of the message.
+        """
+        data = self._json_dump(self.data)
+        msg = json.dumps({'type': self.msg_type, **data})
+        if self._secret_key:
+            payload = encrypt_as_dict(self._secret_key, msg)
+            return json.dumps(payload)
+        return msg
+
+    @staticmethod
+    def deserialize(value):
+        value = Message._json_load(value)
+        msg_type = value.pop("type")
+        return GUIMessage(msg_type, **value)
