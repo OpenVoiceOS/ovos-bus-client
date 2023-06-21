@@ -130,9 +130,9 @@ class IntentContextManager:
         @param data: serialized (dict) data
         @return: IntentContextManager for the specified data
         """
-        timeout = data["timeout"]
+        timeout = data.get("timeout", 2)
         framestack = [(IntentContextManagerFrame.deserialize(f), t)
-                      for (f, t) in data["frame_stack"]]
+                      for (f, t) in data.get("frame_stack", [])]
         return IntentContextManager(timeout, framestack)
 
     def update_context(self, entities: dict):
@@ -445,7 +445,7 @@ class Session:
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
         valid_langs = data.get("valid_languages") or _get_valid_langs()
-        context = IntentContextManager.deserialize(data["context"])
+        context = IntentContextManager.deserialize(data.get("context", {}))
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
