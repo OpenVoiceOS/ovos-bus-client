@@ -1,10 +1,9 @@
 import json
-from typing import Union, Callable, Any, List, Optional
-
 import time
 import traceback
 from os import getpid
 from threading import Event, Thread
+from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
 
 from ovos_utils.log import LOG, deprecated
@@ -72,10 +71,10 @@ class MessageBusClient(_MessageBusClientBase):
         """
         Setup websocket client.
         """
-        url = MessageBusClient.build_url(ssl=self.config.ssl,
-                                         host=self.config.host,
-                                         port=self.config.port,
-                                         route=self.config.route)
+        url = self.build_url(ssl=self.config.ssl,
+                             host=self.config.host,
+                             port=self.config.port,
+                             route=self.config.route)
         return WebSocketApp(url, on_open=self.on_open, on_close=self.on_close,
                             on_error=self.on_error, on_message=self.on_message)
 
