@@ -18,7 +18,7 @@ class UtteranceState(str, enum.Enum):
 
 def _get_valid_langs() -> List[str]:
     return list(set([get_default_lang()] +
-                    Configuration().get("secondary_langs'", [])))
+                    Configuration().get("secondary_langs", [])))
 
 
 class IntentContextManagerFrame:
