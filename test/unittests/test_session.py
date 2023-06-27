@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch
-
 from time import time, sleep
 
 
@@ -11,9 +10,36 @@ class TestSessionModule(unittest.TestCase):
             self.assertIsInstance(state, UtteranceState)
             self.assertIsInstance(state, str)
 
-    def test_get_valid_langs(self):
+    @patch("ovos_bus_client.session.get_default_lang")
+    @patch("ovos_bus_client.session.Configuration")
+    def test_get_valid_langs(self, config, default_lang):
+        config.return_value = {
+            "secondary_langs": ["en-us", "es-mx", "fr-ca"]
+        }
+        default_lang.return_value = "en-us"
         from ovos_bus_client.session import _get_valid_langs
-        # TODO
+        # Test default in secondary
+        langs = _get_valid_langs()
+        self.assertIsInstance(langs, list)
+        self.assertEqual(len(langs), len(set(langs)))
+        self.assertEqual(set(langs), {"en-us", "es-mx", "fr-ca"})
+
+        # Test default not in secondary
+        default_lang.return_value = "pt-pt"
+        langs = _get_valid_langs()
+        self.assertIsInstance(langs, list)
+        self.assertEqual(len(langs), len(set(langs)))
+        self.assertEqual(set(langs), {"en-us", "es-mx", "fr-ca", "pt-pt"})
+
+        # Test no secondary
+        config.return_value = {}
+        langs = _get_valid_langs()
+        self.assertEqual(langs, [default_lang.return_value])
+
+        # Test invalid secondary lang config
+        config.return_value = {"secondary_langs": None}
+        with self.assertRaises(TypeError):
+            _get_valid_langs()
 
 
 class TestIntentContextManagerFrame(unittest.TestCase):
@@ -176,15 +202,40 @@ class TestSession(unittest.TestCase):
         # TODO
         pass
 
-    def test_serialize(self):
-        # TODO
-        pass
+    def test_serialize_deserialize(self):
+        from ovos_bus_client.session import Session, IntentContextManager
+
+        # Simple session serialize/deserialize
+        test_session = Session()
+        serialized = test_session.serialize()
+        self.assertIsInstance(serialized, dict)
+        new_session = Session.deserialize(serialized)
+        self.assertIsInstance(new_session, Session)
+        new_serial = new_session.serialize()
+        ctx = serialized.pop('context')
+        new_ctx = new_serial.pop('context')
+        self.assertEqual(new_serial, serialized)
+        self.assertEqual(ctx['frame_stack'], new_ctx['frame_stack'])
+        self.assertGreater(new_ctx['timeout'], ctx['timeout'])
+
+        # Test default value deserialize
+        test_session = Session.deserialize(dict())
+        self.assertIsInstance(test_session, Session)
+        self.assertIsInstance(test_session.session_id, str)
+        self.assertIsInstance(test_session.lang, str)
+        self.assertIsInstance(test_session.valid_languages, list)
+        self.assertIsInstance(test_session.active_skills, list)
+        self.assertIsInstance(test_session.history, list)
+        self.assertIsInstance(test_session.utterance_states, dict)
+        self.assertIsInstance(test_session.max_time, int)
+        self.assertIsInstance(test_session.touch_time, int)
+        self.assertIsInstance(test_session.expiration_seconds, int)
+        self.assertIsInstance(test_session.context, IntentContextManager)
+        serialized = test_session.serialize()
+        self.assertIsInstance(serialized, dict)
+        self.assertIsInstance(serialized['context'], dict)
 
     def test_update_history(self):
-        # TODO
-        pass
-
-    def test_deserialize(self):
         # TODO
         pass
 

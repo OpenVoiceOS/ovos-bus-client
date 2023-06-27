@@ -434,7 +434,7 @@ class GUIMessage(Message):
     def __init__(self, msg_type, **kwargs):
         super().__init__(msg_type, data=kwargs)
 
-    def serialize(self):
+    def serialize(self) -> str:
         """This returns a string of the message info.
 
         This makes it easy to send over a websocket. This uses
@@ -451,7 +451,7 @@ class GUIMessage(Message):
         return msg
 
     @staticmethod
-    def deserialize(value):
+    def deserialize(value: str):
         value = Message._json_load(value)
         msg_type = value.pop("type")
         return GUIMessage(msg_type, **value)
