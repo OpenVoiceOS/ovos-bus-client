@@ -167,12 +167,15 @@ class MessageBusClient(_MessageBusClientBase):
 
         try:
             if hasattr(message, 'serialize'):
-                self.client.send(message.serialize())
+                msg = message.serialize()
             else:
-                self.client.send(json.dumps(message.__dict__))
+                msg = json.dumps(message.__dict__)
+            self.client.send(msg)
         except WebSocketConnectionClosedException:
-            LOG.warning('Could not send %s message because connection '
-                        'has been closed', message.msg_type)
+            LOG.warning(f'Could not send {message.msg_type} message because connection '
+                        'has been closed')
+        except Exception as e:
+            LOG.exception(f"failed to emit message {message.msg_type}")
 
     def collect_responses(self, message: Message,
                           min_timeout: Union[int, float] = 0.2,
