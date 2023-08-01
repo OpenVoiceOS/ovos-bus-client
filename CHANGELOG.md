@@ -1,20 +1,12 @@
 # Changelog
 
-## [V0.0.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.5a2) (2023-06-27)
+## [0.0.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a1) (2023-08-01)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.5a1...V0.0.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.5...0.0.6a1)
 
 **Merged pull requests:**
 
-- Add unit test coverage for \#40 [\#41](https://github.com/OpenVoiceOS/ovos-bus-client/pull/41) ([NeonDaniel](https://github.com/NeonDaniel))
-
-## [V0.0.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.5a1) (2023-06-21)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4...V0.0.5a1)
-
-**Fixed bugs:**
-
-- hotfix/context deserialize [\#40](https://github.com/OpenVoiceOS/ovos-bus-client/pull/40) ([JarbasAl](https://github.com/JarbasAl))
+- debug logs on message emit failure [\#43](https://github.com/OpenVoiceOS/ovos-bus-client/pull/43) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
