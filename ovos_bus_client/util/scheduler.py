@@ -140,7 +140,7 @@ class EventScheduler(Thread):
         """
         while not self._stopping.wait(0.5):
             self.check_state()
-        LOG.info(f"Stopped")
+        LOG.info("EventScheduler Stopped")
 
     def check_state(self):
         """
@@ -173,6 +173,7 @@ class EventScheduler(Thread):
 
         # Finally, emit the queued up events that triggered
         for msg in pending_messages:
+            LOG.debug(f"Call scheduled event: {msg.msg_type}")
             self.bus.emit(msg)
 
     def schedule_event(self, event: str, sched_time: float,
@@ -201,6 +202,7 @@ class EventScheduler(Thread):
                 LOG.debug(f'Repeating event {event} is already scheduled, '
                           f'discarding')
             else:
+                LOG.debug(f"Scheduled event: {event} for time {sched_time}")
                 # add received event and time
                 event_list.append((sched_time, repeat, data, context))
                 self.events[event] = event_list
