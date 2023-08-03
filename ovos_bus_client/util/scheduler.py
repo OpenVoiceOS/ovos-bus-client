@@ -138,6 +138,7 @@ class EventScheduler(Thread):
         """
         Check events periodically until stopped
         """
+        LOG.info("EventScheduler Started")
         while not self._stopping.wait(0.5):
             try:
                 self.check_state()
