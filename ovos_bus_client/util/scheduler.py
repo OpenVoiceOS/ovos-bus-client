@@ -139,7 +139,10 @@ class EventScheduler(Thread):
         Check events periodically until stopped
         """
         while not self._stopping.wait(0.5):
-            self.check_state()
+            try:
+                self.check_state()
+            except Exception as e:
+                LOG.exception(e)
         LOG.info("EventScheduler Stopped")
 
     def check_state(self):
@@ -206,6 +209,9 @@ class EventScheduler(Thread):
                 # add received event and time
                 event_list.append((sched_time, repeat, data, context))
                 self.events[event] = event_list
+                if sched_time < time.time():
+                    LOG.warning(f"Added event is scheduled in the past and "
+                                f"will be called immediately: {event}")
 
     def schedule_event_handler(self, message: Message):
         """
