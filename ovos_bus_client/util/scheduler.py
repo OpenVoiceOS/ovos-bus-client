@@ -96,10 +96,13 @@ class EventScheduler(Thread):
                     self.update_event_handler)
         self.bus.on('mycroft.scheduler.get_event',
                     self.get_event_handler)
-        if autostart:
-            self.start()
 
         self._stopping = Event()
+        if autostart:
+            self.start()
+        else:
+            # Not running
+            self._stopping.set()
 
     @property
     def is_running(self) -> bool:
@@ -138,9 +141,14 @@ class EventScheduler(Thread):
         """
         Check events periodically until stopped
         """
+        LOG.info("EventScheduler Started")
+        self._stopping.clear()
         while not self._stopping.wait(0.5):
-            self.check_state()
-        LOG.info(f"Stopped")
+            try:
+                self.check_state()
+            except Exception as e:
+                LOG.exception(e)
+        LOG.info("EventScheduler Stopped")
 
     def check_state(self):
         """
@@ -173,6 +181,7 @@ class EventScheduler(Thread):
 
         # Finally, emit the queued up events that triggered
         for msg in pending_messages:
+            LOG.debug(f"Call scheduled event: {msg.msg_type}")
             self.bus.emit(msg)
 
     def schedule_event(self, event: str, sched_time: float,
@@ -201,9 +210,13 @@ class EventScheduler(Thread):
                 LOG.debug(f'Repeating event {event} is already scheduled, '
                           f'discarding')
             else:
+                LOG.debug(f"Scheduled event: {event} for time {sched_time}")
                 # add received event and time
                 event_list.append((sched_time, repeat, data, context))
                 self.events[event] = event_list
+                if sched_time < time.time():
+                    LOG.warning(f"Added event is scheduled in the past and "
+                                f"will be called immediately: {event}")
 
     def schedule_event_handler(self, message: Message):
         """
