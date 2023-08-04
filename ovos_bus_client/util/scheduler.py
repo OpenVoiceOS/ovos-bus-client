@@ -96,10 +96,13 @@ class EventScheduler(Thread):
                     self.update_event_handler)
         self.bus.on('mycroft.scheduler.get_event',
                     self.get_event_handler)
-        if autostart:
-            self.start()
 
         self._stopping = Event()
+        if autostart:
+            self.start()
+        else:
+            # Not running
+            self._stopping.set()
 
     @property
     def is_running(self) -> bool:
@@ -139,6 +142,7 @@ class EventScheduler(Thread):
         Check events periodically until stopped
         """
         LOG.info("EventScheduler Started")
+        self._stopping.clear()
         while not self._stopping.wait(0.5):
             try:
                 self.check_state()
