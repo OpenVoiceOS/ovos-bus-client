@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a2) (2023-08-04)
+## [0.0.6a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a3) (2023-08-07)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a1...0.0.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a2...0.0.6a3)
+
+**Merged pull requests:**
+
+- Remove duplicated classes from `ovos_utils` [\#44](https://github.com/OpenVoiceOS/ovos-bus-client/pull/44) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a2) (2023-08-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a1...V0.0.6a2)
 
 **Merged pull requests:**
 
