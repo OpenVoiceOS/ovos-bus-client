@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a3) (2023-08-07)
+## [0.0.6a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a4) (2023-08-29)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a2...0.0.6a3)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a3...0.0.6a4)
+
+**Merged pull requests:**
+
+- Update EventScheduler init for backwards-compat. [\#46](https://github.com/OpenVoiceOS/ovos-bus-client/pull/46) ([NeonDaniel](https://github.com/NeonDaniel))
+
+## [V0.0.6a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a3) (2023-08-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a2...V0.0.6a3)
 
 **Merged pull requests:**
 
