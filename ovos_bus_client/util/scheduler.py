@@ -344,17 +344,10 @@ class EventScheduler(Thread):
             self.clear_empty()
             # Store all pending scheduled events
             self.store()
-        except TimeoutError:
-            # self.join timeout
-            LOG.error("Timed out joining thread")
-        except RuntimeError as e:
-            # self.join failed
-            LOG.error(e)
-        except OSError as e:
-            # self.store failed
-            LOG.error(e)
-        finally:
             self._running.clear()
+        except Exception as e:
+            self._running.clear()
+            raise e
 
 
 class EventContainer(_EventContainer):
