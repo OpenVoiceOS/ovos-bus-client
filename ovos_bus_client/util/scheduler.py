@@ -99,10 +99,13 @@ class EventScheduler(Thread):
 
         self._running = Event()
         self._stopping = Event()
-        self._stopping.set()
         if autostart:
             self.start()
             self._running.wait(10)
+        else:
+            # Explicitly define event states
+            self._stopping.set()
+            self._running.clear()
 
     @property
     def is_running(self) -> bool:
@@ -328,19 +331,23 @@ class EventScheduler(Thread):
         """
         Stop the running thread.
         """
-        self._stopping.set()
-        self._running.clear()
-        # Remove listeners
-        self.bus.remove_all_listeners('mycroft.scheduler.schedule_event')
-        self.bus.remove_all_listeners('mycroft.scheduler.remove_event')
-        self.bus.remove_all_listeners('mycroft.scheduler.update_event')
-        # Wait for thread to finish
-        self.join()
-        # Prune event list in preparation for saving
-        self.clear_repeating()
-        self.clear_empty()
-        # Store all pending scheduled events
-        self.store()
+        try:
+            self._stopping.set()
+            # Remove listeners
+            self.bus.remove_all_listeners('mycroft.scheduler.schedule_event')
+            self.bus.remove_all_listeners('mycroft.scheduler.remove_event')
+            self.bus.remove_all_listeners('mycroft.scheduler.update_event')
+            # Wait for thread to finish
+            self.join()
+            # Prune event list in preparation for saving
+            self.clear_repeating()
+            self.clear_empty()
+            # Store all pending scheduled events
+            self.store()
+        except Exception as e:
+            LOG.exception(e)
+        finally:
+            self._running.clear()
 
 
 class EventContainer(_EventContainer):
