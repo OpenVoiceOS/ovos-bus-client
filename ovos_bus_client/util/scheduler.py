@@ -21,18 +21,16 @@ criteria is met.
 
 import json
 import shutil
-
 import time
 
-from typing import Optional, Callable, Union
+from typing import Optional
 from threading import Event
-from datetime import datetime, timedelta
 from os.path import isfile, join, expanduser
 from threading import Thread, Lock
 
 from ovos_config.config import Configuration
 from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
-from ovos_utils.log import LOG, log_deprecation, deprecated
+from ovos_utils.log import LOG, log_deprecation
 from ovos_utils.messagebus import FakeBus
 from ovos_utils.events import create_basic_wrapper
 from ovos_utils.events import EventContainer as _EventContainer
@@ -99,12 +97,12 @@ class EventScheduler(Thread):
         self.bus.on('mycroft.scheduler.get_event',
                     self.get_event_handler)
 
+        self._running = Event()
         self._stopping = Event()
+        self._stopping.set()
         if autostart:
             self.start()
-        else:
-            # Not running
-            self._stopping.set()
+            self._running.wait(10)
 
     @property
     def is_running(self) -> bool:
@@ -145,6 +143,7 @@ class EventScheduler(Thread):
         """
         LOG.info("EventScheduler Started")
         self._stopping.clear()
+        self._running.set()
         while not self._stopping.wait(0.5):
             try:
                 self.check_state()
@@ -330,6 +329,7 @@ class EventScheduler(Thread):
         Stop the running thread.
         """
         self._stopping.set()
+        self._running.clear()
         # Remove listeners
         self.bus.remove_all_listeners('mycroft.scheduler.schedule_event')
         self.bus.remove_all_listeners('mycroft.scheduler.remove_event')

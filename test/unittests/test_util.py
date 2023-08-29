@@ -49,6 +49,14 @@ class TestEventScheduler(unittest.TestCase):
         self.scheduler._stopping.set()
         self.assertFalse(self.scheduler.is_running)
 
+    def test_scheduler_init(self):
+        from ovos_bus_client.util.scheduler import EventScheduler
+        scheduler = EventScheduler(self.bus, self.test_schedule_name)
+        self.assertTrue(scheduler.is_running)
+        self.assertEqual(scheduler.bus, self.bus)
+        self.assertNotEqual(scheduler, self.scheduler)
+        scheduler.shutdown()
+
 
 class TestUtils(unittest.TestCase):
     def test_create_echo_function(self):
