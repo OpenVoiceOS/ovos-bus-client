@@ -347,6 +347,8 @@ class EventScheduler(Thread):
             self._running.clear()
         except Exception as e:
             self._running.clear()
+            if not isinstance(e, OSError):
+                self.store()
             raise e
 
 
