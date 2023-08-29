@@ -338,14 +338,21 @@ class EventScheduler(Thread):
             self.bus.remove_all_listeners('mycroft.scheduler.remove_event')
             self.bus.remove_all_listeners('mycroft.scheduler.update_event')
             # Wait for thread to finish
-            self.join()
+            self.join(30)
             # Prune event list in preparation for saving
             self.clear_repeating()
             self.clear_empty()
             # Store all pending scheduled events
             self.store()
-        except Exception as e:
-            LOG.exception(e)
+        except TimeoutError:
+            # self.join timeout
+            LOG.error("Timed out joining thread")
+        except RuntimeError as e:
+            # self.join failed
+            LOG.error(e)
+        except OSError as e:
+            # self.store failed
+            LOG.error(e)
         finally:
             self._running.clear()
 
