@@ -272,7 +272,8 @@ class Session:
                  max_time: int = 5, max_messages: int = 5,
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
-                 valid_langs: List[str] = None):
+                 valid_langs: List[str] = None,
+                 site_id: str = "unknown"):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -288,6 +289,7 @@ class Session:
         """
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
+        self.site_id = site_id or "unknown"  # indoors placement info
 
         self.valid_languages = valid_langs or _get_valid_langs()
         self.active_skills = active_skills or []  # [skill_id , timestamp]
