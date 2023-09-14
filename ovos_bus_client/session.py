@@ -407,7 +407,8 @@ class Session:
             "history": self.history,
             "lang": self.lang,
             "valid_languages": self.valid_languages,
-            "context": self.context.serialize()
+            "context": self.context.serialize(),
+            "site_id": self.site_id
         }
 
     def update_history(self, message: Message = None):
@@ -448,6 +449,7 @@ class Session:
         lang = data.get("lang")
         valid_langs = data.get("valid_languages") or _get_valid_langs()
         context = IntentContextManager.deserialize(data.get("context", {}))
+        site_id = data.get("site_id", "unknown")
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -456,7 +458,8 @@ class Session:
                        lang=lang,
                        valid_langs=valid_langs,
                        max_messages=max_messages,
-                       context=context)
+                       context=context,
+                       site_id=site_id)
 
     @staticmethod
     def from_message(message: Message = None):
