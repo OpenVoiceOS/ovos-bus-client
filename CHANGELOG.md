@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a6) (2023-09-14)
+## [0.0.6a7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a7) (2023-09-22)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a5...0.0.6a6)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a6...0.0.6a7)
+
+**Implemented enhancements:**
+
+- feat/pipeline\_session [\#49](https://github.com/OpenVoiceOS/ovos-bus-client/pull/49) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.6a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a6) (2023-09-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a5...V0.0.6a6)
 
 **Fixed bugs:**
 
