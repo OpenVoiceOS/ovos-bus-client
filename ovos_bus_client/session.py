@@ -1,14 +1,15 @@
 import enum
-import time
 import json
+import time
 from threading import Lock
-from uuid import uuid4
 from typing import Optional, List, Tuple, Union, Iterable
+from uuid import uuid4
 
-from ovos_bus_client.message import dig_for_message, Message
-from ovos_utils.log import LOG, log_deprecation
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
+from ovos_utils.log import LOG, log_deprecation
+
+from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
@@ -95,7 +96,7 @@ class IntentContextManager:
 
     def __init__(self, timeout: int = None,
                  frame_stack: List[Tuple[IntentContextManagerFrame,
-                                         float]] = None,
+                 float]] = None,
                  greedy: bool = None, keywords: List[str] = None,
                  max_frames: int = None):
 
@@ -273,7 +274,8 @@ class Session:
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
                  valid_langs: List[str] = None,
-                 site_id: str = "unknown"):
+                 site_id: str = "unknown",
+                 pipeline: List[str] = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -299,12 +301,20 @@ class Session:
         self.max_time = max_time  # minutes
         self.max_messages = max_messages
         self.touch_time = int(time.time())
-        if expiration_seconds is None:
-            expiration_seconds = Configuration().get('session', {}).get("ttl",
-                                                                        -1)
-        self.expiration_seconds = expiration_seconds
-        self.context = context or IntentContextManager(timeout=self.touch_time +
-                                                       expiration_seconds)
+        self.expiration_seconds = expiration_seconds or \
+                                  Configuration().get('session', {}).get("ttl", -1)
+        self.pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
+            "converse",
+            "padatious_high",
+            "adapt",
+            "common_qa",
+            "fallback_high",
+            "padatious_medium",
+            "fallback_medium",
+            "padatious_low",
+            "fallback_low"
+        ]
+        self.context = context or IntentContextManager(timeout=self.touch_time + self.expiration_seconds)
 
     @property
     def active(self) -> bool:
@@ -408,7 +418,8 @@ class Session:
             "lang": self.lang,
             "valid_languages": self.valid_languages,
             "context": self.context.serialize(),
-            "site_id": self.site_id
+            "site_id": self.site_id,
+            "pipeline": self.pipeline
         }
 
     def update_history(self, message: Message = None):
@@ -450,6 +461,7 @@ class Session:
         valid_langs = data.get("valid_languages") or _get_valid_langs()
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
+        pipeline = data.get("pipeline", [])
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -459,6 +471,7 @@ class Session:
                        valid_langs=valid_langs,
                        max_messages=max_messages,
                        context=context,
+                       pipeline=pipeline,
                        site_id=site_id)
 
     @staticmethod
