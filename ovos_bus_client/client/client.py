@@ -42,7 +42,7 @@ class MessageBusClient(_MessageBusClientBase):
     _config_cache = None
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
-                 emitter=None, cache=False):
+                 emitter=None, cache=False, session=None):
         config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
         if cache and self._config_cache:
             config = self._config_cache
@@ -59,6 +59,12 @@ class MessageBusClient(_MessageBusClientBase):
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
+        if session:
+            SessionManager.update(session)
+        else:
+            session = SessionManager.get()
+
+        self.session_id = session.session_id
 
     @staticmethod
     def build_url(host: str, port: int, route: str, ssl: bool) -> str:
@@ -140,7 +146,9 @@ class MessageBusClient(_MessageBusClientBase):
         else:
             message = args[1]
         parsed_message = Message.deserialize(message)
-        SessionManager.update(Session.from_message(parsed_message))
+        sess = Session.from_message(parsed_message)
+        SessionManager.update(sess)
+        sess.touch()
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
 
@@ -155,9 +163,10 @@ class MessageBusClient(_MessageBusClientBase):
             message (Message): Message to send
         """
         if "session" not in message.context:
-            sess = SessionManager.get(message)
+            sess = SessionManager.sessions.get(self.session_id) or SessionManager.default_session
             message.context["session"] = sess.serialize()
             sess.update_history(message)
+            sess.touch()
 
         if not self.connected_event.wait(10):
             if not self.started_running:
