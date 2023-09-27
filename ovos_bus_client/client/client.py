@@ -159,6 +159,7 @@ class MessageBusClient(_MessageBusClientBase):
         new_session = message.data["session_data"]
         sess = Session.deserialize(new_session)
         SessionManager.update(sess, make_default=True)
+        LOG.debug("synced default_session")
 
     def emit(self, message: Message):
         """
