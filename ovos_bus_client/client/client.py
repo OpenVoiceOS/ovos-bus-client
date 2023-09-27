@@ -148,7 +148,6 @@ class MessageBusClient(_MessageBusClientBase):
         parsed_message = Message.deserialize(message)
         sess = Session.from_message(parsed_message)
         SessionManager.update(sess)
-        sess.touch()
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
 

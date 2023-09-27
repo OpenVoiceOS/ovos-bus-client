@@ -487,26 +487,13 @@ class Session:
         if message:
             lang = message.context.get("lang") or \
                    message.data.get("lang")
-            sid = None
-            if "session_id" in message.context:
-                sid = message.context["session_id"]
             if "session" in message.context:
                 sess = message.context["session"]
-                if sid and "session_id" not in sess:
-                    sess["session_id"] = sid
                 if "lang" not in sess:
                     sess["lang"] = lang
                 sess = Session.deserialize(sess)
-            elif sid:
-                sess = SessionManager.sessions.get(sid) or \
-                       Session(sid)
-                if lang:
-                    sess.lang = lang
             else:
                 sess = SessionManager.default_session
-                if not sess:
-                    LOG.debug(f"Creating default session on reference")
-                    sess = SessionManager.reset_default_session()
                 if sess and lang and sess.lang != lang:
                     sess.lang = lang
                     LOG.info(f"Updated default session lang to: {lang}")
@@ -566,6 +553,7 @@ class SessionManager:
             LOG.debug(f"replacing default session with: {sess.serialize()}")
             SessionManager.default_session = sess
         else:
+
             LOG.debug(f"session updated: {sess.session_id}")
             SessionManager.sessions[sess.session_id] = sess
 
