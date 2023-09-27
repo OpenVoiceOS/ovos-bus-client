@@ -494,7 +494,7 @@ class Session:
                 sess = Session.deserialize(sess)
             else:
                 sess = SessionManager.default_session
-                if sess and lang and sess.lang != lang:
+                if lang and sess.lang != lang:
                     sess.lang = lang
                     LOG.info(f"Updated default session lang to: {lang}")
         else:
