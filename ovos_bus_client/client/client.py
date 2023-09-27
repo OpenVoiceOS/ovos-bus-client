@@ -94,6 +94,8 @@ class MessageBusClient(_MessageBusClientBase):
         self.emitter.emit("open")
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
+        self.on("ovos.session.update_default",
+                self.on_default_session_update)
 
     def on_close(self, *args):
         """
@@ -147,9 +149,16 @@ class MessageBusClient(_MessageBusClientBase):
             message = args[1]
         parsed_message = Message.deserialize(message)
         sess = Session.from_message(parsed_message)
-        SessionManager.update(sess)
+        if sess.session_id != "default":
+            # 'default' can only be updated by core
+            SessionManager.update(sess)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
+
+    def on_default_session_update(self, message):
+        new_session = message.data["session_data"]
+        sess = Session.deserialize(new_session)
+        SessionManager.update(sess, make_default=True)
 
     def emit(self, message: Message):
         """

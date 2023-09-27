@@ -502,7 +502,7 @@ class Session:
             LOG.warning(f"No message found, using default session")
             sess = SessionManager.default_session
         if sess and sess.expired():
-            LOG.debug(f"Resolved session expired {sess.session_id}")
+            LOG.debug(f"unexpiring session {sess.session_id}")
             sess.touch()
         return sess
 
