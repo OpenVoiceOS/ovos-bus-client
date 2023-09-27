@@ -524,7 +524,7 @@ class SessionManager:
     """ Keeps track of the current active session. """
     default_session: Session = Session("default")
     __lock = Lock()
-    sessions = {}
+    sessions = {"default": default_session}
 
     @staticmethod
     def prune_sessions():
@@ -545,17 +545,10 @@ class SessionManager:
         Define and return a new default_session
         """
         with SessionManager.__lock:
-            sess = Session()
-            LOG.info(f"New Default Session Start: {sess.session_id}")
-            if not SessionManager.default_session:
-                SessionManager.default_session = sess
-            if SessionManager.default_session.session_id in \
-                    SessionManager.sessions:
-                LOG.debug(f"Removing expired default session from sessions")
-                SessionManager.sessions.pop(
-                    SessionManager.default_session.session_id)
-            SessionManager.default_session = sess
-            SessionManager.sessions[sess.session_id] = sess
+            sess = Session("default")
+            LOG.info(f"Default Session reset")
+            SessionManager.default_session = Session("default")
+            SessionManager.sessions["default"] = sess
         return SessionManager.default_session
 
     @staticmethod
@@ -570,8 +563,10 @@ class SessionManager:
         sess.touch()
         if make_default:
             sess.session_id = "default"
+            LOG.debug(f"replacing default session with: {sess.serialize()}")
             SessionManager.default_session = sess
         else:
+            LOG.debug(f"session updated: {sess.session_id}")
             SessionManager.sessions[sess.session_id] = sess
 
     @staticmethod
@@ -592,18 +587,15 @@ class SessionManager:
                 SessionManager.sessions[msg_sess.session_id] = msg_sess
                 return msg_sess
             else:
-                LOG.debug(f"No session from message.")
+                LOG.debug(f"No session from message, use default session")
         else:
             LOG.debug(f"No message, use default session")
 
         # Default session, check if it needs to be (re)-created
-        if not sess or sess.expired():
-            if sess is not None and sess.session_id in SessionManager.sessions:
-                LOG.debug(f"Removing expired default: {sess.session_id}")
-                SessionManager.sessions.pop(sess.session_id)
+        if sess.expired():
             sess = SessionManager.reset_default_session()
         else:
-            # Existing default, make sure lang is in sync with Configuration
+            # make sure lang is in sync with Configuration
             sess.lang = Configuration().get('lang') or sess.lang
 
         return sess
