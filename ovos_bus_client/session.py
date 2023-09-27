@@ -534,8 +534,7 @@ class SessionManager:
         with SessionManager.__lock:
             sess = Session("default")
             LOG.info(f"Default Session reset")
-            SessionManager.default_session = Session("default")
-            SessionManager.sessions["default"] = sess
+            SessionManager.default_session = SessionManager.sessions["default"] = Session("default")
         return SessionManager.default_session
 
     @staticmethod
@@ -553,7 +552,6 @@ class SessionManager:
             LOG.debug(f"replacing default session with: {sess.serialize()}")
             SessionManager.default_session = sess
         else:
-
             LOG.debug(f"session updated: {sess.session_id}")
             SessionManager.sessions[sess.session_id] = sess
 
