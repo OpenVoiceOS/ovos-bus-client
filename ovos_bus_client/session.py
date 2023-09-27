@@ -522,7 +522,7 @@ class Session:
 
 class SessionManager:
     """ Keeps track of the current active session. """
-    default_session: Session = None
+    default_session: Session = Session("default")
     __lock = Lock()
     sessions = {}
 
@@ -568,9 +568,11 @@ class SessionManager:
         if not sess:
             raise ValueError(f"Expected Session and got None")
         sess.touch()
-        SessionManager.sessions[sess.session_id] = sess
         if make_default:
+            sess.session_id = "default"
             SessionManager.default_session = sess
+        else:
+            SessionManager.sessions[sess.session_id] = sess
 
     @staticmethod
     def get(message: Optional[Message] = None) -> Session:

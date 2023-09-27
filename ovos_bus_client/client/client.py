@@ -62,7 +62,7 @@ class MessageBusClient(_MessageBusClientBase):
         if session:
             SessionManager.update(session)
         else:
-            session = SessionManager.get()
+            session = SessionManager.default_session
 
         self.session_id = session.session_id
 
