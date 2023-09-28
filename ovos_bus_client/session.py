@@ -521,6 +521,8 @@ class SessionManager:
     @classmethod
     def connect_to_bus(cls, bus):
         cls.bus = bus
+        cls.bus.on("ovos.session.sync",
+                   cls.handle_default_session_request)
         cls.sync()
 
     @classmethod

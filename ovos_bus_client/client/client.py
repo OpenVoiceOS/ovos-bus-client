@@ -65,6 +65,8 @@ class MessageBusClient(_MessageBusClientBase):
             session = SessionManager.default_session
 
         self.session_id = session.session_id
+        self.on("ovos.session.update_default",
+                self.on_default_session_update)
 
     @staticmethod
     def build_url(host: str, port: int, route: str, ssl: bool) -> str:
@@ -94,8 +96,7 @@ class MessageBusClient(_MessageBusClientBase):
         self.emitter.emit("open")
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
-        self.on("ovos.session.update_default",
-                self.on_default_session_update)
+        self.emit(Message("ovos.session.sync")) # request default session update
 
     def on_close(self, *args):
         """
