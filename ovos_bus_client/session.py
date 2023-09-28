@@ -5,11 +5,10 @@ from threading import Lock
 from typing import Optional, List, Tuple, Union, Iterable
 from uuid import uuid4
 
+from ovos_bus_client.message import dig_for_message, Message
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
-
-from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
@@ -512,6 +511,21 @@ class SessionManager:
     default_session: Session = Session("default")
     __lock = Lock()
     sessions = {"default": default_session}
+    bus = None
+
+    @classmethod
+    def sync(cls):
+        cls.bus.emit(Message("ovos.session.update_default",
+                             {"session_data": cls.default_session.serialize()}))
+
+    @classmethod
+    def connect_to_bus(cls, bus):
+        cls.bus = bus
+        cls.sync()
+
+    @classmethod
+    def handle_default_session_request(cls, message):
+        cls.sync()
 
     @staticmethod
     def prune_sessions():
