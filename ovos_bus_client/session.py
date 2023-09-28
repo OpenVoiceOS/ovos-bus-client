@@ -569,7 +569,7 @@ class SessionManager:
             SessionManager.default_session = sess
         else:
             LOG.debug(f"session updated: {sess.session_id}")
-            SessionManager.sessions[sess.session_id] = sess
+        SessionManager.sessions[sess.session_id] = sess
 
     @staticmethod
     def get(message: Optional[Message] = None) -> Session:
