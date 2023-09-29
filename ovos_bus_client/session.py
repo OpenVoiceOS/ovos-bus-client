@@ -507,10 +507,11 @@ class SessionManager:
     bus = None
 
     @classmethod
-    def sync(cls):
+    def sync(cls, message=None):
         if cls.bus:
-            cls.bus.emit(Message("ovos.session.update_default",
-                                 {"session_data": cls.default_session.serialize()}))
+            message = message or Message("ovos.session.sync")
+            cls.bus.emit(message.reply("ovos.session.update_default",
+                                       {"session_data": cls.default_session.serialize()}))
 
     @classmethod
     def connect_to_bus(cls, bus):
@@ -520,8 +521,8 @@ class SessionManager:
         cls.sync()
 
     @classmethod
-    def handle_default_session_request(cls, message):
-        cls.sync()
+    def handle_default_session_request(cls, message=None):
+        cls.sync(message)
 
     @staticmethod
     def prune_sessions():
@@ -587,13 +588,6 @@ class SessionManager:
                 LOG.debug(f"No session from message, use default session")
         else:
             LOG.debug(f"No message, use default session")
-
-        # Default session, check if it needs to be (re)-created
-        if sess.expired():
-            sess = SessionManager.reset_default_session()
-        else:
-            # make sure lang is in sync with Configuration
-            sess.lang = Configuration().get('lang') or sess.lang
 
         return sess
 
