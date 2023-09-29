@@ -508,8 +508,9 @@ class SessionManager:
 
     @classmethod
     def sync(cls):
-        cls.bus.emit(Message("ovos.session.update_default",
-                             {"session_data": cls.default_session.serialize()}))
+        if cls.bus:
+            cls.bus.emit(Message("ovos.session.update_default",
+                                 {"session_data": cls.default_session.serialize()}))
 
     @classmethod
     def connect_to_bus(cls, bus):
@@ -543,7 +544,8 @@ class SessionManager:
         with SessionManager.__lock:
             sess = Session("default")
             LOG.info(f"Default Session reset")
-            SessionManager.default_session = SessionManager.sessions["default"] = Session("default")
+            SessionManager.default_session = SessionManager.sessions["default"] = sess
+            SessionManager.sync()
         return SessionManager.default_session
 
     @staticmethod
