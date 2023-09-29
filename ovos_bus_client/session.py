@@ -483,26 +483,19 @@ class Session:
         @return: Session object
         """
         message = message or dig_for_message()
-        if message:
+        if message and "session" in message.context:
             lang = message.context.get("lang") or \
                    message.data.get("lang")
-            if "session" in message.context:
-                sess = message.context["session"]
-                if "lang" not in sess:
-                    sess["lang"] = lang
-                sess = Session.deserialize(sess)
-            else:
-                sess = SessionManager.default_session
-                if lang and sess.lang != lang:
-                    sess.lang = lang
-                    LOG.info(f"Updated default session lang to: {lang}")
+            sess = message.context["session"]
+            if "lang" not in sess:
+                sess["lang"] = lang
+            sess = Session.deserialize(sess)
         else:
             # new session
             LOG.warning(f"No message found, using default session")
             sess = SessionManager.default_session
         if sess and sess.expired():
             LOG.debug(f"unexpiring session {sess.session_id}")
-            sess.touch()
         return sess
 
 
