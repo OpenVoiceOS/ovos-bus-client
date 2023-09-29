@@ -262,19 +262,9 @@ class TestSessionManager(unittest.TestCase):
         # TODO
         pass
 
-    @patch("ovos_bus_client.session.Configuration")
-    def test_get(self, config):
-        config.return_value = {'lang': 'en-us'}
-        self.assertEqual(config(), {'lang': 'en-us'})
-        from ovos_bus_client.session import Session
-        session = self.SessionManager.get()
-        self.assertIsInstance(session, Session)
-        self.assertEqual(session.lang, 'en-us')
-        config.return_value = {'lang': 'es-es'}
-
-        session = self.SessionManager.get()
-        self.assertIsInstance(session, Session)
-        self.assertEqual(session.lang, 'es-es')
+    def test_get(self):
+        # TODO - rewrite test, .get has no side effects now, lang update happens in ovos-core
+        pass
 
     def test_touch(self):
         # TODO

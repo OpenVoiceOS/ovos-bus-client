@@ -42,7 +42,7 @@ class MessageBusClient(_MessageBusClientBase):
     _config_cache = None
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
-                 emitter=None, cache=False):
+                 emitter=None, cache=False, session=None):
         config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
         if cache and self._config_cache:
             config = self._config_cache
@@ -59,6 +59,14 @@ class MessageBusClient(_MessageBusClientBase):
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
+        if session:
+            SessionManager.update(session)
+        else:
+            session = SessionManager.default_session
+
+        self.session_id = session.session_id
+        self.on("ovos.session.update_default",
+                self.on_default_session_update)
 
     @staticmethod
     def build_url(host: str, port: int, route: str, ssl: bool) -> str:
@@ -88,6 +96,7 @@ class MessageBusClient(_MessageBusClientBase):
         self.emitter.emit("open")
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
+        self.emit(Message("ovos.session.sync")) # request default session update
 
     def on_close(self, *args):
         """
@@ -140,9 +149,18 @@ class MessageBusClient(_MessageBusClientBase):
         else:
             message = args[1]
         parsed_message = Message.deserialize(message)
-        SessionManager.update(Session.from_message(parsed_message))
+        sess = Session.from_message(parsed_message)
+        if sess.session_id != "default":
+            # 'default' can only be updated by core
+            SessionManager.update(sess)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
+
+    def on_default_session_update(self, message):
+        new_session = message.data["session_data"]
+        sess = Session.deserialize(new_session)
+        SessionManager.update(sess, make_default=True)
+        LOG.debug("synced default_session")
 
     def emit(self, message: Message):
         """
@@ -155,9 +173,11 @@ class MessageBusClient(_MessageBusClientBase):
             message (Message): Message to send
         """
         if "session" not in message.context:
-            sess = SessionManager.get(message)
+            sess = SessionManager.sessions.get(self.session_id) or \
+                   SessionManager.default_session
             message.context["session"] = sess.serialize()
             sess.update_history(message)
+            sess.touch()
 
         if not self.connected_event.wait(10):
             if not self.started_running:

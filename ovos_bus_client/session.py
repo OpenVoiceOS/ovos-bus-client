@@ -5,11 +5,10 @@ from threading import Lock
 from typing import Optional, List, Tuple, Union, Iterable
 from uuid import uuid4
 
+from ovos_bus_client.message import dig_for_message, Message
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
-
-from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
@@ -484,47 +483,46 @@ class Session:
         @return: Session object
         """
         message = message or dig_for_message()
-        if message:
+        if message and "session" in message.context:
             lang = message.context.get("lang") or \
                    message.data.get("lang")
-            sid = None
-            if "session_id" in message.context:
-                sid = message.context["session_id"]
-            if "session" in message.context:
-                sess = message.context["session"]
-                if sid and "session_id" not in sess:
-                    sess["session_id"] = sid
-                if "lang" not in sess:
-                    sess["lang"] = lang
-                sess = Session.deserialize(sess)
-            elif sid:
-                sess = SessionManager.sessions.get(sid) or \
-                       Session(sid)
-                if lang:
-                    sess.lang = lang
-            else:
-                sess = SessionManager.default_session
-                if not sess:
-                    LOG.debug(f"Creating default session on reference")
-                    sess = SessionManager.reset_default_session()
-                if sess and lang and sess.lang != lang:
-                    sess.lang = lang
-                    LOG.info(f"Updated default session lang to: {lang}")
+            sess = message.context["session"]
+            if "lang" not in sess:
+                sess["lang"] = lang
+            sess = Session.deserialize(sess)
         else:
             # new session
             LOG.warning(f"No message found, using default session")
             sess = SessionManager.default_session
         if sess and sess.expired():
-            LOG.debug(f"Resolved session expired {sess.session_id}")
-            sess.touch()
+            LOG.debug(f"unexpiring session {sess.session_id}")
         return sess
 
 
 class SessionManager:
     """ Keeps track of the current active session. """
-    default_session: Session = None
+    default_session: Session = Session("default")
     __lock = Lock()
-    sessions = {}
+    sessions = {"default": default_session}
+    bus = None
+
+    @classmethod
+    def sync(cls, message=None):
+        if cls.bus:
+            message = message or Message("ovos.session.sync")
+            cls.bus.emit(message.reply("ovos.session.update_default",
+                                       {"session_data": cls.default_session.serialize()}))
+
+    @classmethod
+    def connect_to_bus(cls, bus):
+        cls.bus = bus
+        cls.bus.on("ovos.session.sync",
+                   cls.handle_default_session_request)
+        cls.sync()
+
+    @classmethod
+    def handle_default_session_request(cls, message=None):
+        cls.sync(message)
 
     @staticmethod
     def prune_sessions():
@@ -545,17 +543,10 @@ class SessionManager:
         Define and return a new default_session
         """
         with SessionManager.__lock:
-            sess = Session()
-            LOG.info(f"New Default Session Start: {sess.session_id}")
-            if not SessionManager.default_session:
-                SessionManager.default_session = sess
-            if SessionManager.default_session.session_id in \
-                    SessionManager.sessions:
-                LOG.debug(f"Removing expired default session from sessions")
-                SessionManager.sessions.pop(
-                    SessionManager.default_session.session_id)
-            SessionManager.default_session = sess
-            SessionManager.sessions[sess.session_id] = sess
+            sess = Session("default")
+            LOG.info(f"Default Session reset")
+            SessionManager.default_session = SessionManager.sessions["default"] = sess
+            SessionManager.sync()
         return SessionManager.default_session
 
     @staticmethod
@@ -568,9 +559,13 @@ class SessionManager:
         if not sess:
             raise ValueError(f"Expected Session and got None")
         sess.touch()
-        SessionManager.sessions[sess.session_id] = sess
         if make_default:
+            sess.session_id = "default"
+            LOG.debug(f"replacing default session with: {sess.serialize()}")
             SessionManager.default_session = sess
+        else:
+            LOG.debug(f"session updated: {sess.session_id}")
+        SessionManager.sessions[sess.session_id] = sess
 
     @staticmethod
     def get(message: Optional[Message] = None) -> Session:
@@ -590,19 +585,9 @@ class SessionManager:
                 SessionManager.sessions[msg_sess.session_id] = msg_sess
                 return msg_sess
             else:
-                LOG.debug(f"No session from message.")
+                LOG.debug(f"No session from message, use default session")
         else:
             LOG.debug(f"No message, use default session")
-
-        # Default session, check if it needs to be (re)-created
-        if not sess or sess.expired():
-            if sess is not None and sess.session_id in SessionManager.sessions:
-                LOG.debug(f"Removing expired default: {sess.session_id}")
-                SessionManager.sessions.pop(sess.session_id)
-            sess = SessionManager.reset_default_session()
-        else:
-            # Existing default, make sure lang is in sync with Configuration
-            sess.lang = Configuration().get('lang') or sess.lang
 
         return sess
 
