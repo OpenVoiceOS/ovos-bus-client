@@ -329,6 +329,7 @@ class Session:
         update the touch_time on the session
         """
         self.touch_time = int(time.time())
+        SessionManager.update(self)
 
     def expired(self) -> bool:
         """
@@ -347,6 +348,7 @@ class Session:
         @param skill_id: ID of skill expecting a response
         """
         self.utterance_states[skill_id] = UtteranceState.RESPONSE.value
+        SessionManager.update(self)
 
     def disable_response_mode(self, skill_id: str):
         """
@@ -354,6 +356,7 @@ class Session:
         @param skill_id: ID of skill expecting a response
         """
         self.utterance_states[skill_id] = UtteranceState.INTENT.value
+        SessionManager.update(self)
 
     def activate_skill(self, skill_id: str):
         """
@@ -364,6 +367,7 @@ class Session:
         self.deactivate_skill(skill_id)
         # add skill with timestamp to start of active list
         self.active_skills.insert(0, [skill_id, time.time()])
+        SessionManager.update(self)
 
     def deactivate_skill(self, skill_id: str):
         """
@@ -374,6 +378,7 @@ class Session:
         if skill_id in active_ids:
             idx = active_ids.index(skill_id)
             self.active_skills.pop(idx)
+        SessionManager.update(self)
 
     def is_active(self, skill_id: str) -> bool:
         """
@@ -403,6 +408,7 @@ class Session:
         """
         self.active_skills = []
         self.history = []
+        SessionManager.update(self)
 
     def serialize(self) -> dict:
         """
@@ -442,6 +448,7 @@ class Session:
             m["context"] = {}  # clear personal data
             self.history.append((m, time.time()))
         self._prune_history()
+        SessionManager.update(self)
 
     @staticmethod
     def deserialize(data: dict):
@@ -558,13 +565,15 @@ class SessionManager:
         """
         if not sess:
             raise ValueError(f"Expected Session and got None")
-        sess.touch()
+
         if make_default:
             sess.session_id = "default"
             LOG.debug(f"replacing default session with: {sess.serialize()}")
-            SessionManager.default_session = sess
         else:
             LOG.debug(f"session updated: {sess.session_id}")
+
+        if sess.session_id == "default":
+            SessionManager.default_session = sess
         SessionManager.sessions[sess.session_id] = sess
 
     @staticmethod
@@ -598,4 +607,5 @@ class SessionManager:
 
         @param message: Message to get Session for to update
         """
-        SessionManager.get(message).touch()
+        sess = SessionManager.get(message)
+        sess.touch()
