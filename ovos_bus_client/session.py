@@ -268,8 +268,6 @@ class IntentContextManager:
 class Session:
     def __init__(self, session_id: str = None, expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 history: List[Tuple[Message, float]] = None,
-                 max_time: int = 5, max_messages: int = 5,
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
                  valid_langs: List[str] = None,
@@ -280,9 +278,6 @@ class Session:
         @param session_id: string UUID for the session
         @param expiration_seconds: TTL for session (-1 for no expiration)
         @param active_skills: List of list skill_id, last reference
-        @param history: List of tuple Message, timestamp
-        @param max_time: maximum time for history in minutes
-        @param max_messages: maximum number of messages to retain
         @param utterance_states: dict of skill_id to UtteranceState
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
@@ -293,12 +288,9 @@ class Session:
         self.site_id = site_id or "unknown"  # indoors placement info
 
         self.valid_languages = valid_langs or _get_valid_langs()
-        self.active_skills = active_skills or []  # [skill_id , timestamp]
-        # TODO: Can active_skills be a list of tuples like history?
-        self.history = history or []  # (Message , timestamp)
+        self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
-        self.max_time = max_time  # minutes
-        self.max_messages = max_messages
+
         self.touch_time = int(time.time())
         self.expiration_seconds = expiration_seconds or \
                                   Configuration().get('session', {}).get("ttl", -1)
@@ -348,7 +340,7 @@ class Session:
         @param skill_id: ID of skill expecting a response
         """
         self.utterance_states[skill_id] = UtteranceState.RESPONSE.value
-        SessionManager.update(self)
+        self.touch()
 
     def disable_response_mode(self, skill_id: str):
         """
@@ -356,7 +348,7 @@ class Session:
         @param skill_id: ID of skill expecting a response
         """
         self.utterance_states[skill_id] = UtteranceState.INTENT.value
-        SessionManager.update(self)
+        self.touch()
 
     def activate_skill(self, skill_id: str):
         """
@@ -367,7 +359,7 @@ class Session:
         self.deactivate_skill(skill_id)
         # add skill with timestamp to start of active list
         self.active_skills.insert(0, [skill_id, time.time()])
-        SessionManager.update(self)
+        self.touch()
 
     def deactivate_skill(self, skill_id: str):
         """
@@ -378,7 +370,7 @@ class Session:
         if skill_id in active_ids:
             idx = active_ids.index(skill_id)
             self.active_skills.pop(idx)
-        SessionManager.update(self)
+        self.touch()
 
     def is_active(self, skill_id: str) -> bool:
         """
@@ -386,29 +378,15 @@ class Session:
         @param skill_id: ID of skill to check
         @return: True if the requested skill is active
         """
-        self._prune_history()  # TODO: Is this necessary or useful?
         active_ids = [s[0] for s in self.active_skills]
         return skill_id in active_ids
 
-    def _prune_history(self):
-        """
-        Remove messages from history that are too old or exceed max_messages
-        """
-        # filter old messages from history
-        now = time.time()
-        self.history = [m for m in self.history
-                        if now - m[1] < 60 * self.max_time]
-        # keep only self.max_messages
-        if len(self.history) > self.max_messages:
-            self.history = self.history[self.max_messages * -1:]
-
     def clear(self):
         """
-        Clear history and active_skills
+        Clear active_skills
         """
         self.active_skills = []
-        self.history = []
-        SessionManager.update(self)
+        self.touch()
 
     def serialize(self) -> dict:
         """
@@ -419,36 +397,12 @@ class Session:
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
-            "history": self.history,
             "lang": self.lang,
             "valid_languages": self.valid_languages,
             "context": self.context.serialize(),
             "site_id": self.site_id,
             "pipeline": self.pipeline
         }
-
-    def update_history(self, message: Message = None):
-        """
-        Add a message to history and then prune history
-        @param message: Message to append to history
-        """
-        message = message or dig_for_message()
-        if message:
-            try:
-                m = message.as_dict
-            except AttributeError:
-                log_deprecation("mycroft-bus-client has been deprecated, please"
-                                " update your imports to use ovos-bus-client",
-                                "0.0.4",
-                                excluded_package_refs=["ovos_bus_client"])
-                m = json.loads(message.serialize())
-            except Exception as e:
-                LOG.exception(e)
-                m = json.loads(message.serialize())
-            m["context"] = {}  # clear personal data
-            self.history.append((m, time.time()))
-        self._prune_history()
-        SessionManager.update(self)
 
     @staticmethod
     def deserialize(data: dict):
@@ -459,9 +413,6 @@ class Session:
         """
         uid = data.get("session_id")
         active = data.get("active_skills") or []
-        history = data.get("history") or []
-        max_time = data.get("max_time") or 5
-        max_messages = data.get("max_messages") or 5
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
         valid_langs = data.get("valid_languages") or _get_valid_langs()
@@ -471,11 +422,8 @@ class Session:
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
-                       history=history,
-                       max_time=max_time,
                        lang=lang,
                        valid_langs=valid_langs,
-                       max_messages=max_messages,
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id)
@@ -569,8 +517,6 @@ class SessionManager:
         if make_default:
             sess.session_id = "default"
             LOG.debug(f"replacing default session with: {sess.serialize()}")
-        else:
-            LOG.debug(f"session updated: {sess.session_id}")
 
         if sess.session_id == "default":
             SessionManager.default_session = sess

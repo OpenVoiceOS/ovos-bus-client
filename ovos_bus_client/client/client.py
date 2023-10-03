@@ -176,7 +176,7 @@ class MessageBusClient(_MessageBusClientBase):
             sess = SessionManager.sessions.get(self.session_id) or \
                    SessionManager.default_session
             message.context["session"] = sess.serialize()
-            sess.update_history(message)
+
             sess.touch()
 
         if not self.connected_event.wait(10):

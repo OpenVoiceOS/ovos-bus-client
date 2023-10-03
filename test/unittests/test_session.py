@@ -140,10 +140,7 @@ class TestSession(unittest.TestCase):
         self.assertIsInstance(session.lang, str)
         self.assertIsInstance(session.valid_languages, list)
         self.assertEqual(session.active_skills, list())
-        self.assertEqual(session.history, list())
         self.assertEqual(session.utterance_states, dict())
-        self.assertIsInstance(session.max_time, int)
-        self.assertIsInstance(session.max_messages, int)
         self.assertIsInstance(session.touch_time, int)
         self.assertIsInstance(session.expiration_seconds, int)
         self.assertIsInstance(session.context, IntentContextManager)
@@ -194,10 +191,6 @@ class TestSession(unittest.TestCase):
         # TODO
         pass
 
-    def test_prune_history(self):
-        # TODO
-        pass
-
     def test_clear(self):
         # TODO
         pass
@@ -225,19 +218,13 @@ class TestSession(unittest.TestCase):
         self.assertIsInstance(test_session.lang, str)
         self.assertIsInstance(test_session.valid_languages, list)
         self.assertIsInstance(test_session.active_skills, list)
-        self.assertIsInstance(test_session.history, list)
         self.assertIsInstance(test_session.utterance_states, dict)
-        self.assertIsInstance(test_session.max_time, int)
         self.assertIsInstance(test_session.touch_time, int)
         self.assertIsInstance(test_session.expiration_seconds, int)
         self.assertIsInstance(test_session.context, IntentContextManager)
         serialized = test_session.serialize()
         self.assertIsInstance(serialized, dict)
         self.assertIsInstance(serialized['context'], dict)
-
-    def test_update_history(self):
-        # TODO
-        pass
 
     def test_from_message(self):
         # TODO
