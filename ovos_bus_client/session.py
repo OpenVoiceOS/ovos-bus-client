@@ -556,8 +556,11 @@ class SessionManager:
         if message:
             msg_sess = Session.from_message(message)
             if msg_sess:
-                SessionManager.sessions[msg_sess.session_id] = msg_sess
-                return msg_sess
+                if msg_sess.session_id == "default":  # reserved namespace for ovos-core
+                    LOG.debug(f"message is using default session")
+                else:
+                    SessionManager.sessions[msg_sess.session_id] = msg_sess
+                    return msg_sess
             else:
                 LOG.debug(f"No session from message, use default session")
         else:
