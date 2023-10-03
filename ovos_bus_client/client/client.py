@@ -288,7 +288,9 @@ class MessageBusClient(_MessageBusClientBase):
         if isinstance(reply_type, list):
             message_type = reply_type
         elif isinstance(reply_type, str):
-            message_type = reply_type or message.msg_type + '.response'
+            message_type = reply_type
+        elif reply_type is None:
+            message_type = message.msg_type + '.response'
         waiter = MessageWaiter(self, message_type)  # Setup response handler
         # Send message and wait for its response
         self.emit(message)
