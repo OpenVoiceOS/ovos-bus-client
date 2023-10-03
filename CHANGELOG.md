@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a10) (2023-10-03)
+## [0.0.6a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a11) (2023-10-03)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a9...0.0.6a10)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a10...0.0.6a11)
+
+**Fixed bugs:**
+
+- fix/default\_session\_overwrite [\#54](https://github.com/OpenVoiceOS/ovos-bus-client/pull/54) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.6a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a10) (2023-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a9...V0.0.6a10)
 
 **Merged pull requests:**
 
