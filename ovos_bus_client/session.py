@@ -1,14 +1,14 @@
 import enum
-import json
 import time
 from threading import Lock
 from typing import Optional, List, Tuple, Union, Iterable
 from uuid import uuid4
 
-from ovos_bus_client.message import dig_for_message, Message
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
-from ovos_utils.log import LOG, log_deprecation
+from ovos_utils.log import LOG
+
+from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
@@ -268,6 +268,7 @@ class IntentContextManager:
 class Session:
     def __init__(self, session_id: str = None, expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
+                 history=None, max_time=None, max_messages=None,
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
                  valid_langs: List[str] = None,
@@ -278,6 +279,9 @@ class Session:
         @param session_id: string UUID for the session
         @param expiration_seconds: TTL for session (-1 for no expiration)
         @param active_skills: List of list skill_id, last reference
+        @param history: DEPRECATED
+        @param max_time: DEPRECATED
+        @param max_messages: DEPRECATED
         @param utterance_states: dict of skill_id to UtteranceState
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
@@ -306,6 +310,13 @@ class Session:
             "fallback_low"
         ]
         self.context = context or IntentContextManager(timeout=self.touch_time + self.expiration_seconds)
+
+        # deprecated - TODO remove 0.0.8
+        if history is not None or max_time is not None or max_messages is not None:
+            LOG.warning("history, max_time and max_messages have been deprecated")
+        self.history = []  # (Message , timestamp)
+        self.max_time = 5  # minutes
+        self.max_messages = 5
 
     @property
     def active(self) -> bool:
@@ -403,6 +414,14 @@ class Session:
             "site_id": self.site_id,
             "pipeline": self.pipeline
         }
+
+    def update_history(self, message: Message = None):
+        """
+        Add a message to history and then prune history
+        @param message: Message to append to history
+        """
+        LOG.warning("update_history has been deprecated, "
+                    "session no longer has a message history")
 
     @staticmethod
     def deserialize(data: dict):
