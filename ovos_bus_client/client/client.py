@@ -174,10 +174,8 @@ class MessageBusClient(_MessageBusClientBase):
         """
         if "session" not in message.context:
             sess = SessionManager.sessions.get(self.session_id) or \
-                   SessionManager.default_session
+                   Session(self.session_id)
             message.context["session"] = sess.serialize()
-
-            sess.touch()
 
         if not self.connected_event.wait(10):
             if not self.started_running:
