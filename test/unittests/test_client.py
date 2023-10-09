@@ -11,7 +11,7 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import call, Mock, patch
 
 from pyee import ExecutorEventEmitter
 
@@ -19,38 +19,34 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.client.client import MessageBusClient, GUIWebsocketClient
 from ovos_bus_client.client import MessageWaiter, MessageCollector
 
-WS_CONF = {
-    'websocket': {
-        "host": "testhost",
-        "port": 1337,
-        "route": "/core",
-        "ssl": False
-    }
-}
+WS_CONF = {"websocket": {"host": "testhost", "port": 1337, "route": "/core", "ssl": False}}
 
 
 class TestClient(unittest.TestCase):
     def test_echo(self):
         from ovos_bus_client.client.client import echo
+
         # TODO
 
     def test_inheritance(self):
         from mycroft_bus_client.client import MessageBusClient as _Client
+
         self.assertTrue(issubclass(MessageBusClient, _Client))
 
 
 class TestMessageBusClient(unittest.TestCase):
     from ovos_bus_client.client.client import MessageBusClient
+
     client = MessageBusClient()
 
     def test_build_url(self):
-        url = MessageBusClient.build_url('localhost', 1337, '/core', False)
-        self.assertEqual(url, 'ws://localhost:1337/core')
-        ssl_url = MessageBusClient.build_url('sslhost', 443, '/core', True)
-        self.assertEqual(ssl_url, 'wss://sslhost:443/core')
+        url = MessageBusClient.build_url("localhost", 1337, "/core", False)
+        self.assertEqual(url, "ws://localhost:1337/core")
+        ssl_url = MessageBusClient.build_url("sslhost", 443, "/core", True)
+        self.assertEqual(ssl_url, "wss://sslhost:443/core")
 
     def test_create_client(self):
-        self.assertEqual(self.client.client.url, 'ws://0.0.0.0:8181/core')
+        self.assertEqual(self.client.client.url, "ws://0.0.0.0:8181/core")
         self.assertIsInstance(self.client.emitter, ExecutorEventEmitter)
 
         mock_emitter = Mock()
@@ -85,9 +81,25 @@ class TestMessageBusClient(unittest.TestCase):
         # TODO
         pass
 
-    def test_wait_for_message(self):
-        # TODO
-        pass
+    @patch("ovos_bus_client.client.client.MessageWaiter")
+    def test_wait_for_message_str(self, mock_message_waiter):
+        # Arrange
+        test_message = Message("test.message")
+        self.client.emit = Mock()
+        # Act
+        self.client.wait_for_response(test_message)
+        # Assert
+        mock_message_waiter.assert_called_once_with(self.client, ["test.message.response"])
+
+    @patch("ovos_bus_client.client.client.MessageWaiter")
+    def test_wait_for_message_list(self, mock_message_waiter):
+        # Arrange
+        test_message = Message("test.message")
+        self.client.emit = Mock()
+        # Act
+        self.client.wait_for_response(test_message, ["test.message.response", "test.message.response2"])
+        # Assert
+        mock_message_waiter.assert_called_once_with(self.client, ["test.message.response", "test.message.response2"])
 
     def test_wait_for_response(self):
         # TODO
@@ -145,75 +157,63 @@ class TestGuiWebsocketClient(unittest.TestCase):
 class TestMessageWaiter:
     def test_message_wait_success(self):
         bus = Mock()
-        waiter = MessageWaiter(bus, 'delayed.message')
-        bus.once.assert_called_with('delayed.message', waiter._handler)
+        waiter = MessageWaiter(bus, "delayed.message")
+        bus.once.assert_called_with("delayed.message", waiter._handler)
 
-        test_msg = Mock(name='test_msg')
+        test_msg = Mock(name="test_msg")
         waiter._handler(test_msg)  # Inject response
 
         assert waiter.wait() == test_msg
 
     def test_message_wait_timeout(self):
         bus = Mock()
-        waiter = MessageWaiter(bus, 'delayed.message')
-        bus.once.assert_called_with('delayed.message', waiter._handler)
+        waiter = MessageWaiter(bus, "delayed.message")
+        bus.once.assert_called_with("delayed.message", waiter._handler)
 
         assert waiter.wait(0.3) is None
+
+    def test_message_converts_to_list(self):
+        bus = Mock()
+        waiter = MessageWaiter(bus, "test.message")
+        assert isinstance(waiter.msg_type, list)
+        bus.once.assert_called_with("test.message", waiter._handler)
+
+    def test_multiple_messages(self):
+        bus = Mock()
+        waiter = MessageWaiter(bus, ["test.message", "test.message2"])
+        bus.once.assert_has_calls([call("test.message", waiter._handler), call("test.message2", waiter._handler)])
 
 
 class TestMessageCollector:
     def test_message_wait_success(self):
         bus = Mock()
-        collector = MessageCollector(bus, Message('delayed.message'),
-                                     min_timeout=0.0, max_timeout=2.0)
+        collector = MessageCollector(bus, Message("delayed.message"), min_timeout=0.0, max_timeout=2.0)
 
-        test_register = Mock(name='test_register')
-        test_register.data = {
-            'query': collector.collect_id,
-            'timeout': 5,
-            'handler': 'test_handler1'
-        }
+        test_register = Mock(name="test_register")
+        test_register.data = {"query": collector.collect_id, "timeout": 5, "handler": "test_handler1"}
         collector._register_handler(test_register)  # Inject response
 
-        test_response = Mock(name='test_register')
-        test_response.data = {
-            'query': collector.collect_id,
-            'handler': 'test_handler1'
-        }
+        test_response = Mock(name="test_register")
+        test_response.data = {"query": collector.collect_id, "handler": "test_handler1"}
         collector._receive_response(test_response)
 
         assert collector.collect() == [test_response]
 
     def test_message_drop_invalid(self):
         bus = Mock()
-        collector = MessageCollector(bus, Message('delayed.message'),
-                                     min_timeout=0.0, max_timeout=2.0)
+        collector = MessageCollector(bus, Message("delayed.message"), min_timeout=0.0, max_timeout=2.0)
 
-        valid_register = Mock(name='valid_register')
-        valid_register.data = {
-            'query': collector.collect_id,
-            'timeout': 5,
-            'handler': 'test_handler1'
-        }
-        invalid_register = Mock(name='invalid_register')
-        invalid_register.data = {
-            'query': 'asdf',
-            'timeout': 5,
-            'handler': 'test_handler1'
-        }
+        valid_register = Mock(name="valid_register")
+        valid_register.data = {"query": collector.collect_id, "timeout": 5, "handler": "test_handler1"}
+        invalid_register = Mock(name="invalid_register")
+        invalid_register.data = {"query": "asdf", "timeout": 5, "handler": "test_handler1"}
         collector._register_handler(valid_register)  # Inject response
         collector._register_handler(invalid_register)  # Inject response
 
-        valid_response = Mock(name='valid_register')
-        valid_response.data = {
-            'query': collector.collect_id,
-            'handler': 'test_handler1'
-        }
-        invalid_response = Mock(name='invalid_register')
-        invalid_response.data = {
-            'query': 'asdf',
-            'handler': 'test_handler1'
-        }
+        valid_response = Mock(name="valid_register")
+        valid_response.data = {"query": collector.collect_id, "handler": "test_handler1"}
+        invalid_response = Mock(name="invalid_register")
+        invalid_response.data = {"query": "asdf", "handler": "test_handler1"}
         collector._receive_response(valid_response)
         collector._receive_response(invalid_response)
         assert collector.collect() == [valid_response]

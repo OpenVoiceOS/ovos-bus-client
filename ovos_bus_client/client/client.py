@@ -186,7 +186,7 @@ class MessageBusClient(_MessageBusClientBase):
         if hasattr(message, 'serialize'):
             msg = message.serialize()
         else:
-            msg = json.dumps(message.__dict__)      
+            msg = json.dumps(message.__dict__)
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
@@ -269,7 +269,7 @@ class MessageBusClient(_MessageBusClientBase):
         return MessageWaiter(self, message_type).wait(timeout)
 
     def wait_for_response(self, message: Message,
-                          reply_type: Optional[str] = None,
+                          reply_type: Optional[Union[str, List[str]]] = None,
                           timeout: Union[float, int] = 3.0) -> \
             Optional[Message]:
         """
@@ -277,16 +277,22 @@ class MessageBusClient(_MessageBusClientBase):
 
         Arguments:
             message (Message): message to send
-            reply_type (str): the message type of the expected reply.
+            reply_type (str | List[str]): the message type(s) of the expected reply.
                               Defaults to "<message.msg_type>.response".
             timeout: seconds to wait before timeout, defaults to 3
 
         Returns:
             The received message or None if the response timed out
         """
-        message_type = reply_type or message.msg_type + '.response'
+        message_type = None
+        if isinstance(reply_type, list):
+            message_type = reply_type
+        elif isinstance(reply_type, str):
+            message_type = [reply_type]
+        elif reply_type is None:
+            message_type = [message.msg_type + '.response']
         waiter = MessageWaiter(self, message_type)  # Setup response handler
-        # Send message and wait for it's response
+        # Send message and wait for its response
         self.emit(message)
         return waiter.wait(timeout)
 
