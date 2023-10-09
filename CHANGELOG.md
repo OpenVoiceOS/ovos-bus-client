@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a12) (2023-10-04)
+## [0.0.6a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a13) (2023-10-09)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a11...0.0.6a12)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a12...0.0.6a13)
+
+**Implemented enhancements:**
+
+- feat: extend wait\_for\_response to accept list [\#52](https://github.com/OpenVoiceOS/ovos-bus-client/pull/52) ([mikejgray](https://github.com/mikejgray))
+
+## [V0.0.6a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a12) (2023-10-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a11...V0.0.6a12)
 
 **Fixed bugs:**
 
