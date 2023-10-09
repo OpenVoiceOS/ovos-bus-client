@@ -11,7 +11,7 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import call, Mock, patch
 
 from pyee import ExecutorEventEmitter
 
@@ -89,7 +89,7 @@ class TestMessageBusClient(unittest.TestCase):
         # Act
         self.client.wait_for_response(test_message)
         # Assert
-        mock_message_waiter.assert_called_once_with(self.client, "test.message.response")
+        mock_message_waiter.assert_called_once_with(self.client, ["test.message.response"])
 
     @patch("ovos_bus_client.client.client.MessageWaiter")
     def test_wait_for_message_list(self, mock_message_waiter):
@@ -171,6 +171,17 @@ class TestMessageWaiter:
         bus.once.assert_called_with("delayed.message", waiter._handler)
 
         assert waiter.wait(0.3) is None
+
+    def test_message_converts_to_list(self):
+        bus = Mock()
+        waiter = MessageWaiter(bus, "test.message")
+        assert isinstance(waiter.msg_type, list)
+        bus.once.assert_called_with("test.message", waiter._handler)
+
+    def test_multiple_messages(self):
+        bus = Mock()
+        waiter = MessageWaiter(bus, ["test.message", "test.message2"])
+        bus.once.assert_has_calls([call("test.message", waiter._handler), call("test.message2", waiter._handler)])
 
 
 class TestMessageCollector:
