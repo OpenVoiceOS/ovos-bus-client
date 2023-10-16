@@ -74,6 +74,7 @@ setup(
             'ovos-listen=ovos_bus_client.scripts:ovos_listen',
             'ovos-speak=ovos_bus_client.scripts:ovos_speak',
             'ovos-say-to=ovos_bus_client.scripts:ovos_say_to',
+            'ovos-simple-cli=ovos_bus_client.scripts:simple_cli'
         ]
     }
 )
