@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a13) (2023-10-09)
+## [0.0.6a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a14) (2023-10-16)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a12...0.0.6a13)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a13...0.0.6a14)
+
+**Implemented enhancements:**
+
+- add simple\_cli entrypoint [\#56](https://github.com/OpenVoiceOS/ovos-bus-client/pull/56) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.6a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a13) (2023-10-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a12...V0.0.6a13)
 
 **Implemented enhancements:**
 
