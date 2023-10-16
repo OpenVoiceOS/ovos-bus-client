@@ -19,6 +19,8 @@ def ovos_speak():
         raise SystemExit(2)
     client = MessageBusClient()
     client.run_in_thread()
+    if not client.connected_event.is_set():
+        client.connected_event.wait()
     client.emit(Message("speak", {"utterance": utt, "lang": lang}))
     client.close()
 
@@ -36,6 +38,8 @@ def ovos_say_to():
         raise SystemExit(2)
     client = MessageBusClient()
     client.run_in_thread()
+    if not client.connected_event.is_set():
+        client.connected_event.wait()
     client.emit(Message("recognizer_loop:utterance", {"utterances": [utt], "lang": lang}))
     client.close()
 
@@ -43,5 +47,35 @@ def ovos_say_to():
 def ovos_listen():
     client = MessageBusClient()
     client.run_in_thread()
+    if not client.connected_event.is_set():
+        client.connected_event.wait()
     client.emit(Message("mycroft.mic.listen"))
     client.close()
+
+
+def simple_cli(lang=None):
+    client = MessageBusClient()
+    client.run_in_thread()
+    if not client.connected_event.is_set():
+        client.connected_event.wait()
+    lang = lang or Configuration().get("lang", "en-us")
+
+    from ovos_bus_client.session import SessionManager, Session
+    sess = SessionManager.default_session
+
+    while True:
+        try:
+            utt = input("Say:")
+            if utt == ":exit":
+                break
+            client.emit(Message("recognizer_loop:utterance",
+                                {"utterances": [utt], "lang": lang},
+                                {"session": sess.serialize()}))
+        except KeyboardInterrupt:
+            break
+
+    client.close()
+
+
+if __name__ == "__main__":
+    simple_cli()
