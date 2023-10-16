@@ -53,7 +53,16 @@ def ovos_listen():
     client.close()
 
 
-def simple_cli(lang=None):
+def simple_cli():
+    args_count = len(sys.argv)
+    if args_count == 1:
+        lang = sys.argv[1]
+    elif args_count > 1:
+        print("USAGE: ovos-simple-cli [lang]")
+        return
+    else:
+        lang = Configuration().get("lang", "en-us")
+
     client = MessageBusClient()
     client.run_in_thread()
     if not client.connected_event.is_set():
