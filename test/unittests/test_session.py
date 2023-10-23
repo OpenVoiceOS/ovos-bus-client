@@ -177,7 +177,7 @@ class TestSession(unittest.TestCase):
         new_ctx = new_serial.pop('context')
         self.assertEqual(new_serial, serialized)
         self.assertEqual(ctx['frame_stack'], new_ctx['frame_stack'])
-        self.assertGreater(new_ctx['timeout'], ctx['timeout'])
+        self.assertEqual(new_ctx['timeout'], ctx['timeout'])
 
         # Test default value deserialize
         test_session = Session.deserialize(dict())
