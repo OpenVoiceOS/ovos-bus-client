@@ -96,7 +96,7 @@ class IntentContextManager:
 
         config = Configuration().get('context', {})
         if timeout is None:
-            timeout = config.get('timeout', 2)
+            timeout = config.get('timeout', 2) * 60  # minutes to seconds
         if greedy is None:
             greedy = config.get('greedy', False)
         if keywords is None:
@@ -105,7 +105,7 @@ class IntentContextManager:
             max_frames = config.get('max_frames', 3)
 
         self.frame_stack = frame_stack or []
-        self.timeout = timeout * 60  # minutes to seconds
+        self.timeout = timeout
         self.context_keywords = keywords
         self.context_max_frames = max_frames
         self.context_greedy = greedy
@@ -125,7 +125,7 @@ class IntentContextManager:
         @param data: serialized (dict) data
         @return: IntentContextManager for the specified data
         """
-        timeout = data.get("timeout", 2)
+        timeout = data.get("timeout", 2 * 60)
         framestack = [(IntentContextManagerFrame.deserialize(f), t)
                       for (f, t) in data.get("frame_stack", [])]
         return IntentContextManager(timeout, framestack)
