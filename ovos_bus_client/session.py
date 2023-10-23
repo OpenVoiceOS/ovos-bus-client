@@ -1,11 +1,12 @@
 import enum
 import time
-from ovos_config.config import Configuration
-from ovos_config.locale import get_default_lang
-from ovos_utils.log import LOG
 from threading import Lock
 from typing import Optional, List, Tuple, Union, Iterable
 from uuid import uuid4
+
+from ovos_config.config import Configuration
+from ovos_config.locale import get_default_lang
+from ovos_utils.log import LOG
 
 from ovos_bus_client.message import dig_for_message, Message
 
@@ -265,6 +266,7 @@ class Session:
                  history=None, max_time=None, max_messages=None,
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
+                 valid_langs: List[str] = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None):
         """
@@ -278,6 +280,7 @@ class Session:
         @param utterance_states: dict of skill_id to UtteranceState
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
+        @param valid_langs: DEPRECATED
         """
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
@@ -304,10 +307,12 @@ class Session:
 
         # deprecated - TODO remove 0.0.8
         if history is not None or max_time is not None or max_messages is not None:
-            LOG.warning("history, max_time and max_messages have been deprecated")
+            LOG.warning("valid_langs , history, max_time and max_messages have been deprecated")
         self.history = []  # (Message , timestamp)
         self.max_time = 5  # minutes
         self.max_messages = 5
+        self.valid_languages = list(set([get_default_lang()] +
+                                        Configuration().get("secondary_langs", [])))
 
     @property
     def active(self) -> bool:
