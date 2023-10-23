@@ -10,37 +10,6 @@ class TestSessionModule(unittest.TestCase):
             self.assertIsInstance(state, UtteranceState)
             self.assertIsInstance(state, str)
 
-    @patch("ovos_bus_client.session.get_default_lang")
-    @patch("ovos_bus_client.session.Configuration")
-    def test_get_valid_langs(self, config, default_lang):
-        config.return_value = {
-            "secondary_langs": ["en-us", "es-mx", "fr-ca"]
-        }
-        default_lang.return_value = "en-us"
-        from ovos_bus_client.session import _get_valid_langs
-        # Test default in secondary
-        langs = _get_valid_langs()
-        self.assertIsInstance(langs, list)
-        self.assertEqual(len(langs), len(set(langs)))
-        self.assertEqual(set(langs), {"en-us", "es-mx", "fr-ca"})
-
-        # Test default not in secondary
-        default_lang.return_value = "pt-pt"
-        langs = _get_valid_langs()
-        self.assertIsInstance(langs, list)
-        self.assertEqual(len(langs), len(set(langs)))
-        self.assertEqual(set(langs), {"en-us", "es-mx", "fr-ca", "pt-pt"})
-
-        # Test no secondary
-        config.return_value = {}
-        langs = _get_valid_langs()
-        self.assertEqual(langs, [default_lang.return_value])
-
-        # Test invalid secondary lang config
-        config.return_value = {"secondary_langs": None}
-        with self.assertRaises(TypeError):
-            _get_valid_langs()
-
 
 class TestIntentContextManagerFrame(unittest.TestCase):
     def test_serialize_deserialize(self):
@@ -138,7 +107,6 @@ class TestSession(unittest.TestCase):
         session = Session()
         self.assertIsInstance(session.session_id, str)
         self.assertIsInstance(session.lang, str)
-        self.assertIsInstance(session.valid_languages, list)
         self.assertEqual(session.active_skills, list())
         self.assertEqual(session.utterance_states, dict())
         self.assertIsInstance(session.touch_time, int)
@@ -216,7 +184,6 @@ class TestSession(unittest.TestCase):
         self.assertIsInstance(test_session, Session)
         self.assertIsInstance(test_session.session_id, str)
         self.assertIsInstance(test_session.lang, str)
-        self.assertIsInstance(test_session.valid_languages, list)
         self.assertIsInstance(test_session.active_skills, list)
         self.assertIsInstance(test_session.utterance_states, dict)
         self.assertIsInstance(test_session.touch_time, int)

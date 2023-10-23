@@ -16,11 +16,6 @@ class UtteranceState(str, enum.Enum):
     RESPONSE = "response"
 
 
-def _get_valid_langs() -> List[str]:
-    return list(set([get_default_lang()] +
-                    Configuration().get("secondary_langs", [])))
-
-
 class IntentContextManagerFrame:
     def __init__(self, entities: List[dict] = None, metadata: dict = None):
         """
@@ -285,13 +280,12 @@ class Session:
         @param utterance_states: dict of skill_id to UtteranceState
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
-        @param valid_langs: list of configured valid languages
+        @param valid_langs: DEPRECATED
         """
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
         self.site_id = site_id or "unknown"  # indoors placement info
 
-        self.valid_languages = valid_langs or _get_valid_langs()
         self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
 
@@ -313,10 +307,12 @@ class Session:
 
         # deprecated - TODO remove 0.0.8
         if history is not None or max_time is not None or max_messages is not None:
-            LOG.warning("history, max_time and max_messages have been deprecated")
+            LOG.warning("valid_langs , history, max_time and max_messages have been deprecated")
         self.history = []  # (Message , timestamp)
         self.max_time = 5  # minutes
         self.max_messages = 5
+        self.valid_languages = list(set([get_default_lang()] +
+                                        Configuration().get("secondary_langs", [])))
 
     @property
     def active(self) -> bool:
@@ -409,7 +405,6 @@ class Session:
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
             "lang": self.lang,
-            "valid_languages": self.valid_languages,
             "context": self.context.serialize(),
             "site_id": self.site_id,
             "pipeline": self.pipeline
@@ -434,7 +429,6 @@ class Session:
         active = data.get("active_skills") or []
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
-        valid_langs = data.get("valid_languages") or _get_valid_langs()
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
@@ -442,7 +436,6 @@ class Session:
                        active_skills=active,
                        utterance_states=states,
                        lang=lang,
-                       valid_langs=valid_langs,
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id)
@@ -556,9 +549,7 @@ class SessionManager:
         if message:
             msg_sess = Session.from_message(message)
             if msg_sess:
-                if msg_sess.session_id == "default":  # reserved namespace for ovos-core
-                    LOG.debug(f"message is using default session")
-                else:
+                if msg_sess.session_id != "default":  # reserved namespace for ovos-core
                     SessionManager.sessions[msg_sess.session_id] = msg_sess
                     return msg_sess
             else:
