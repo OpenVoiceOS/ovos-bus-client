@@ -443,8 +443,12 @@ class Session:
                 sess["lang"] = lang
             sess = Session.deserialize(sess)
         else:
+            if message:
+                LOG.warning(f"No session context in message:{message.msg_type}")
+                LOG.debug(f"context={message.context}")
+            else:
+                LOG.warning(f"No message found, using default session")
             # new session
-            LOG.warning(f"No message found, using default session")
             sess = SessionManager.default_session
         if sess and sess.expired():
             LOG.debug(f"unexpiring session {sess.session_id}")
