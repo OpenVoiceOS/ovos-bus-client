@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a16) (2023-10-23)
+## [0.0.6a17](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a17) (2023-10-24)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a15...0.0.6a16)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a16...0.0.6a17)
+
+**Fixed bugs:**
+
+- fix/init\_of\_context\_manager [\#60](https://github.com/OpenVoiceOS/ovos-bus-client/pull/60) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.6a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a16) (2023-10-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a15...V0.0.6a16)
 
 **Fixed bugs:**
 
