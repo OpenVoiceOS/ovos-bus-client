@@ -303,7 +303,7 @@ class Session:
             "padatious_low",
             "fallback_low"
         ]
-        self.context = context or IntentContextManager(timeout=self.touch_time + self.expiration_seconds)
+        self.context = context or IntentContextManager()
 
         # deprecated - TODO remove 0.0.8
         if history is not None or max_time is not None or max_messages is not None:
