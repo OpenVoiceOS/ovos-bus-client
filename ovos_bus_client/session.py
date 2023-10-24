@@ -263,10 +263,8 @@ class IntentContextManager:
 class Session:
     def __init__(self, session_id: str = None, expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 history=None, max_time=None, max_messages=None,
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
-                 valid_langs: List[str] = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None):
         """
@@ -274,13 +272,9 @@ class Session:
         @param session_id: string UUID for the session
         @param expiration_seconds: TTL for session (-1 for no expiration)
         @param active_skills: List of list skill_id, last reference
-        @param history: DEPRECATED
-        @param max_time: DEPRECATED
-        @param max_messages: DEPRECATED
         @param utterance_states: dict of skill_id to UtteranceState
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
-        @param valid_langs: DEPRECATED
         """
         self.session_id = session_id or str(uuid4())
         self.lang = lang or get_default_lang()
@@ -304,15 +298,6 @@ class Session:
             "fallback_low"
         ]
         self.context = context or IntentContextManager()
-
-        # deprecated - TODO remove 0.0.8
-        if history is not None or max_time is not None or max_messages is not None:
-            LOG.warning("valid_langs , history, max_time and max_messages have been deprecated")
-        self.history = []  # (Message , timestamp)
-        self.max_time = 5  # minutes
-        self.max_messages = 5
-        self.valid_languages = list(set([get_default_lang()] +
-                                        Configuration().get("secondary_langs", [])))
 
     @property
     def active(self) -> bool:
