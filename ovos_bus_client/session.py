@@ -445,8 +445,9 @@ class Session:
         else:
             if message:
                 LOG.warning(f"No session context in message:{message.msg_type}")
-                LOG.debug(f"Add `session: SessionManager.default_session` to "
-                          f"message.context. context={message.context}")
+                LOG.debug(f"Update ovos-bus-client or add `session` to "
+                          f"`message.context` where emitted. "
+                          f"context={message.context}")
             else:
                 LOG.warning(f"No message found, using default session")
             # new session
