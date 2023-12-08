@@ -266,7 +266,9 @@ class Session:
                  utterance_states: dict = None, lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
-                 pipeline: List[str] = None):
+                 pipeline: List[str] = None,
+                 stt_prefs: dict = None,
+                 tts_prefs: dict = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -277,7 +279,9 @@ class Session:
         @param context: IntentContextManager for this Session
         """
         self.session_id = session_id or str(uuid4())
+
         self.lang = lang or get_default_lang()
+
         self.site_id = site_id or "unknown"  # indoors placement info
 
         self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
@@ -298,6 +302,20 @@ class Session:
             "fallback_low"
         ]
         self.context = context or IntentContextManager()
+
+        if not stt_prefs:
+            stt = Configuration().get("stt", {})
+            sttm = stt.get("module", "ovos-stt-plugin-server")
+            stt_prefs = {"plugin_id": sttm,
+                         "config": stt.get(sttm) or {}}
+        self.stt_preferences = stt_prefs
+
+        if not tts_prefs:
+            tts = Configuration().get("tts", {})
+            ttsm = tts.get("module", "ovos-tts-plugin-server")
+            tts_prefs = {"plugin_id": ttsm,
+                         "config": tts.get(ttsm) or {}}
+        self.tts_preferences = tts_prefs
 
     @property
     def active(self) -> bool:
@@ -392,7 +410,9 @@ class Session:
             "lang": self.lang,
             "context": self.context.serialize(),
             "site_id": self.site_id,
-            "pipeline": self.pipeline
+            "pipeline": self.pipeline,
+            "stt": self.stt_preferences,
+            "tts": self.tts_preferences
         }
 
     def update_history(self, message: Message = None):
@@ -417,13 +437,17 @@ class Session:
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
+        tts = data.get("tts_preferences", {})
+        stt = data.get("stt_preferences", {})
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
                        lang=lang,
                        context=context,
                        pipeline=pipeline,
-                       site_id=site_id)
+                       site_id=site_id,
+                       tts_prefs=tts,
+                       stt_prefs=stt)
 
     @staticmethod
     def from_message(message: Message = None):
