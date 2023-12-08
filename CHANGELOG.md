@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.6a19](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a19) (2023-10-25)
+## [0.0.6a20](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.6a20) (2023-12-08)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a18...0.0.6a19)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a19...0.0.6a20)
+
+**Implemented enhancements:**
+
+- feat/tts\_prefs [\#64](https://github.com/OpenVoiceOS/ovos-bus-client/pull/64) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.6a19](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a19) (2023-10-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a18...V0.0.6a19)
 
 **Merged pull requests:**
 
