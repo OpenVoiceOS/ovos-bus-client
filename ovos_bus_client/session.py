@@ -1,7 +1,7 @@
 import enum
 import time
 from threading import Lock
-from typing import Optional, List, Tuple, Union, Iterable
+from typing import Optional, List, Tuple, Union, Iterable, Dict
 from uuid import uuid4
 
 from ovos_config.config import Configuration
@@ -17,7 +17,7 @@ class UtteranceState(str, enum.Enum):
 
 
 class IntentContextManagerFrame:
-    def __init__(self, entities: List[dict] = None, metadata: dict = None):
+    def __init__(self, entities: List[dict] = None, metadata: Dict = None):
         """
         Manages entities and context for a single frame of conversation.
         Provides simple equality querying.
@@ -36,7 +36,7 @@ class IntentContextManagerFrame:
                 "metadata": self.metadata}
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build an IntentContextManagerFrame from serialized data
         @param data: serialized (dict) frame data
@@ -44,7 +44,7 @@ class IntentContextManagerFrame:
         """
         return IntentContextManagerFrame(**data)
 
-    def metadata_matches(self, query: dict = None) -> bool:
+    def metadata_matches(self, query: Dict = None) -> bool:
         """
         Returns key matches to metadata
         Asserts that the contents of query exist within (logical subset of)
@@ -65,7 +65,7 @@ class IntentContextManagerFrame:
 
         return result
 
-    def merge_context(self, tag: dict, metadata: dict):
+    def merge_context(self, tag: Dict, metadata: Dict):
         """
         merge into contextManagerFrame new entity and metadata.
         Appends tag as new entity and adds keys in metadata to keys in
@@ -119,7 +119,7 @@ class IntentContextManager:
                                 in self.frame_stack]}
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build an IntentContextManager from serialized data
         @param data: serialized (dict) data
@@ -130,7 +130,7 @@ class IntentContextManager:
                       for (f, t) in data.get("frame_stack", [])]
         return IntentContextManager(timeout, framestack)
 
-    def update_context(self, entities: dict):
+    def update_context(self, entities: Dict):
         """
         Updates context with keyword from the intent.
 
@@ -162,7 +162,7 @@ class IntentContextManager:
         self.frame_stack = [(f, t) for (f, t) in self.frame_stack
                             if context_id in f.entities[0].get('data', [])]
 
-    def inject_context(self, entity: dict, metadata: dict = None):
+    def inject_context(self, entity: Dict, metadata: Dict = None):
         """
         Add context to the first frame in the stack. If no frame metadata
         doesn't match the passed metadata then a new one is inserted.
@@ -263,12 +263,12 @@ class IntentContextManager:
 class Session:
     def __init__(self, session_id: str = None, expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 utterance_states: dict = None, lang: str = None,
+                 utterance_states: Dict = None, lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None,
-                 stt_prefs: dict = None,
-                 tts_prefs: dict = None):
+                 stt_prefs: Dict = None,
+                 tts_prefs: Dict = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -424,7 +424,7 @@ class Session:
                     "session no longer has a message history")
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build a Session object from dict data
         @param data: dict serialized Session object
