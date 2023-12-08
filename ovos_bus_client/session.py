@@ -1,7 +1,7 @@
 import enum
 import time
 from threading import Lock
-from typing import Optional, List, Tuple, Union, Iterable
+from typing import Optional, List, Tuple, Union, Iterable, Dict
 from uuid import uuid4
 
 from ovos_config.config import Configuration
@@ -17,7 +17,7 @@ class UtteranceState(str, enum.Enum):
 
 
 class IntentContextManagerFrame:
-    def __init__(self, entities: List[dict] = None, metadata: dict = None):
+    def __init__(self, entities: List[dict] = None, metadata: Dict = None):
         """
         Manages entities and context for a single frame of conversation.
         Provides simple equality querying.
@@ -36,7 +36,7 @@ class IntentContextManagerFrame:
                 "metadata": self.metadata}
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build an IntentContextManagerFrame from serialized data
         @param data: serialized (dict) frame data
@@ -44,7 +44,7 @@ class IntentContextManagerFrame:
         """
         return IntentContextManagerFrame(**data)
 
-    def metadata_matches(self, query: dict = None) -> bool:
+    def metadata_matches(self, query: Dict = None) -> bool:
         """
         Returns key matches to metadata
         Asserts that the contents of query exist within (logical subset of)
@@ -65,7 +65,7 @@ class IntentContextManagerFrame:
 
         return result
 
-    def merge_context(self, tag: dict, metadata: dict):
+    def merge_context(self, tag: Dict, metadata: Dict):
         """
         merge into contextManagerFrame new entity and metadata.
         Appends tag as new entity and adds keys in metadata to keys in
@@ -119,7 +119,7 @@ class IntentContextManager:
                                 in self.frame_stack]}
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build an IntentContextManager from serialized data
         @param data: serialized (dict) data
@@ -130,7 +130,7 @@ class IntentContextManager:
                       for (f, t) in data.get("frame_stack", [])]
         return IntentContextManager(timeout, framestack)
 
-    def update_context(self, entities: dict):
+    def update_context(self, entities: Dict):
         """
         Updates context with keyword from the intent.
 
@@ -162,7 +162,7 @@ class IntentContextManager:
         self.frame_stack = [(f, t) for (f, t) in self.frame_stack
                             if context_id in f.entities[0].get('data', [])]
 
-    def inject_context(self, entity: dict, metadata: dict = None):
+    def inject_context(self, entity: Dict, metadata: Dict = None):
         """
         Add context to the first frame in the stack. If no frame metadata
         doesn't match the passed metadata then a new one is inserted.
@@ -263,10 +263,12 @@ class IntentContextManager:
 class Session:
     def __init__(self, session_id: str = None, expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 utterance_states: dict = None, lang: str = None,
+                 utterance_states: Dict = None, lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
-                 pipeline: List[str] = None):
+                 pipeline: List[str] = None,
+                 stt_prefs: Dict = None,
+                 tts_prefs: Dict = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -277,7 +279,9 @@ class Session:
         @param context: IntentContextManager for this Session
         """
         self.session_id = session_id or str(uuid4())
+
         self.lang = lang or get_default_lang()
+
         self.site_id = site_id or "unknown"  # indoors placement info
 
         self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
@@ -298,6 +302,20 @@ class Session:
             "fallback_low"
         ]
         self.context = context or IntentContextManager()
+
+        if not stt_prefs:
+            stt = Configuration().get("stt", {})
+            sttm = stt.get("module", "ovos-stt-plugin-server")
+            stt_prefs = {"plugin_id": sttm,
+                         "config": stt.get(sttm) or {}}
+        self.stt_preferences = stt_prefs
+
+        if not tts_prefs:
+            tts = Configuration().get("tts", {})
+            ttsm = tts.get("module", "ovos-tts-plugin-server")
+            tts_prefs = {"plugin_id": ttsm,
+                         "config": tts.get(ttsm) or {}}
+        self.tts_preferences = tts_prefs
 
     @property
     def active(self) -> bool:
@@ -392,7 +410,9 @@ class Session:
             "lang": self.lang,
             "context": self.context.serialize(),
             "site_id": self.site_id,
-            "pipeline": self.pipeline
+            "pipeline": self.pipeline,
+            "stt": self.stt_preferences,
+            "tts": self.tts_preferences
         }
 
     def update_history(self, message: Message = None):
@@ -404,7 +424,7 @@ class Session:
                     "session no longer has a message history")
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build a Session object from dict data
         @param data: dict serialized Session object
@@ -417,13 +437,17 @@ class Session:
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
+        tts = data.get("tts_preferences", {})
+        stt = data.get("stt_preferences", {})
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
                        lang=lang,
                        context=context,
                        pipeline=pipeline,
-                       site_id=site_id)
+                       site_id=site_id,
+                       tts_prefs=tts,
+                       stt_prefs=stt)
 
     @staticmethod
     def from_message(message: Message = None):
