@@ -2,9 +2,9 @@ from os import walk
 from os.path import join, splitext, isfile
 from typing import List, Union, Optional, Callable
 
-from ovos_utils import resolve_ovos_resource_file, resolve_resource_file
+from ovos_utils.file_utils import resolve_ovos_resource_file, resolve_resource_file
 from ovos_utils.log import LOG, log_deprecation
-from ovos_utils.messagebus import get_mycroft_bus
+from ovos_bus_client.util import get_mycroft_bus
 from ovos_utils.gui import can_use_gui
 
 from ovos_bus_client.message import Message

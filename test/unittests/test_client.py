@@ -46,7 +46,7 @@ class TestMessageBusClient(unittest.TestCase):
         self.assertEqual(ssl_url, "wss://sslhost:443/core")
 
     def test_create_client(self):
-        self.assertEqual(self.client.client.url, "ws://0.0.0.0:8181/core")
+        self.assertEqual(self.client.client.url, "ws://127.0.0.1:8181/core")
         self.assertIsInstance(self.client.emitter, ExecutorEventEmitter)
 
         mock_emitter = Mock()

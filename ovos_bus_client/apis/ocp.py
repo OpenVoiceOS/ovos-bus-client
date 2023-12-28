@@ -17,7 +17,7 @@ from datetime import timedelta
 
 from os.path import abspath
 
-from ovos_utils.messagebus import get_mycroft_bus
+from ovos_bus_client.util import get_mycroft_bus
 from ovos_bus_client.message import Message, dig_for_message
 
 
