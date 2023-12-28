@@ -48,6 +48,7 @@ setup(
     version=get_version(),
     packages=['ovos_bus_client',
               'ovos_bus_client.client',
+              'ovos_bus_client.apis',
               'ovos_bus_client.util'],
     package_data={
         '*': ['*.txt', '*.md']

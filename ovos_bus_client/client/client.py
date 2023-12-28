@@ -150,8 +150,7 @@ class MessageBusClient(_MessageBusClientBase):
             message = args[1]
         parsed_message = Message.deserialize(message)
         sess = Session.from_message(parsed_message)
-        if sess.session_id != "default":
-            # 'default' can only be updated by core
+        if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
