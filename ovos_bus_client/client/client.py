@@ -17,7 +17,6 @@ from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
 from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
 from ovos_bus_client.session import SessionManager, Session
-from ovos_bus_client.util import create_echo_function
 
 try:
     from mycroft_bus_client import MessageBusClient as _MessageBusClientBase
@@ -450,6 +449,8 @@ def echo():
     """
     Echo function repeating all input from a user.
     """
+
+    from ovos_bus_client.util import create_echo_function
     # TODO: Deprecate in 0.1.0
     message_bus_client = MessageBusClient()
 
