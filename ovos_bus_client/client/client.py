@@ -17,7 +17,6 @@ from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
 from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
 from ovos_bus_client.session import SessionManager, Session
-from ovos_bus_client.util import create_echo_function
 
 try:
     from mycroft_bus_client import MessageBusClient as _MessageBusClientBase
@@ -42,7 +41,7 @@ class MessageBusClient(_MessageBusClientBase):
     _config_cache = None
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
-                 emitter=None, cache=False):
+                 emitter=None, cache=False, session=None):
         config_overrides = dict(host=host, port=port, route=route, ssl=ssl)
         if cache and self._config_cache:
             config = self._config_cache
@@ -59,6 +58,14 @@ class MessageBusClient(_MessageBusClientBase):
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
+        if session:
+            SessionManager.update(session)
+        else:
+            session = SessionManager.default_session
+
+        self.session_id = session.session_id
+        self.on("ovos.session.update_default",
+                self.on_default_session_update)
 
     @staticmethod
     def build_url(host: str, port: int, route: str, ssl: bool) -> str:
@@ -88,6 +95,7 @@ class MessageBusClient(_MessageBusClientBase):
         self.emitter.emit("open")
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
+        self.emit(Message("ovos.session.sync")) # request default session update
 
     def on_close(self, *args):
         """
@@ -140,9 +148,17 @@ class MessageBusClient(_MessageBusClientBase):
         else:
             message = args[1]
         parsed_message = Message.deserialize(message)
-        SessionManager.update(Session.from_message(parsed_message))
+        sess = Session.from_message(parsed_message)
+        if sess.session_id != "default": # 'default' can only be updated by core
+            SessionManager.update(sess)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
+
+    def on_default_session_update(self, message):
+        new_session = message.data["session_data"]
+        sess = Session.deserialize(new_session)
+        SessionManager.update(sess, make_default=True)
+        LOG.debug("synced default_session")
 
     def emit(self, message: Message):
         """
@@ -155,9 +171,9 @@ class MessageBusClient(_MessageBusClientBase):
             message (Message): Message to send
         """
         if "session" not in message.context:
-            sess = SessionManager.get(message)
+            sess = SessionManager.sessions.get(self.session_id) or \
+                   Session(self.session_id)
             message.context["session"] = sess.serialize()
-            sess.update_history(message)
 
         if not self.connected_event.wait(10):
             if not self.started_running:
@@ -165,14 +181,17 @@ class MessageBusClient(_MessageBusClientBase):
                                  'before emitting messages')
             self.connected_event.wait()
 
+        if hasattr(message, 'serialize'):
+            msg = message.serialize()
+        else:
+            msg = json.dumps(message.__dict__)
         try:
-            if hasattr(message, 'serialize'):
-                self.client.send(message.serialize())
-            else:
-                self.client.send(json.dumps(message.__dict__))
+            self.client.send(msg)
         except WebSocketConnectionClosedException:
-            LOG.warning('Could not send %s message because connection '
-                        'has been closed', message.msg_type)
+            LOG.warning(f'Could not send {message.msg_type} message because connection '
+                        'has been closed')
+        except Exception as e:
+            LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
 
     def collect_responses(self, message: Message,
                           min_timeout: Union[int, float] = 0.2,
@@ -248,7 +267,7 @@ class MessageBusClient(_MessageBusClientBase):
         return MessageWaiter(self, message_type).wait(timeout)
 
     def wait_for_response(self, message: Message,
-                          reply_type: Optional[str] = None,
+                          reply_type: Optional[Union[str, List[str]]] = None,
                           timeout: Union[float, int] = 3.0) -> \
             Optional[Message]:
         """
@@ -256,16 +275,22 @@ class MessageBusClient(_MessageBusClientBase):
 
         Arguments:
             message (Message): message to send
-            reply_type (str): the message type of the expected reply.
+            reply_type (str | List[str]): the message type(s) of the expected reply.
                               Defaults to "<message.msg_type>.response".
             timeout: seconds to wait before timeout, defaults to 3
 
         Returns:
             The received message or None if the response timed out
         """
-        message_type = reply_type or message.msg_type + '.response'
+        message_type = None
+        if isinstance(reply_type, list):
+            message_type = reply_type
+        elif isinstance(reply_type, str):
+            message_type = [reply_type]
+        elif reply_type is None:
+            message_type = [message.msg_type + '.response']
         waiter = MessageWaiter(self, message_type)  # Setup response handler
-        # Send message and wait for it's response
+        # Send message and wait for its response
         self.emit(message)
         return waiter.wait(timeout)
 
@@ -424,6 +449,8 @@ def echo():
     """
     Echo function repeating all input from a user.
     """
+
+    from ovos_bus_client.util import create_echo_function
     # TODO: Deprecate in 0.1.0
     message_bus_client = MessageBusClient()
 

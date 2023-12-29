@@ -48,6 +48,7 @@ setup(
     version=get_version(),
     packages=['ovos_bus_client',
               'ovos_bus_client.client',
+              'ovos_bus_client.apis',
               'ovos_bus_client.util'],
     package_data={
         '*': ['*.txt', '*.md']
@@ -74,6 +75,7 @@ setup(
             'ovos-listen=ovos_bus_client.scripts:ovos_listen',
             'ovos-speak=ovos_bus_client.scripts:ovos_speak',
             'ovos-say-to=ovos_bus_client.scripts:ovos_say_to',
+            'ovos-simple-cli=ovos_bus_client.scripts:simple_cli'
         ]
     }
 )

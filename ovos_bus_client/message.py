@@ -26,7 +26,6 @@ import re
 from copy import deepcopy
 from typing import Optional
 from binascii import hexlify, unhexlify
-from ovos_utils.gui import _GUIDict
 from ovos_utils.log import LOG, deprecated
 from ovos_utils.security import encrypt, decrypt
 from ovos_config.config import Configuration
@@ -131,6 +130,9 @@ class Message(_MsgBase, metaclass=_MessageMeta):
 
     @staticmethod
     def _json_dump(value):
+
+        from ovos_bus_client.apis.gui import _GUIDict
+
         def serialize_item(x):
             try:
                 if hasattr(x, "serialize"):

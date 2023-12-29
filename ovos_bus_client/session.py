@@ -1,14 +1,14 @@
 import enum
 import time
-import json
 from threading import Lock
+from typing import Optional, List, Tuple, Union, Iterable, Dict
 from uuid import uuid4
-from typing import Optional, List, Tuple, Union, Iterable
 
-from ovos_bus_client.message import dig_for_message, Message
-from ovos_utils.log import LOG, log_deprecation
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
+from ovos_utils.log import LOG
+
+from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
@@ -16,13 +16,8 @@ class UtteranceState(str, enum.Enum):
     RESPONSE = "response"
 
 
-def _get_valid_langs() -> List[str]:
-    return list(set([get_default_lang()] +
-                    Configuration().get("secondary_langs", [])))
-
-
 class IntentContextManagerFrame:
-    def __init__(self, entities: List[dict] = None, metadata: dict = None):
+    def __init__(self, entities: List[dict] = None, metadata: Dict = None):
         """
         Manages entities and context for a single frame of conversation.
         Provides simple equality querying.
@@ -41,7 +36,7 @@ class IntentContextManagerFrame:
                 "metadata": self.metadata}
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build an IntentContextManagerFrame from serialized data
         @param data: serialized (dict) frame data
@@ -49,7 +44,7 @@ class IntentContextManagerFrame:
         """
         return IntentContextManagerFrame(**data)
 
-    def metadata_matches(self, query: dict = None) -> bool:
+    def metadata_matches(self, query: Dict = None) -> bool:
         """
         Returns key matches to metadata
         Asserts that the contents of query exist within (logical subset of)
@@ -70,7 +65,7 @@ class IntentContextManagerFrame:
 
         return result
 
-    def merge_context(self, tag: dict, metadata: dict):
+    def merge_context(self, tag: Dict, metadata: Dict):
         """
         merge into contextManagerFrame new entity and metadata.
         Appends tag as new entity and adds keys in metadata to keys in
@@ -95,13 +90,13 @@ class IntentContextManager:
 
     def __init__(self, timeout: int = None,
                  frame_stack: List[Tuple[IntentContextManagerFrame,
-                                         float]] = None,
+                 float]] = None,
                  greedy: bool = None, keywords: List[str] = None,
                  max_frames: int = None):
 
         config = Configuration().get('context', {})
         if timeout is None:
-            timeout = config.get('timeout', 2)
+            timeout = config.get('timeout', 2) * 60  # minutes to seconds
         if greedy is None:
             greedy = config.get('greedy', False)
         if keywords is None:
@@ -110,7 +105,7 @@ class IntentContextManager:
             max_frames = config.get('max_frames', 3)
 
         self.frame_stack = frame_stack or []
-        self.timeout = timeout * 60  # minutes to seconds
+        self.timeout = timeout
         self.context_keywords = keywords
         self.context_max_frames = max_frames
         self.context_greedy = greedy
@@ -124,18 +119,18 @@ class IntentContextManager:
                                 in self.frame_stack]}
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build an IntentContextManager from serialized data
         @param data: serialized (dict) data
         @return: IntentContextManager for the specified data
         """
-        timeout = data.get("timeout", 2)
+        timeout = data.get("timeout", 2 * 60)
         framestack = [(IntentContextManagerFrame.deserialize(f), t)
                       for (f, t) in data.get("frame_stack", [])]
         return IntentContextManager(timeout, framestack)
 
-    def update_context(self, entities: dict):
+    def update_context(self, entities: Dict):
         """
         Updates context with keyword from the intent.
 
@@ -167,7 +162,7 @@ class IntentContextManager:
         self.frame_stack = [(f, t) for (f, t) in self.frame_stack
                             if context_id in f.entities[0].get('data', [])]
 
-    def inject_context(self, entity: dict, metadata: dict = None):
+    def inject_context(self, entity: Dict, metadata: Dict = None):
         """
         Add context to the first frame in the stack. If no frame metadata
         doesn't match the passed metadata then a new one is inserted.
@@ -268,41 +263,59 @@ class IntentContextManager:
 class Session:
     def __init__(self, session_id: str = None, expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 history: List[Tuple[Message, float]] = None,
-                 max_time: int = 5, max_messages: int = 5,
-                 utterance_states: dict = None, lang: str = None,
+                 utterance_states: Dict = None, lang: str = None,
                  context: IntentContextManager = None,
-                 valid_langs: List[str] = None):
+                 site_id: str = "unknown",
+                 pipeline: List[str] = None,
+                 stt_prefs: Dict = None,
+                 tts_prefs: Dict = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
         @param expiration_seconds: TTL for session (-1 for no expiration)
         @param active_skills: List of list skill_id, last reference
-        @param history: List of tuple Message, timestamp
-        @param max_time: maximum time for history in minutes
-        @param max_messages: maximum number of messages to retain
         @param utterance_states: dict of skill_id to UtteranceState
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
-        @param valid_langs: list of configured valid languages
         """
         self.session_id = session_id or str(uuid4())
+
         self.lang = lang or get_default_lang()
 
-        self.valid_languages = valid_langs or _get_valid_langs()
-        self.active_skills = active_skills or []  # [skill_id , timestamp]
-        # TODO: Can active_skills be a list of tuples like history?
-        self.history = history or []  # (Message , timestamp)
+        self.site_id = site_id or "unknown"  # indoors placement info
+
+        self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
-        self.max_time = max_time  # minutes
-        self.max_messages = max_messages
+
         self.touch_time = int(time.time())
-        if expiration_seconds is None:
-            expiration_seconds = Configuration().get('session', {}).get("ttl",
-                                                                        -1)
-        self.expiration_seconds = expiration_seconds
-        self.context = context or IntentContextManager(timeout=self.touch_time +
-                                                       expiration_seconds)
+        self.expiration_seconds = expiration_seconds or \
+                                  Configuration().get('session', {}).get("ttl", -1)
+        self.pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
+            "converse",
+            "padatious_high",
+            "adapt",
+            "common_qa",
+            "fallback_high",
+            "padatious_medium",
+            "fallback_medium",
+            "padatious_low",
+            "fallback_low"
+        ]
+        self.context = context or IntentContextManager()
+
+        if not stt_prefs:
+            stt = Configuration().get("stt", {})
+            sttm = stt.get("module", "ovos-stt-plugin-server")
+            stt_prefs = {"plugin_id": sttm,
+                         "config": stt.get(sttm) or {}}
+        self.stt_preferences = stt_prefs
+
+        if not tts_prefs:
+            tts = Configuration().get("tts", {})
+            ttsm = tts.get("module", "ovos-tts-plugin-server")
+            tts_prefs = {"plugin_id": ttsm,
+                         "config": tts.get(ttsm) or {}}
+        self.tts_preferences = tts_prefs
 
     @property
     def active(self) -> bool:
@@ -318,6 +331,7 @@ class Session:
         update the touch_time on the session
         """
         self.touch_time = int(time.time())
+        SessionManager.update(self)
 
     def expired(self) -> bool:
         """
@@ -336,6 +350,7 @@ class Session:
         @param skill_id: ID of skill expecting a response
         """
         self.utterance_states[skill_id] = UtteranceState.RESPONSE.value
+        self.touch()
 
     def disable_response_mode(self, skill_id: str):
         """
@@ -343,6 +358,7 @@ class Session:
         @param skill_id: ID of skill expecting a response
         """
         self.utterance_states[skill_id] = UtteranceState.INTENT.value
+        self.touch()
 
     def activate_skill(self, skill_id: str):
         """
@@ -353,6 +369,7 @@ class Session:
         self.deactivate_skill(skill_id)
         # add skill with timestamp to start of active list
         self.active_skills.insert(0, [skill_id, time.time()])
+        self.touch()
 
     def deactivate_skill(self, skill_id: str):
         """
@@ -363,6 +380,7 @@ class Session:
         if skill_id in active_ids:
             idx = active_ids.index(skill_id)
             self.active_skills.pop(idx)
+        self.touch()
 
     def is_active(self, skill_id: str) -> bool:
         """
@@ -370,28 +388,15 @@ class Session:
         @param skill_id: ID of skill to check
         @return: True if the requested skill is active
         """
-        self._prune_history()  # TODO: Is this necessary or useful?
         active_ids = [s[0] for s in self.active_skills]
         return skill_id in active_ids
 
-    def _prune_history(self):
-        """
-        Remove messages from history that are too old or exceed max_messages
-        """
-        # filter old messages from history
-        now = time.time()
-        self.history = [m for m in self.history
-                        if now - m[1] < 60 * self.max_time]
-        # keep only self.max_messages
-        if len(self.history) > self.max_messages:
-            self.history = self.history[self.max_messages * -1:]
-
     def clear(self):
         """
-        Clear history and active_skills
+        Clear active_skills
         """
         self.active_skills = []
-        self.history = []
+        self.touch()
 
     def serialize(self) -> dict:
         """
@@ -402,10 +407,12 @@ class Session:
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
-            "history": self.history,
             "lang": self.lang,
-            "valid_languages": self.valid_languages,
-            "context": self.context.serialize()
+            "context": self.context.serialize(),
+            "site_id": self.site_id,
+            "pipeline": self.pipeline,
+            "stt": self.stt_preferences,
+            "tts": self.tts_preferences
         }
 
     def update_history(self, message: Message = None):
@@ -413,25 +420,11 @@ class Session:
         Add a message to history and then prune history
         @param message: Message to append to history
         """
-        message = message or dig_for_message()
-        if message:
-            try:
-                m = message.as_dict
-            except AttributeError:
-                log_deprecation("mycroft-bus-client has been deprecated, please"
-                                " update your imports to use ovos-bus-client",
-                                "0.0.4",
-                                excluded_package_refs=["ovos_bus_client"])
-                m = json.loads(message.serialize())
-            except Exception as e:
-                LOG.exception(e)
-                m = json.loads(message.serialize())
-            m["context"] = {}  # clear personal data
-            self.history.append((m, time.time()))
-        self._prune_history()
+        LOG.warning("update_history has been deprecated, "
+                    "session no longer has a message history")
 
     @staticmethod
-    def deserialize(data: dict):
+    def deserialize(data: Dict):
         """
         Build a Session object from dict data
         @param data: dict serialized Session object
@@ -439,22 +432,22 @@ class Session:
         """
         uid = data.get("session_id")
         active = data.get("active_skills") or []
-        history = data.get("history") or []
-        max_time = data.get("max_time") or 5
-        max_messages = data.get("max_messages") or 5
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
-        valid_langs = data.get("valid_languages") or _get_valid_langs()
         context = IntentContextManager.deserialize(data.get("context", {}))
+        site_id = data.get("site_id", "unknown")
+        pipeline = data.get("pipeline", [])
+        tts = data.get("tts_preferences", {})
+        stt = data.get("stt_preferences", {})
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
-                       history=history,
-                       max_time=max_time,
                        lang=lang,
-                       valid_langs=valid_langs,
-                       max_messages=max_messages,
-                       context=context)
+                       context=context,
+                       pipeline=pipeline,
+                       site_id=site_id,
+                       tts_prefs=tts,
+                       stt_prefs=stt)
 
     @staticmethod
     def from_message(message: Message = None):
@@ -466,47 +459,52 @@ class Session:
         @return: Session object
         """
         message = message or dig_for_message()
-        if message:
+        if message and "session" in message.context:
             lang = message.context.get("lang") or \
                    message.data.get("lang")
-            sid = None
-            if "session_id" in message.context:
-                sid = message.context["session_id"]
-            if "session" in message.context:
-                sess = message.context["session"]
-                if sid and "session_id" not in sess:
-                    sess["session_id"] = sid
-                if "lang" not in sess:
-                    sess["lang"] = lang
-                sess = Session.deserialize(sess)
-            elif sid:
-                sess = SessionManager.sessions.get(sid) or \
-                       Session(sid)
-                if lang:
-                    sess.lang = lang
-            else:
-                sess = SessionManager.default_session
-                if not sess:
-                    LOG.debug(f"Creating default session on reference")
-                    sess = SessionManager.reset_default_session()
-                if sess and lang and sess.lang != lang:
-                    sess.lang = lang
-                    LOG.info(f"Updated default session lang to: {lang}")
+            sess = message.context["session"]
+            if "lang" not in sess:
+                sess["lang"] = lang
+            sess = Session.deserialize(sess)
         else:
+            if message:
+                LOG.warning(f"No session context in message:{message.msg_type}")
+                LOG.debug(f"Update ovos-bus-client or add `session` to "
+                          f"`message.context` where emitted. "
+                          f"context={message.context}")
+            else:
+                LOG.warning(f"No message found, using default session")
             # new session
-            LOG.warning(f"No message found, using default session")
             sess = SessionManager.default_session
         if sess and sess.expired():
-            LOG.debug(f"Resolved session expired {sess.session_id}")
-            sess.touch()
+            LOG.debug(f"unexpiring session {sess.session_id}")
         return sess
 
 
 class SessionManager:
     """ Keeps track of the current active session. """
-    default_session: Session = None
+    default_session: Session = Session("default")
     __lock = Lock()
-    sessions = {}
+    sessions = {"default": default_session}
+    bus = None
+
+    @classmethod
+    def sync(cls, message=None):
+        if cls.bus:
+            message = message or Message("ovos.session.sync")
+            cls.bus.emit(message.reply("ovos.session.update_default",
+                                       {"session_data": cls.default_session.serialize()}))
+
+    @classmethod
+    def connect_to_bus(cls, bus):
+        cls.bus = bus
+        cls.bus.on("ovos.session.sync",
+                   cls.handle_default_session_request)
+        cls.sync()
+
+    @classmethod
+    def handle_default_session_request(cls, message=None):
+        cls.sync(message)
 
     @staticmethod
     def prune_sessions():
@@ -527,17 +525,10 @@ class SessionManager:
         Define and return a new default_session
         """
         with SessionManager.__lock:
-            sess = Session()
-            LOG.info(f"New Default Session Start: {sess.session_id}")
-            if not SessionManager.default_session:
-                SessionManager.default_session = sess
-            if SessionManager.default_session.session_id in \
-                    SessionManager.sessions:
-                LOG.debug(f"Removing expired default session from sessions")
-                SessionManager.sessions.pop(
-                    SessionManager.default_session.session_id)
-            SessionManager.default_session = sess
-            SessionManager.sessions[sess.session_id] = sess
+            sess = Session("default")
+            LOG.info(f"Default Session reset")
+            SessionManager.default_session = SessionManager.sessions["default"] = sess
+            SessionManager.sync()
         return SessionManager.default_session
 
     @staticmethod
@@ -549,10 +540,14 @@ class SessionManager:
         """
         if not sess:
             raise ValueError(f"Expected Session and got None")
-        sess.touch()
-        SessionManager.sessions[sess.session_id] = sess
+
         if make_default:
+            sess.session_id = "default"
+            LOG.debug(f"replacing default session with: {sess.serialize()}")
+
+        if sess.session_id == "default":
             SessionManager.default_session = sess
+        SessionManager.sessions[sess.session_id] = sess
 
     @staticmethod
     def get(message: Optional[Message] = None) -> Session:
@@ -569,22 +564,13 @@ class SessionManager:
         if message:
             msg_sess = Session.from_message(message)
             if msg_sess:
-                SessionManager.sessions[msg_sess.session_id] = msg_sess
-                return msg_sess
+                if msg_sess.session_id != "default":  # reserved namespace for ovos-core
+                    SessionManager.sessions[msg_sess.session_id] = msg_sess
+                    return msg_sess
             else:
-                LOG.debug(f"No session from message.")
+                LOG.debug(f"No session from message, use default session")
         else:
             LOG.debug(f"No message, use default session")
-
-        # Default session, check if it needs to be (re)-created
-        if not sess or sess.expired():
-            if sess is not None and sess.session_id in SessionManager.sessions:
-                LOG.debug(f"Removing expired default: {sess.session_id}")
-                SessionManager.sessions.pop(sess.session_id)
-            sess = SessionManager.reset_default_session()
-        else:
-            # Existing default, make sure lang is in sync with Configuration
-            sess.lang = Configuration().get('lang') or sess.lang
 
         return sess
 
@@ -595,4 +581,5 @@ class SessionManager:
 
         @param message: Message to get Session for to update
         """
-        SessionManager.get(message).touch()
+        sess = SessionManager.get(message)
+        sess.touch()

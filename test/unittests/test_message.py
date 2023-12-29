@@ -39,9 +39,7 @@ class TestMessage(TestCase):
     def test_session_serialize_deserialize(self):
         """Assert that a serized message is recreated when deserialized."""
         s = Session()
-        for i in range(3):
-            s.update_history(Message(f'test_type_{i}',
-                                     context={"session": s.serialize()}))
+
         SessionManager.update(s, make_default=True)
 
         source = Message('test_type',
