@@ -4,6 +4,8 @@ from time import time
 from unittest import TestCase
 import json
 from ovos_bus_client import Message
+from ovos_bus_client.util import get_message_lang
+from ovos_config.locale import setup_locale
 from ovos_bus_client.message import dig_for_message
 from ovos_bus_client.session import Session, SessionManager
 
@@ -153,6 +155,23 @@ class TestFunctions(unittest.TestCase):
         self.assertIsInstance(m1, Message)
         self.assertIsInstance(m2, _MycroftMessage)
         self.assertIsInstance(m2, Message)
+
+
+class TestLanguageExtraction(TestCase):
+    def test_no_lang_in_message(self):
+        """No lang in message should result in lang from active locale."""
+        setup_locale("it-it")
+        msg = Message('test msg', data={})
+        self.assertEqual(get_message_lang(msg), 'it-it')
+        setup_locale("en-us")
+        self.assertEqual(get_message_lang(msg), 'en-us')
+
+    def test_lang_exists(self):
+        """Message has a lang code in data, it should be used."""
+        msg = Message('test msg', data={'lang': 'de-de'})
+        self.assertEqual(get_message_lang(msg), 'de-de')
+        msg = Message('test msg', data={'lang': 'sv-se'})
+        self.assertEqual(get_message_lang(msg), 'sv-se')
 
 
 class TestCollectionMessage(unittest.TestCase):

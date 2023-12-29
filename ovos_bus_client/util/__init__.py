@@ -38,9 +38,11 @@ def get_message_lang(message=None):
         return None
     # old style lang param
     lang = message.data.get("lang") or message.context.get("lang")
+    if lang:
+        return lang
 
     # new style session lang
-    if not lang and "session_id" in message.context or "session" in message.context:
+    if "session_id" in message.context or "session" in message.context:
         sess = SessionManager.get(message)
         return sess.lang
 
