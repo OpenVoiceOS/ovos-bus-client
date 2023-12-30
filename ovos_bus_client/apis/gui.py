@@ -6,7 +6,7 @@ from ovos_utils.file_utils import resolve_ovos_resource_file, resolve_resource_f
 from ovos_utils.log import LOG, log_deprecation
 from ovos_bus_client.util import get_mycroft_bus
 from ovos_utils.gui import can_use_gui
-
+from ovos_config import Configuration
 from ovos_bus_client.message import Message
 
 
@@ -91,14 +91,7 @@ class GUIInterface:
             `all` key should reference a `gui` directory containing all
             specific resource subdirectories
         """
-        if not config:
-            log_deprecation(f"Expected a dict config and got None.", "0.1.0")
-            try:
-                from ovos_config.config import read_mycroft_config
-                config = read_mycroft_config().get("gui", {})
-            except ImportError:
-                LOG.warning("Config not provided and ovos_config not available")
-                config = dict()
+        config = config or Configuration().get("gui", {})
         self.config = config
         if remote_server:
             self.config["remote-server"] = remote_server
@@ -364,8 +357,8 @@ class GUIInterface:
             # Prefer plugin-specific resources first, then fallback to core
             page = resolve_ovos_resource_file(name, extra_dirs) or \
                    resolve_ovos_resource_file(join('ui', name), extra_dirs) or \
-                   resolve_resource_file(name, self.config) or \
-                   resolve_resource_file(join('ui', name), self.config)
+                   resolve_resource_file(name, config=self.config) or \
+                   resolve_resource_file(join('ui', name), config=self.config)
 
             if page:
                 if self.remote_url:
