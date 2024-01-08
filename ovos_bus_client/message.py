@@ -118,10 +118,10 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         data = self._json_dump(self.data)
         ctxt = self._json_dump(self.context)
 
-        msg = orjson.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
+        msg = orjson.dumps({'type': self.msg_type, 'data': data, 'context': ctxt}).decode("utf-8")
         if self._secret_key:
             payload = encrypt_as_dict(self._secret_key, msg)
-            return orjson.dumps(payload)
+            return orjson.dumps(payload).decode("utf-8")
         return msg
 
     @property
@@ -446,10 +446,10 @@ class GUIMessage(Message):
             str: a json string representation of the message.
         """
         data = self._json_dump(self.data)
-        msg = orjson.dumps({'type': self.msg_type, **data})
+        msg = orjson.dumps({'type': self.msg_type, **data}).decode("utf-8")
         if self._secret_key:
             payload = encrypt_as_dict(self._secret_key, msg)
-            return orjson.dumps(payload)
+            return orjson.dumps(payload).decode("utf-8")
         return msg
 
     @staticmethod
