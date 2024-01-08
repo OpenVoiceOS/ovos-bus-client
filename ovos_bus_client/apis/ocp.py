@@ -23,7 +23,7 @@ from ovos_bus_client.util import get_mycroft_bus
 from ovos_utils.gui import is_gui_connected, is_gui_running
 from ovos_utils.log import LOG
 from ovos_utils.messagebus import Message
-from ovos_utils.ocp import MediaType, PlaybackType, PlaybackMode, available_extractors
+from ovos_utils.ocp import MediaType, PlaybackType, PlaybackMode
 
 
 def ensure_uri(s: str):
@@ -392,7 +392,18 @@ class OCPQuery:
         self.config = config or {}
         self.reset()
 
+    def _get_available_extractors(self):
+        # TODO - implement a bus api,
+        #  in containers the plugins wont be installed
+        #  in the code using this api
+        try:  # optional import
+            from ovos_plugin_manager.ocp import available_extractors
+            self.valid_uris = available_extractors()
+        except:
+            self.valid_uris = ["/", "http:", "https:", "file:"]
+
     def reset(self):
+        self._get_available_extractors()
         self.active_skills = {}
         self.active_skills_lock = Lock()
         self.query_replies = []
@@ -496,8 +507,7 @@ class OCPQuery:
                         res["playlist"] = [
                             r for r in res["playlist"]
                             if r.get("uri") and any(r.get("uri").startswith(e)
-                                                    for e in
-                                                    available_extractors())]
+                                                    for e in self.valid_uris)]
                         if not len(res["playlist"]):
                             results[idx] = None  # can't play this search result!
                             LOG.error(f"Empty playlist for {res}")
@@ -505,7 +515,7 @@ class OCPQuery:
                     elif uri and res.get("playback") not in [
                         PlaybackType.SKILL, PlaybackType.UNDEFINED] and \
                             not any(
-                                uri.startswith(e) for e in available_extractors()):
+                                uri.startswith(e) for e in self.valid_uris):
                         results[idx] = None  # can't play this search result!
                         LOG.error(f"stream handler not available for {res}")
                         continue
