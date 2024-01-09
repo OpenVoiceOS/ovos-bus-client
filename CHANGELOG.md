@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.9a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a3) (2024-01-08)
+## [0.0.9a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a4) (2024-01-09)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a2...0.0.9a3)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a3...0.0.9a4)
+
+**Fixed bugs:**
+
+- hotfix/avoid\_c++\_crash [\#76](https://github.com/OpenVoiceOS/ovos-bus-client/pull/76) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.9a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a3) (2024-01-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a2...V0.0.9a3)
 
 **Fixed bugs:**
 
