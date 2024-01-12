@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.9a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a4) (2024-01-09)
+## [0.0.9a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a5) (2024-01-12)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a3...0.0.9a4)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a4...0.0.9a5)
+
+**Implemented enhancements:**
+
+- feat/ovos-media [\#78](https://github.com/OpenVoiceOS/ovos-bus-client/pull/78) ([NeonJarbas](https://github.com/NeonJarbas))
+
+## [V0.0.9a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a4) (2024-01-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a3...V0.0.9a4)
 
 **Fixed bugs:**
 
