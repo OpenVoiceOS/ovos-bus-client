@@ -50,11 +50,13 @@ def ensure_uri(s: str):
 
 
 class ClassicAudioServiceInterface:
-    """AudioService class for interacting with the audio subsystem
+    """AudioService class for interacting with the classic mycroft audio subsystem
 
     DEPRECATED: only works in ovos-core <= 0.0.8
 
     it has been removed from ovos-audio with the move to ovos-media
+    
+    "mycroft.audio.XXX" has been replaced by "ovos.audio.XXX" namespace
 
     use OCPInterface instead
 
@@ -258,7 +260,7 @@ class OCPInterface:
             if isinstance(track, dict):
                 tracks[idx] = MediaEntry.from_dict(track)
             elif isinstance(track, list) and not isinstance(track, Playlist):
-                tracks[idx] = OCPInterface.norm_tracks(tracks)
+                tracks[idx] = OCPInterface.norm_tracks(track)
             else:
                 # TODO - support string uris
                 # let it fail in next assert
