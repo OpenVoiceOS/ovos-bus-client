@@ -81,7 +81,7 @@ class ClassicAudioServiceInterface:
         elif not isinstance(tracks, list):
             raise ValueError
         tracks = [ensure_uri(t) for t in tracks]
-        self.bus.emit(Message('.audio.service.queue',
+        self.bus.emit(Message('mycroft.audio.service.queue',
                               data={'tracks': tracks}))
 
     def play(self, tracks=None, utterance=None, repeat=None):
@@ -103,26 +103,26 @@ class ClassicAudioServiceInterface:
         elif not isinstance(tracks, list):
             raise ValueError
         tracks = [ensure_uri(t) for t in tracks]
-        self.bus.emit(Message('.audio.service.play',
+        self.bus.emit(Message('mycroft.audio.service.play',
                               data={'tracks': tracks,
                                     'utterance': utterance,
                                     'repeat': repeat}))
 
     def stop(self):
         """Stop the track."""
-        self.bus.emit(Message('.audio.service.stop'))
+        self.bus.emit(Message('mycroft.audio.service.stop'))
 
     def next(self):
         """Change to next track."""
-        self.bus.emit(Message('.audio.service.next'))
+        self.bus.emit(Message('mycroft.audio.service.next'))
 
     def prev(self):
         """Change to previous track."""
-        self.bus.emit(Message('.audio.service.prev'))
+        self.bus.emit(Message('mycroft.audio.service.prev'))
 
     def pause(self):
         """Pause playback."""
-        self.bus.emit(Message('.audio.service.pause'))
+        self.bus.emit(Message('mycroft.audio.service.pause'))
 
     def resume(self):
         """Resume paused playback."""
