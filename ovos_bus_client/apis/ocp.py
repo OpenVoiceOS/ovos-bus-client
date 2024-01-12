@@ -63,7 +63,7 @@ class ClassicAudioServiceInterface:
     """
 
     @deprecated("removed from ovos-audio with the adoption of ovos-media service, "
-                "use OCPAudioServiceInterface instead", "0.1.0")
+                "use OCPInterface instead", "0.1.0")
     def __init__(self, bus=None):
         self.bus = bus or get_mycroft_bus()
 
