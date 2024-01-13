@@ -15,7 +15,7 @@
 """
 Tools and constructs that are useful together with the messagebus.
 """
-import json
+import orjson
 
 from ovos_config.config import read_mycroft_config
 from ovos_config.locale import get_default_lang
@@ -117,7 +117,7 @@ def wait_for_reply(message, reply_type=None, timeout=3.0, bus=None):
     bus = bus or get_mycroft_bus()
     if isinstance(message, str):
         try:
-            message = json.loads(message)
+            message = orjson.loads(message)
         except:
             pass
     if isinstance(message, str):
@@ -142,7 +142,7 @@ def send_message(message, data=None, context=None, bus=None):
             message = Message(message, data, context)
         else:
             try:
-                message = json.loads(message)
+                message = orjson.loads(message)
             except:
                 message = Message(message)
     if isinstance(message, dict):
@@ -179,7 +179,7 @@ def send_binary_file_message(filepath, msg_type="mycroft.binary.file",
 def decode_binary_message(message):
     if isinstance(message, str):
         try:  # json string
-            message = json.loads(message)
+            message = orjson.loads(message)
             binary_data = message.get("binary") or message["data"]["binary"]
         except:  # hex string
             binary_data = message

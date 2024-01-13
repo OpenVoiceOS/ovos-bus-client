@@ -21,7 +21,7 @@ serializing / deserializing the message for transmission.
 """
 
 import inspect
-import json
+import orjson
 import re
 from copy import deepcopy
 from typing import Optional
@@ -118,15 +118,15 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         data = self._json_dump(self.data)
         ctxt = self._json_dump(self.context)
 
-        msg = json.dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
+        msg = orjson.dumps({'type': self.msg_type, 'data': data, 'context': ctxt}).decode("utf-8")
         if self._secret_key:
             payload = encrypt_as_dict(self._secret_key, msg)
-            return json.dumps(payload)
+            return orjson.dumps(payload).decode("utf-8")
         return msg
 
     @property
     def as_dict(self) -> dict:
-        return json.loads(self.serialize())
+        return orjson.loads(self.serialize())
 
     @staticmethod
     def _json_dump(value):
@@ -153,7 +153,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
     @staticmethod
     def _json_load(value):
         if isinstance(value, str):
-            obj = json.loads(value)
+            obj = orjson.loads(value)
         else:
             obj = value
         assert isinstance(obj, dict)
@@ -446,10 +446,10 @@ class GUIMessage(Message):
             str: a json string representation of the message.
         """
         data = self._json_dump(self.data)
-        msg = json.dumps({'type': self.msg_type, **data})
+        msg = orjson.dumps({'type': self.msg_type, **data}).decode("utf-8")
         if self._secret_key:
             payload = encrypt_as_dict(self._secret_key, msg)
-            return json.dumps(payload)
+            return orjson.dumps(payload).decode("utf-8")
         return msg
 
     @staticmethod

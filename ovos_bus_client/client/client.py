@@ -1,4 +1,4 @@
-import json
+import orjson
 import time
 import traceback
 from os import getpid
@@ -184,7 +184,7 @@ class MessageBusClient(_MessageBusClientBase):
         if hasattr(message, 'serialize'):
             msg = message.serialize()
         else:
-            msg = json.dumps(message.__dict__)
+            msg = orjson.dumps(message.__dict__).decode("utf-8")
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
@@ -417,7 +417,7 @@ class GUIWebsocketClient(MessageBusClient):
             if hasattr(message, 'serialize'):
                 self.client.send(message.serialize())
             else:
-                self.client.send(json.dumps(message.__dict__))
+                self.client.send(orjson.dumps(message.__dict__).decode("utf-8"))
         except WebSocketConnectionClosedException:
             LOG.warning('Could not send %s message because connection '
                         'has been closed', message.msg_type)
