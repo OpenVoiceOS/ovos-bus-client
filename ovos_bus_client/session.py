@@ -543,7 +543,9 @@ class SessionManager:
 
         if make_default:
             sess.session_id = "default"
-            LOG.debug(f"replacing default session with: {sess.serialize()}")
+            # this log is dangerous, session may contain things like passwords and access keys
+            # this comment is here to avoid reintroducing it by accident
+            # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
 
         if sess.session_id == "default":
             SessionManager.default_session = sess
