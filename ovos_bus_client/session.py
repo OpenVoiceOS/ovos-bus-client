@@ -291,14 +291,17 @@ class Session:
         self.expiration_seconds = expiration_seconds or \
                                   Configuration().get('session', {}).get("ttl", -1)
         self.pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
+            "stop_high",
             "converse",
             "padatious_high",
-            "adapt",
-            "common_qa",
+            "adapt_high",
             "fallback_high",
+            "stop_medium",
             "padatious_medium",
+            "adapt_medium",
+            "adapt_low",
+            "common_qa",
             "fallback_medium",
-            "padatious_low",
             "fallback_low"
         ]
         self.context = context or IntentContextManager()
