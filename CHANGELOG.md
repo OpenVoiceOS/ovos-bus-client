@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.9a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a9) (2024-01-23)
+## [0.0.9a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a10) (2024-01-29)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a8...0.0.9a9)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a9...0.0.9a10)
+
+**Fixed bugs:**
+
+- Update default values [\#83](https://github.com/OpenVoiceOS/ovos-bus-client/pull/83) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.9a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a9) (2024-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a8...V0.0.9a9)
 
 **Fixed bugs:**
 
