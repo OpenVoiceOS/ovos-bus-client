@@ -261,14 +261,17 @@ class IntentContextManager:
 
 
 class Session:
-    def __init__(self, session_id: str = None, expiration_seconds: int = None,
+    def __init__(self, session_id: str = None,
+                 expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 utterance_states: Dict = None, lang: str = None,
+                 utterance_states: Dict = None,
+                 lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None,
                  stt_prefs: Dict = None,
-                 tts_prefs: Dict = None):
+                 tts_prefs: Dict = None,
+                 location_prefs: Dict = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -282,7 +285,7 @@ class Session:
 
         self.lang = lang or get_default_lang()
 
-        self.site_id = site_id or "unknown"  # indoors placement info
+        self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
 
         self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
@@ -319,6 +322,7 @@ class Session:
             tts_prefs = {"plugin_id": ttsm,
                          "config": tts.get(ttsm) or {}}
         self.tts_preferences = tts_prefs
+        self.location_preferences = location_prefs or Configuration().get("location", {})
 
     @property
     def active(self) -> bool:
@@ -415,7 +419,8 @@ class Session:
             "site_id": self.site_id,
             "pipeline": self.pipeline,
             "stt": self.stt_preferences,
-            "tts": self.tts_preferences
+            "tts": self.tts_preferences,
+            "location": self.location_preferences
         }
 
     def update_history(self, message: Message = None):
@@ -440,8 +445,9 @@ class Session:
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
-        tts = data.get("tts_preferences", {})
-        stt = data.get("stt_preferences", {})
+        tts = data.get("tts", {})
+        stt = data.get("stt", {})
+        location = data.get("location", {})
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -450,7 +456,8 @@ class Session:
                        pipeline=pipeline,
                        site_id=site_id,
                        tts_prefs=tts,
-                       stt_prefs=stt)
+                       stt_prefs=stt,
+                       location_prefs=location)
 
     @staticmethod
     def from_message(message: Message = None):
