@@ -42,6 +42,8 @@ def get_version():
         version += f"a{alpha}"
     return version
 
+with open("README.md", "r") as f:
+    long_description = f.read()
 
 setup(
     name='ovos-bus-client',
@@ -58,17 +60,16 @@ setup(
     url='https://github.com/OpenVoiceOS/ovos-bus-client',
     license='Apache-2.0',
     author='JarbasAI',
-    author_email='jarbasai@mailfence.com',
+    author_email='jarbas@openvoiceos.com',
     description='OVOS Messagebus Client',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: Apache Software License',
 
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3',
     ],
     entry_points={
         'console_scripts': [
