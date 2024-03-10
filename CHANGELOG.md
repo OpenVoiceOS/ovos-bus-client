@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.9a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a12) (2024-02-21)
+## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a11...0.0.9a12)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a12...HEAD)
+
+**Merged pull requests:**
+
+- chore\(docs\): add a long description to PyPi [\#86](https://github.com/OpenVoiceOS/ovos-bus-client/pull/86) ([mikejgray](https://github.com/mikejgray))
+
+## [V0.0.9a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a12) (2024-02-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a11...V0.0.9a12)
 
 **Implemented enhancements:**
 
