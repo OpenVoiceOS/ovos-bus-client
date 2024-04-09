@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...HEAD)
+
+**Implemented enhancements:**
+
+- feat/targeted OCP queries [\#88](https://github.com/OpenVoiceOS/ovos-bus-client/pull/88) ([NeonJarbas](https://github.com/NeonJarbas))
+
 ## [V](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V) (2024-03-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a12...V)
