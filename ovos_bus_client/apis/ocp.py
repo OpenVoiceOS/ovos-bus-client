@@ -261,7 +261,7 @@ class OCPInterface:
                 tracks[idx] = MediaEntry.from_dict(track)
             elif isinstance(track, list) and not isinstance(track, Playlist):
                 tracks[idx] = OCPInterface.norm_tracks(track)
-            else:
+            elif not isinstance(track, MediaEntry):
                 # TODO - support string uris
                 # let it fail in next assert
                 # log all bad entries before failing
