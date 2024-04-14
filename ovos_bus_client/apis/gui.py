@@ -103,8 +103,7 @@ class GUIInterface:
         self.on_gui_changed_callback = None
         self._events = []
         self.ui_directories = ui_directories or dict()
-        if bus:
-            self.set_bus(bus)
+        self.set_bus(bus)
 
     @property
     def remote_url(self) -> Optional[str]:
