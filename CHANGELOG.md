@@ -6,6 +6,7 @@
 
 **Implemented enhancements:**
 
+- feat/add\_units\_to\_session [\#90](https://github.com/OpenVoiceOS/ovos-bus-client/pull/90) ([JarbasAl](https://github.com/JarbasAl))
 - feat/targeted OCP queries [\#88](https://github.com/OpenVoiceOS/ovos-bus-client/pull/88) ([NeonJarbas](https://github.com/NeonJarbas))
 
 ## [V](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V) (2024-03-10)
