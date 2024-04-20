@@ -271,7 +271,10 @@ class Session:
                  pipeline: List[str] = None,
                  stt_prefs: Dict = None,
                  tts_prefs: Dict = None,
-                 location_prefs: Dict = None):
+                 location_prefs: Dict = None,
+                 system_unit: str = None,
+                 time_format: str = None,
+                 date_format: str = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -284,6 +287,9 @@ class Session:
         self.session_id = session_id or str(uuid4())
 
         self.lang = lang or get_default_lang()
+        self.system_unit = system_unit or Configuration().get("system_unit", "metric")
+        self.date_format = date_format or Configuration().get("date_format", "DMY")
+        self.time_format = time_format or Configuration().get("time_format", "full")
 
         self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
 
@@ -420,7 +426,10 @@ class Session:
             "pipeline": self.pipeline,
             "stt": self.stt_preferences,
             "tts": self.tts_preferences,
-            "location": self.location_preferences
+            "location": self.location_preferences,
+            "system_unit": self.system_unit,
+            "time_format": self.time_format,
+            "date_format": self.date_format
         }
 
     def update_history(self, message: Message = None):
@@ -448,6 +457,9 @@ class Session:
         tts = data.get("tts", {})
         stt = data.get("stt", {})
         location = data.get("location", {})
+        system_unit = data.get("system_unit")
+        date_format = data.get("date_format")
+        time_format = data.get("time_format")
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -457,7 +469,10 @@ class Session:
                        site_id=site_id,
                        tts_prefs=tts,
                        stt_prefs=stt,
-                       location_prefs=location)
+                       location_prefs=location,
+                       system_unit=system_unit,
+                       date_format=date_format,
+                       time_format=time_format)
 
     @staticmethod
     def from_message(message: Message = None):
