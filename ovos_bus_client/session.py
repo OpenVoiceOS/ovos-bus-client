@@ -269,6 +269,8 @@ class Session:
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None,
+                 stt_prefs: Dict = None,
+                 tts_prefs: Dict = None,
                  location_prefs: Dict = None,
                  system_unit: str = None,
                  time_format: str = None,
@@ -282,6 +284,10 @@ class Session:
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
         """
+        if tts_prefs:
+            LOG.warning("tts_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
+        if stt_prefs:
+            LOG.warning("stt_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
         self.session_id = session_id or str(uuid4())
 
         self.lang = lang or get_default_lang()
