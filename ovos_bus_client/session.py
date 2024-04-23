@@ -269,8 +269,6 @@ class Session:
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None,
-                 stt_prefs: Dict = None,
-                 tts_prefs: Dict = None,
                  location_prefs: Dict = None,
                  system_unit: str = None,
                  time_format: str = None,
@@ -315,19 +313,6 @@ class Session:
         ]
         self.context = context or IntentContextManager()
 
-        if not stt_prefs:
-            stt = Configuration().get("stt", {})
-            sttm = stt.get("module", "ovos-stt-plugin-server")
-            stt_prefs = {"plugin_id": sttm,
-                         "config": stt.get(sttm) or {}}
-        self.stt_preferences = stt_prefs
-
-        if not tts_prefs:
-            tts = Configuration().get("tts", {})
-            ttsm = tts.get("module", "ovos-tts-plugin-server")
-            tts_prefs = {"plugin_id": ttsm,
-                         "config": tts.get(ttsm) or {}}
-        self.tts_preferences = tts_prefs
         self.location_preferences = location_prefs or Configuration().get("location", {})
 
     @property
@@ -424,8 +409,6 @@ class Session:
             "context": self.context.serialize(),
             "site_id": self.site_id,
             "pipeline": self.pipeline,
-            "stt": self.stt_preferences,
-            "tts": self.tts_preferences,
             "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
@@ -454,8 +437,6 @@ class Session:
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
-        tts = data.get("tts", {})
-        stt = data.get("stt", {})
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
@@ -467,8 +448,6 @@ class Session:
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id,
-                       tts_prefs=tts,
-                       stt_prefs=stt,
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,
