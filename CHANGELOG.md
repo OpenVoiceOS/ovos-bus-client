@@ -4,6 +4,10 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...HEAD)
 
+**Breaking changes:**
+
+- refactor/remove\_stt+tts\_prefs [\#91](https://github.com/OpenVoiceOS/ovos-bus-client/pull/91) ([JarbasAl](https://github.com/JarbasAl))
+
 **Implemented enhancements:**
 
 - feat/add\_units\_to\_session [\#90](https://github.com/OpenVoiceOS/ovos-bus-client/pull/90) ([JarbasAl](https://github.com/JarbasAl))
