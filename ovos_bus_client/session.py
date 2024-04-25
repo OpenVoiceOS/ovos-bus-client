@@ -284,6 +284,10 @@ class Session:
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
         """
+        if tts_prefs:
+            LOG.warning("tts_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
+        if stt_prefs:
+            LOG.warning("stt_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
         self.session_id = session_id or str(uuid4())
 
         self.lang = lang or get_default_lang()
@@ -315,19 +319,6 @@ class Session:
         ]
         self.context = context or IntentContextManager()
 
-        if not stt_prefs:
-            stt = Configuration().get("stt", {})
-            sttm = stt.get("module", "ovos-stt-plugin-server")
-            stt_prefs = {"plugin_id": sttm,
-                         "config": stt.get(sttm) or {}}
-        self.stt_preferences = stt_prefs
-
-        if not tts_prefs:
-            tts = Configuration().get("tts", {})
-            ttsm = tts.get("module", "ovos-tts-plugin-server")
-            tts_prefs = {"plugin_id": ttsm,
-                         "config": tts.get(ttsm) or {}}
-        self.tts_preferences = tts_prefs
         self.location_preferences = location_prefs or Configuration().get("location", {})
 
     @property
@@ -424,8 +415,6 @@ class Session:
             "context": self.context.serialize(),
             "site_id": self.site_id,
             "pipeline": self.pipeline,
-            "stt": self.stt_preferences,
-            "tts": self.tts_preferences,
             "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
@@ -454,8 +443,6 @@ class Session:
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
-        tts = data.get("tts", {})
-        stt = data.get("stt", {})
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
@@ -467,8 +454,6 @@ class Session:
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id,
-                       tts_prefs=tts,
-                       stt_prefs=stt,
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,
