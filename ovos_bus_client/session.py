@@ -1,6 +1,6 @@
 import enum
 import time
-from threading import Lock
+from threading import Lock, Event
 from typing import Optional, List, Tuple, Union, Iterable, Dict
 from uuid import uuid4
 
@@ -274,7 +274,9 @@ class Session:
                  location_prefs: Dict = None,
                  system_unit: str = None,
                  time_format: str = None,
-                 date_format: str = None):
+                 date_format: str = None,
+                 is_speaking: bool = False,
+                 is_recording: bool = False):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -295,6 +297,8 @@ class Session:
         self.date_format = date_format or Configuration().get("date_format", "DMY")
         self.time_format = time_format or Configuration().get("time_format", "full")
 
+        self.is_recording = is_recording
+        self.is_speaking = is_speaking
         self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
 
         self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
@@ -418,7 +422,9 @@ class Session:
             "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
-            "date_format": self.date_format
+            "date_format": self.date_format,
+            "is_speaking": self.is_speaking,
+            "is_recording": self.is_recording
         }
 
     def update_history(self, message: Message = None):
@@ -447,6 +453,8 @@ class Session:
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
         time_format = data.get("time_format")
+        is_recording = data.get("is_recording", False)
+        is_speaking = data.get("is_speaking", False)
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -457,7 +465,9 @@ class Session:
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,
-                       time_format=time_format)
+                       time_format=time_format,
+                       is_recording=is_recording,
+                       is_speaking=is_speaking)
 
     @staticmethod
     def from_message(message: Message = None):
@@ -508,13 +518,12 @@ class SessionManager:
     @classmethod
     def connect_to_bus(cls, bus):
         cls.bus = bus
-        cls.bus.on("ovos.session.sync",
-                   cls.handle_default_session_request)
+        cls.bus.on("recognizer_loop:record_begin", cls.handle_recording_start)
+        cls.bus.on("recognizer_loop:record_end", cls.handle_recording_end)
+        cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
+        cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
+        cls.bus.on("ovos.session.sync", cls.handle_default_session_request)
         cls.sync()
-
-    @classmethod
-    def handle_default_session_request(cls, message=None):
-        cls.sync(message)
 
     @staticmethod
     def prune_sessions():
@@ -595,3 +604,99 @@ class SessionManager:
         """
         sess = SessionManager.get(message)
         sess.touch()
+
+    ##############################
+    # util methods for skill consumption
+    @classmethod
+    def is_speaking(cls, session: Session = None):
+        session = session or SessionManager.get()
+        return session.is_speaking
+
+    @classmethod
+    def wait_while_speaking(cls, timeout=15, session: Session = None):
+        """ wait until audio service reports end of audio output """
+        if not cls.bus:
+            LOG.error("SessionManager not connected to bus, can not monitor speech state")
+            return
+
+        session = session or SessionManager.get()
+        if not cls.is_speaking(session):
+            return
+
+        # wait until end of speech
+        event = Event()
+        sessid = session.session_id
+
+        def handle_output_end(msg):
+            nonlocal sessid, event
+            sess = SessionManager.get(msg)
+            if sessid == sess.session_id:
+                event.set()
+
+        cls.bus.on("recognizer_loop:audio_output_end", handle_output_end)
+        event.wait(timeout=timeout)
+        cls.bus.remove("recognizer_loop:audio_output_end", handle_output_end)
+
+    @classmethod
+    def is_recording(cls, session: Session = None):
+        session = session or SessionManager.get()
+        return session.is_recording
+
+    @classmethod
+    def wait_while_recording(cls, timeout=45, session: Session = None):
+        """ wait until listener service reports end of recording"""
+        if not cls.bus:
+            LOG.error("SessionManager not connected to bus, can not monitor recording state")
+            return
+
+        session = session or SessionManager.get()
+        if not cls.is_recording(session):
+            return
+
+        # wait until end of recording
+        event = Event()
+        sessid = session.session_id
+
+        def handle_rec_end(msg):
+            nonlocal sessid, event
+            sess = SessionManager.get(msg)
+            if sessid == sess.session_id:
+                event.set()
+
+        cls.bus.on("recognizer_loop:record_end", handle_rec_end)
+        event.wait(timeout=timeout)
+        cls.bus.remove("recognizer_loop:record_end", handle_rec_end)
+
+    ###############################
+    # State tracking events
+    @classmethod
+    def handle_recording_start(cls, message):
+        """track when a session is recording audio"""
+        sess = cls.get(message)
+        sess.is_recording = True
+        cls.update(sess)
+
+    @classmethod
+    def handle_recording_end(cls, message):
+        """track when a session stops recording audio"""
+        sess = cls.get(message)
+        sess.is_recording = False
+        cls.update(sess)
+
+    @classmethod
+    def handle_audio_output_start(cls, message):
+        """track when a session is outputting audio"""
+        sess = cls.get(message)
+        sess.is_speaking = True
+        cls.update(sess)
+
+    @classmethod
+    def handle_audio_output_end(cls, message):
+        """track when a session stops outputting audio"""
+        sess = cls.get(message)
+        sess.is_speaking = False
+        cls.update(sess)
+
+    @classmethod
+    def handle_default_session_request(cls, message=None):
+        cls.sync(message)
