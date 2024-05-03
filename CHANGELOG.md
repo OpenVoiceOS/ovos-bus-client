@@ -10,6 +10,7 @@
 
 **Implemented enhancements:**
 
+- feat/track\_speaking+recording\_per\_session [\#93](https://github.com/OpenVoiceOS/ovos-bus-client/pull/93) ([JarbasAl](https://github.com/JarbasAl))
 - feat/add\_units\_to\_session [\#90](https://github.com/OpenVoiceOS/ovos-bus-client/pull/90) ([JarbasAl](https://github.com/JarbasAl))
 - feat/targeted OCP queries [\#88](https://github.com/OpenVoiceOS/ovos-bus-client/pull/88) ([NeonJarbas](https://github.com/NeonJarbas))
 
