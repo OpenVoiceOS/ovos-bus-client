@@ -117,6 +117,107 @@ except ImportError:
 
 
     @dataclass
+    class MediaEntry:
+        uri: str = ""
+        title: str = ""
+        artist: str = ""
+        match_confidence: int = 0  # 0 - 100
+        skill_id: str = OCP_ID
+        playback: PlaybackType = PlaybackType.UNDEFINED
+        status: TrackState = TrackState.DISAMBIGUATION
+        media_type: MediaType = MediaType.GENERIC
+        length: int = 0  # in seconds
+        image: str = ""
+        skill_icon: str = ""
+        javascript: str = ""  # to execute once webview is loaded
+
+        def update(self, entry: dict, skipkeys: list = None, newonly: bool = False):
+            """
+            Update this MediaEntry object with keys from the provided entry
+            @param entry: dict or MediaEntry object to update this object with
+            @param skipkeys: list of keys to not change
+            @param newonly: if True, only adds new keys; existing keys are unchanged
+            """
+            skipkeys = skipkeys or []
+            if isinstance(entry, MediaEntry):
+                entry = entry.as_dict
+            entry = entry or {}
+            for k, v in entry.items():
+                if k not in skipkeys and hasattr(self, k):
+                    if newonly and self.__getattribute__(k):
+                        # skip, do not replace existing values
+                        continue
+                    self.__setattr__(k, v)
+
+        @property
+        def infocard(self) -> dict:
+            """
+            Return dict data used for a UI display
+            """
+            return {
+                "duration": self.length,
+                "track": self.title,
+                "image": self.image,
+                "album": self.skill_id,
+                "source": self.skill_icon,
+                "uri": self.uri
+            }
+
+        @property
+        def mpris_metadata(self) -> dict:
+            """
+            Return dict data used by MPRIS
+            """
+            from dbus_next.service import Variant
+            meta = {"xesam:url": Variant('s', self.uri)}
+            if self.artist:
+                meta['xesam:artist'] = Variant('as', [self.artist])
+            if self.title:
+                meta['xesam:title'] = Variant('s', self.title)
+            if self.image:
+                meta['mpris:artUrl'] = Variant('s', self.image)
+            if self.length:
+                meta['mpris:length'] = Variant('d', self.length)
+            return meta
+
+        @property
+        def as_dict(self) -> dict:
+            """
+            Return a dict representation of this MediaEntry
+            """
+            # orjson handles dataclasses directly
+            return orjson.loads(orjson.dumps(self).decode("utf-8"))
+
+        @staticmethod
+        def from_dict(track: dict):
+            if track.get("playlist"):
+                kwargs = {k: v for k, v in track.items()
+                          if k in inspect.signature(Playlist).parameters}
+                playlist = Playlist(**kwargs)
+                for e in track["playlist"]:
+                    playlist.add_entry(e)
+                return playlist
+            else:
+                kwargs = {k: v for k, v in track.items()
+                          if k in inspect.signature(MediaEntry).parameters}
+                return MediaEntry(**kwargs)
+
+        @property
+        def mimetype(self) -> Optional[Tuple[Optional[str], Optional[str]]]:
+            """
+            Get the detected mimetype tuple (type, encoding) if it can be determined
+            """
+            if self.uri:
+                return find_mime(self.uri)
+
+        def __eq__(self, other):
+            if isinstance(other, MediaEntry):
+                other = other.infocard
+            # dict comparison
+            return other == self.infocard
+
+
+    @dataclass
     class Playlist(list):
         title: str = ""
         position: int = 0
@@ -348,107 +449,6 @@ except ImportError:
                     if e.uri == item.uri:
                         return True
             return False
-
-
-    @dataclass
-    class MediaEntry:
-        uri: str = ""
-        title: str = ""
-        artist: str = ""
-        match_confidence: int = 0  # 0 - 100
-        skill_id: str = OCP_ID
-        playback: PlaybackType = PlaybackType.UNDEFINED
-        status: TrackState = TrackState.DISAMBIGUATION
-        media_type: MediaType = MediaType.GENERIC
-        length: int = 0  # in seconds
-        image: str = ""
-        skill_icon: str = ""
-        javascript: str = ""  # to execute once webview is loaded
-
-        def update(self, entry: dict, skipkeys: list = None, newonly: bool = False):
-            """
-            Update this MediaEntry object with keys from the provided entry
-            @param entry: dict or MediaEntry object to update this object with
-            @param skipkeys: list of keys to not change
-            @param newonly: if True, only adds new keys; existing keys are unchanged
-            """
-            skipkeys = skipkeys or []
-            if isinstance(entry, MediaEntry):
-                entry = entry.as_dict
-            entry = entry or {}
-            for k, v in entry.items():
-                if k not in skipkeys and hasattr(self, k):
-                    if newonly and self.__getattribute__(k):
-                        # skip, do not replace existing values
-                        continue
-                    self.__setattr__(k, v)
-
-        @property
-        def infocard(self) -> dict:
-            """
-            Return dict data used for a UI display
-            """
-            return {
-                "duration": self.length,
-                "track": self.title,
-                "image": self.image,
-                "album": self.skill_id,
-                "source": self.skill_icon,
-                "uri": self.uri
-            }
-
-        @property
-        def mpris_metadata(self) -> dict:
-            """
-            Return dict data used by MPRIS
-            """
-            from dbus_next.service import Variant
-            meta = {"xesam:url": Variant('s', self.uri)}
-            if self.artist:
-                meta['xesam:artist'] = Variant('as', [self.artist])
-            if self.title:
-                meta['xesam:title'] = Variant('s', self.title)
-            if self.image:
-                meta['mpris:artUrl'] = Variant('s', self.image)
-            if self.length:
-                meta['mpris:length'] = Variant('d', self.length)
-            return meta
-
-        @property
-        def as_dict(self) -> dict:
-            """
-            Return a dict representation of this MediaEntry
-            """
-            # orjson handles dataclasses directly
-            return orjson.loads(orjson.dumps(self).decode("utf-8"))
-
-        @staticmethod
-        def from_dict(track: dict):
-            if track.get("playlist"):
-                kwargs = {k: v for k, v in track.items()
-                          if k in inspect.signature(Playlist).parameters}
-                playlist = Playlist(**kwargs)
-                for e in track["playlist"]:
-                    playlist.add_entry(e)
-                return playlist
-            else:
-                kwargs = {k: v for k, v in track.items()
-                          if k in inspect.signature(MediaEntry).parameters}
-                return MediaEntry(**kwargs)
-
-        @property
-        def mimetype(self) -> Optional[Tuple[Optional[str], Optional[str]]]:
-            """
-            Get the detected mimetype tuple (type, encoding) if it can be determined
-            """
-            if self.uri:
-                return find_mime(self.uri)
-
-        def __eq__(self, other):
-            if isinstance(other, MediaEntry):
-                other = other.infocard
-            # dict comparison
-            return other == self.infocard
 
 
 def ensure_uri(s: str):
