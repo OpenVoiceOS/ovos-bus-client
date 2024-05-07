@@ -14,6 +14,10 @@
 - feat/add\_units\_to\_session [\#90](https://github.com/OpenVoiceOS/ovos-bus-client/pull/90) ([JarbasAl](https://github.com/JarbasAl))
 - feat/targeted OCP queries [\#88](https://github.com/OpenVoiceOS/ovos-bus-client/pull/88) ([NeonJarbas](https://github.com/NeonJarbas))
 
+**Merged pull requests:**
+
+- Update imports to support ovos-utils~=0.0.x with compat. warnings [\#94](https://github.com/OpenVoiceOS/ovos-bus-client/pull/94) ([NeonDaniel](https://github.com/NeonDaniel))
+
 ## [V](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V) (2024-03-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a12...V)
