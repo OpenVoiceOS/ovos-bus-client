@@ -14,11 +14,10 @@ import time
 from datetime import timedelta
 from os.path import abspath
 from threading import Lock
-from typing import List
+from typing import List, Union
 
 from ovos_utils.gui import is_gui_connected, is_gui_running
 from ovos_utils.log import LOG, deprecated
-from ovos_utils.ocp import MediaType, PlaybackMode, Playlist, MediaEntry
 
 from ovos_bus_client.message import Message
 from ovos_bus_client.message import dig_for_message
@@ -163,7 +162,7 @@ class ClassicAudioServiceInterface:
         self.bus.emit(Message('mycroft.audio.service.set_track_position',
                               {"position": seconds * 1000}))  # convert to ms
 
-    def seek(self, seconds=1):
+    def seek(self, seconds: Union[int, float, timedelta] = 1):
         """Seek X seconds.
 
         Args:
@@ -176,7 +175,7 @@ class ClassicAudioServiceInterface:
         else:
             self.seek_forward(seconds)
 
-    def seek_forward(self, seconds=1):
+    def seek_forward(self, seconds: Union[int, float, timedelta] = 1):
         """Skip ahead X seconds.
 
         Args:
@@ -187,7 +186,7 @@ class ClassicAudioServiceInterface:
         self.bus.emit(Message('mycroft.audio.service.seek_forward',
                               {"seconds": seconds}))
 
-    def seek_backward(self, seconds=1):
+    def seek_backward(self, seconds: Union[int, float, timedelta] = 1):
         """Rewind X seconds
 
          Args:
@@ -253,6 +252,11 @@ class OCPInterface:
     # OCP bus api
     @staticmethod
     def norm_tracks(tracks: list):
+        try:
+            from ovos_utils.ocp import Playlist, MediaEntry
+        except ImportError as e:
+            raise RuntimeError("This method requires ovos-utils ~=0.1") from e
+
         """ensures a list of tracks contains only MediaEntry or Playlist items"""
         assert isinstance(tracks, list)
         # support Playlist and MediaEntry objects in tracks
@@ -479,7 +483,7 @@ class OCPAudioServiceInterface:
         self.bus.emit(Message('ovos.audio.service.set_track_position',
                               {"position": seconds * 1000}))  # convert to ms
 
-    def seek(self, seconds=1):
+    def seek(self, seconds: Union[int, float, timedelta] = 1):
         """Seek X seconds.
 
         Args:
@@ -492,7 +496,7 @@ class OCPAudioServiceInterface:
         else:
             self.seek_forward(seconds)
 
-    def seek_forward(self, seconds=1):
+    def seek_forward(self, seconds: Union[int, float, timedelta] = 1):
         """Skip ahead X seconds.
 
         Args:
@@ -503,7 +507,7 @@ class OCPAudioServiceInterface:
         self.bus.emit(Message('ovos.audio.service.seek_forward',
                               {"seconds": seconds}))
 
-    def seek_backward(self, seconds=1):
+    def seek_backward(self, seconds: Union[int, float, timedelta] = 1):
         """Rewind X seconds
 
          Args:
@@ -641,7 +645,7 @@ class OCPVideoServiceInterface:
         else:
             self.seek_forward(seconds)
 
-    def seek_forward(self, seconds=1):
+    def seek_forward(self, seconds: Union[int, float, timedelta] = 1):
         """Skip ahead X seconds.
 
         Args:
@@ -652,7 +656,7 @@ class OCPVideoServiceInterface:
         self.bus.emit(Message('ovos.video.service.seek_forward',
                               {"seconds": seconds}))
 
-    def seek_backward(self, seconds=1):
+    def seek_backward(self, seconds: Union[int, float, timedelta] = 1):
         """Rewind X seconds
 
          Args:
@@ -777,7 +781,7 @@ class OCPWebServiceInterface:
         self.bus.emit(Message('ovos.web.service.set_track_position',
                               {"position": seconds * 1000}))  # convert to ms
 
-    def seek(self, seconds=1):
+    def seek(self, seconds: Union[int, float, timedelta] = 1):
         """Seek X seconds.
 
         Args:
@@ -790,7 +794,7 @@ class OCPWebServiceInterface:
         else:
             self.seek_forward(seconds)
 
-    def seek_forward(self, seconds=1):
+    def seek_forward(self, seconds: Union[int, float, timedelta] = 1):
         """Skip ahead X seconds.
 
         Args:
@@ -801,7 +805,7 @@ class OCPWebServiceInterface:
         self.bus.emit(Message('ovos.web.service.seek_forward',
                               {"seconds": seconds}))
 
-    def seek_backward(self, seconds=1):
+    def seek_backward(self, seconds: Union[int, float, timedelta] = 1):
         """Rewind X seconds
 
          Args:
@@ -841,17 +845,28 @@ class OCPWebServiceInterface:
 
 
 class OCPQuery:
-    cast2audio = [
-        MediaType.MUSIC,
-        MediaType.PODCAST,
-        MediaType.AUDIOBOOK,
-        MediaType.RADIO,
-        MediaType.RADIO_THEATRE,
-        MediaType.VISUAL_STORY,
-        MediaType.NEWS
-    ]
+    try:
+        from ovos_utils.ocp import MediaType
+        cast2audio = [
+            MediaType.MUSIC,
+            MediaType.PODCAST,
+            MediaType.AUDIOBOOK,
+            MediaType.RADIO,
+            MediaType.RADIO_THEATRE,
+            MediaType.VISUAL_STORY,
+            MediaType.NEWS
+        ]
+    except ImportError as e:
+        from enum import IntEnum
+
+        class MediaType(IntEnum):
+            GENERIC = 0  # nothing else matches
+
+        cast2audio = None
 
     def __init__(self, query, bus, media_type=MediaType.GENERIC, config=None):
+        if self.cast2audio is None:
+            raise RuntimeError("This class requires ovos-utils ~=0.1")
         LOG.debug(f"Created {media_type.name} query: {query}")
         self.query = query
         self.media_type = media_type
@@ -860,6 +875,10 @@ class OCPQuery:
         self.reset()
 
     def reset(self):
+        try:
+            from ovos_utils.ocp import PlaybackMode
+        except ImportError as e:
+            raise RuntimeError("This method requires ovos-utils ~=0.1") from e
         self.active_skills = {}
         self.active_skills_lock = Lock()
         self.query_replies = []
@@ -887,6 +906,10 @@ class OCPQuery:
                                    "question_type": self.media_type}))
 
     def wait(self):
+        try:
+            from ovos_utils.ocp import MediaType
+        except ImportError as e:
+            raise RuntimeError("This method requires ovos-utils ~=0.1") from e
         # if there is no match type defined, lets increase timeout a bit
         # since all skills need to search
         if self.media_type == MediaType.GENERIC:
