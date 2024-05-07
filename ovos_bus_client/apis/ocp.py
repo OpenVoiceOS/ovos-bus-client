@@ -847,20 +847,26 @@ class OCPWebServiceInterface:
 class OCPQuery:
     try:
         from ovos_utils.ocp import MediaType
+        cast2audio = [
+            MediaType.MUSIC,
+            MediaType.PODCAST,
+            MediaType.AUDIOBOOK,
+            MediaType.RADIO,
+            MediaType.RADIO_THEATRE,
+            MediaType.VISUAL_STORY,
+            MediaType.NEWS
+        ]
     except ImportError as e:
-        raise RuntimeError("This class requires ovos-utils ~=0.1") from e
+        from enum import IntEnum
 
-    cast2audio = [
-        MediaType.MUSIC,
-        MediaType.PODCAST,
-        MediaType.AUDIOBOOK,
-        MediaType.RADIO,
-        MediaType.RADIO_THEATRE,
-        MediaType.VISUAL_STORY,
-        MediaType.NEWS
-    ]
+        class MediaType(IntEnum):
+            GENERIC = 0  # nothing else matches
+
+        cast2audio = None
 
     def __init__(self, query, bus, media_type=MediaType.GENERIC, config=None):
+        if self.cast2audio is None:
+            raise RuntimeError("This class requires ovos-utils ~=0.1")
         LOG.debug(f"Created {media_type.name} query: {query}")
         self.query = query
         self.media_type = media_type
