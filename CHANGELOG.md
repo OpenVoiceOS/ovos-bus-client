@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased](https://github.com/OpenVoiceOS/ovos-bus-client/tree/HEAD)
+## [0.0.9a21](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a21) (2024-05-08)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...HEAD)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a21)
 
 **Breaking changes:**
 
@@ -13,6 +13,10 @@
 - feat/track\_speaking+recording\_per\_session [\#93](https://github.com/OpenVoiceOS/ovos-bus-client/pull/93) ([JarbasAl](https://github.com/JarbasAl))
 - feat/add\_units\_to\_session [\#90](https://github.com/OpenVoiceOS/ovos-bus-client/pull/90) ([JarbasAl](https://github.com/JarbasAl))
 - feat/targeted OCP queries [\#88](https://github.com/OpenVoiceOS/ovos-bus-client/pull/88) ([NeonJarbas](https://github.com/NeonJarbas))
+
+**Fixed bugs:**
+
+- Update setup.py to resolve version automation bug [\#95](https://github.com/OpenVoiceOS/ovos-bus-client/pull/95) ([NeonDaniel](https://github.com/NeonDaniel))
 
 **Merged pull requests:**
 
