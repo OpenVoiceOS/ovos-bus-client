@@ -8,8 +8,7 @@ BASEDIR = os.path.abspath(os.path.dirname(__file__))
 
 def required(requirements_file):
     """ Read requirements file and remove comments and empty lines. """
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    with open(os.path.join(base_dir, requirements_file), 'r') as f:
+    with open(os.path.join(BASEDIR, requirements_file), 'r') as f:
         requirements = f.read().splitlines()
         if 'MYCROFT_LOOSE_REQUIREMENTS' in os.environ:
             print('USING LOOSE REQUIREMENTS!')
@@ -42,7 +41,8 @@ def get_version():
         version += f"a{alpha}"
     return version
 
-with open("README.md", "r") as f:
+
+with open(os.path.join(BASEDIR, "README.md"), "r") as f:
     long_description = f.read()
 
 setup(
