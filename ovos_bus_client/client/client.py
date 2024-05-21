@@ -116,11 +116,13 @@ class MessageBusClient(_MessageBusClientBase):
             LOG.warning('Could not send message because connection has closed')
         elif isinstance(error, ConnectionRefusedError):
             LOG.warning('Connection Refused. Is Messagebus Service running?')
+        elif isinstance(error, ConnectionResetError):
+            LOG.warning('Connection Reset. Did the Messagebus Service stop?')
         else:
             LOG.exception('=== %s ===', repr(error))
+            self.emitter.emit('error', error)
 
         try:
-            self.emitter.emit('error', error)
             if self.client.keep_running:
                 self.client.close()
         except Exception as e:
