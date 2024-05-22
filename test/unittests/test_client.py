@@ -9,12 +9,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import secrets
 import unittest
+from multiprocessing import Process, Event
+from threading import Thread
+
+from time import sleep, time
 from unittest.mock import call, Mock, patch
 
 from pyee import ExecutorEventEmitter
 
+import ovos_messagebus.__main__
 from ovos_bus_client.message import Message
 from ovos_bus_client.client.client import MessageBusClient, GUIWebsocketClient
 from ovos_bus_client.client import MessageWaiter, MessageCollector
@@ -217,3 +222,97 @@ class TestMessageCollector:
         collector._receive_response(valid_response)
         collector._receive_response(invalid_response)
         assert collector.collect() == [valid_response]
+
+
+class TestClientConnections(unittest.TestCase):
+    service_proc: Process = None
+    num_clients = 128
+    clients = []
+
+    @classmethod
+    def setUpClass(cls):
+        from ovos_messagebus.__main__ import main
+        ovos_messagebus.__main__.reset_sigint_handler = Mock()
+        ready_event = Event()
+
+        def ready():
+            ready_event.set()
+
+        cls.service_proc = Process(target=main, args=(ready,))
+        cls.service_proc.start()
+        if not ready_event.wait(10):
+            raise TimeoutError("Timed out waiting for bus service to start")
+
+    def tearDown(self):
+        for client in self.clients:
+            client.close()
+        self.clients = []
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.service_proc.terminate()
+        cls.service_proc.join(timeout=5)
+        cls.service_proc.kill()
+
+    def test_create_clients(self):
+        for i in range(self.num_clients):
+            client = MessageBusClient()
+            self.clients.append(client)
+            client.run_in_thread()
+            self.assertTrue(client.connected_event.wait(5))
+
+        self.assertEqual(len(self.clients), self.num_clients)
+        self.assertTrue(all((client.connected_event.is_set()
+                             for client in self.clients)))
+
+        for client in self.clients:
+            client.close()
+            self.assertFalse(client.connected_event.is_set())
+        self.clients = []
+
+    def test_handle_messages(self):
+        handled = []
+        test_messages = []
+
+        def handler(message):
+            self.assertIsInstance(message, Message)
+            self.assertIsInstance(message.data['test'], str)
+            self.assertIsInstance(message.context['test'], str)
+            handled.append(message)
+
+        for i in range(self.num_clients):
+            client = MessageBusClient()
+            self.clients.append(client)
+            client.run_in_thread()
+            self.assertTrue(client.connected_event.wait(5))
+            client.on("test.message", handler)
+            client.on(f"test.message{i}", handler)
+            test_messages.append(Message(f"test.message{i}",
+                                         {"test": secrets.token_hex(1024)},
+                                         {"test": secrets.token_hex(512)}))
+
+        sender = MessageBusClient()
+        sender.run_in_thread()
+        self.assertTrue(sender.connected_event.wait(5))
+
+        # Send one message to many handlers
+        test_message = Message("test.message", {"test": ""}, {"test": ""})
+        sender.emit(test_message)
+        timeout = time() + 10
+        while len(handled) < self.num_clients and time() < timeout:
+            sleep(1)
+        self.assertEqual(len(handled), self.num_clients)
+
+        # Send many messages to many handlers
+        handled = []
+        for message in test_messages:
+            Thread(target=sender.emit, args=(message,)).start()
+        timeout = time() + 30
+        while len(handled) < self.num_clients and time() < timeout:
+            sleep(1)
+        self.assertEqual(len(handled), self.num_clients)
+
+        sender.close()
+        for client in self.clients:
+            client.close()
+        self.clients = []
