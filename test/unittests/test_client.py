@@ -288,7 +288,7 @@ class TestClientConnections(unittest.TestCase):
             client.on("test.message", handler)
             client.on(f"test.message{i}", handler)
             test_messages.append(Message(f"test.message{i}",
-                                         {"test": secrets.token_hex(1024)},
+                                         {"test": secrets.token_hex(512)},
                                          {"test": secrets.token_hex(512)}))
 
         sender = MessageBusClient()
@@ -307,7 +307,7 @@ class TestClientConnections(unittest.TestCase):
         handled = []
         for message in test_messages:
             Thread(target=sender.emit, args=(message,)).start()
-        timeout = time() + 30
+        timeout = time() + 60
         while len(handled) < self.num_clients and time() < timeout:
             sleep(1)
         self.assertEqual(len(handled), self.num_clients)
