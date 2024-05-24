@@ -253,7 +253,7 @@ class OCPInterface:
     @staticmethod
     def norm_tracks(tracks: list):
         try:
-            from ovos_utils.ocp import Playlist, MediaEntry
+            from ovos_utils.ocp import Playlist, MediaEntry, PluginStream
         except ImportError as e:
             raise RuntimeError("This method requires ovos-utils ~=0.1") from e
 
@@ -263,14 +263,20 @@ class OCPInterface:
         for idx, track in enumerate(tracks):
             if isinstance(track, dict):
                 tracks[idx] = MediaEntry.from_dict(track)
+            elif isinstance(track, PluginStream):
+                # TODO - this method will be deprecated
+                #  once all SEI parsers can handle the new objects
+                #  this module can serialize them just fine,
+                #  but we dont know who is listening
+                tracks[idx] = track.as_media_entry()
             elif isinstance(track, list) and not isinstance(track, Playlist):
                 tracks[idx] = OCPInterface.norm_tracks(track)
-            elif not isinstance(track, MediaEntry):
+            elif not isinstance(track, (MediaEntry, PluginStream)):
                 # TODO - support string uris
                 # let it fail in next assert
                 # log all bad entries before failing
                 LOG.error(f"Bad track, invalid type: {track}")
-        assert all(isinstance(t, (MediaEntry, Playlist)) for t in tracks)
+        assert all(isinstance(t, (MediaEntry, Playlist, PluginStream)) for t in tracks)
         return tracks
 
     def queue(self, tracks: list):
