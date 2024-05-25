@@ -253,7 +253,7 @@ class OCPInterface:
     @staticmethod
     def norm_tracks(tracks: list):
         try:
-            from ovos_utils.ocp import Playlist, MediaEntry, PluginStream
+            from ovos_utils.ocp import Playlist, MediaEntry, PluginStream, dict2entry
         except ImportError as e:
             raise RuntimeError("This method requires ovos-utils ~=0.1") from e
 
@@ -262,7 +262,7 @@ class OCPInterface:
         # support Playlist and MediaEntry objects in tracks
         for idx, track in enumerate(tracks):
             if isinstance(track, dict):
-                tracks[idx] = MediaEntry.from_dict(track)
+                tracks[idx] = dict2entry(track)
             elif isinstance(track, PluginStream):
                 # TODO - this method will be deprecated
                 #  once all SEI parsers can handle the new objects
