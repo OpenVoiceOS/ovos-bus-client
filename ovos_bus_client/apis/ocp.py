@@ -263,7 +263,7 @@ class OCPInterface:
         for idx, track in enumerate(tracks):
             if isinstance(track, dict):
                 tracks[idx] = dict2entry(track)
-            elif isinstance(track, PluginStream):
+            if isinstance(track, PluginStream):
                 # TODO - this method will be deprecated
                 #  once all SEI parsers can handle the new objects
                 #  this module can serialize them just fine,
@@ -271,7 +271,7 @@ class OCPInterface:
                 tracks[idx] = track.as_media_entry()
             elif isinstance(track, list) and not isinstance(track, Playlist):
                 tracks[idx] = OCPInterface.norm_tracks(track)
-            elif not isinstance(track, (MediaEntry, PluginStream)):
+            elif not isinstance(track, MediaEntry):
                 # TODO - support string uris
                 # let it fail in next assert
                 # log all bad entries before failing
