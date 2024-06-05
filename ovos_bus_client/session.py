@@ -276,7 +276,9 @@ class Session:
                  time_format: str = None,
                  date_format: str = None,
                  is_speaking: bool = False,
-                 is_recording: bool = False):
+                 is_recording: bool = False,
+                 blacklisted_intents: Optional[List[str]] = None,
+                 blacklisted_skills: Optional[List[str]] = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -291,7 +293,10 @@ class Session:
         if stt_prefs:
             LOG.warning("stt_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
         self.session_id = session_id or str(uuid4())
-
+        self.blacklisted_skills = (blacklisted_skills or
+                                   Configuration().get("skills", {}).get("blacklisted_skills", []))
+        self.blacklisted_intents = (blacklisted_intents or
+                                    Configuration().get("intents", {}).get("blacklisted_intents", []))
         self.lang = lang or get_default_lang()
         self.system_unit = system_unit or Configuration().get("system_unit", "metric")
         self.date_format = date_format or Configuration().get("date_format", "DMY")
@@ -424,7 +429,9 @@ class Session:
             "time_format": self.time_format,
             "date_format": self.date_format,
             "is_speaking": self.is_speaking,
-            "is_recording": self.is_recording
+            "is_recording": self.is_recording,
+            "blacklisted_skills": self.blacklisted_skills,
+            "blacklisted_intents": self.blacklisted_intents
         }
 
     def update_history(self, message: Message = None):
@@ -455,6 +462,8 @@ class Session:
         time_format = data.get("time_format")
         is_recording = data.get("is_recording", False)
         is_speaking = data.get("is_speaking", False)
+        blacklisted_skills = data.get("blacklisted_skills", [])
+        blacklisted_intents = data.get("blacklisted_intents", [])
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -467,7 +476,9 @@ class Session:
                        date_format=date_format,
                        time_format=time_format,
                        is_recording=is_recording,
-                       is_speaking=is_speaking)
+                       is_speaking=is_speaking,
+                       blacklisted_intents=blacklisted_intents,
+                       blacklisted_skills=blacklisted_skills)
 
     @staticmethod
     def from_message(message: Message = None):
