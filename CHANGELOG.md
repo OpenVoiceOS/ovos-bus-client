@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.0.9a22](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a22) (2024-06-05)
+## [0.0.9a23](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a23) (2024-06-20)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a22)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a23)
 
 **Breaking changes:**
 
@@ -21,6 +21,7 @@
 
 **Merged pull requests:**
 
+- refactor/handle\_new\_SEIs [\#97](https://github.com/OpenVoiceOS/ovos-bus-client/pull/97) ([JarbasAl](https://github.com/JarbasAl))
 - Update imports to support ovos-utils~=0.0.x with compat. warnings [\#94](https://github.com/OpenVoiceOS/ovos-bus-client/pull/94) ([NeonDaniel](https://github.com/NeonDaniel))
 
 ## [V](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V) (2024-03-10)
