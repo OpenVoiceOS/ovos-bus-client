@@ -268,7 +268,7 @@ class OCPInterface:
                 #  once all SEI parsers can handle the new objects
                 #  this module can serialize them just fine,
                 #  but we dont know who is listening
-                tracks[idx] = track.as_media_entry()
+                tracks[idx] = track.as_media_entry
             elif isinstance(track, list) and not isinstance(track, Playlist):
                 tracks[idx] = OCPInterface.norm_tracks(track)
             elif not isinstance(track, MediaEntry):
