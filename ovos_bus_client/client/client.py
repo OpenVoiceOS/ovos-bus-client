@@ -120,7 +120,10 @@ class MessageBusClient(_MessageBusClientBase):
             LOG.warning('Connection Reset. Did the Messagebus Service stop?')
         else:
             LOG.exception('=== %s ===', repr(error))
-            self.emitter.emit('error', error)
+            try:
+                self.emitter.emit('error', error)
+            except Exception as e:
+                LOG.exception(f'Failed to emit error event: {e}')
 
         try:
             if self.client.keep_running:
