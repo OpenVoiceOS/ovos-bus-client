@@ -35,12 +35,12 @@ def ensure_uri(s: str):
         if s is uri, s is returned otherwise file:// is prepended
     """
     if isinstance(s, str):
-        if '://' not in s:
+        if ':' not in s:
             return 'file://' + abspath(s)
         else:
             return s
     elif isinstance(s, (tuple, list)):  # Handle (mime, uri) arg
-        if '://' not in s[0]:
+        if ':' not in s[0]:
             return 'file://' + abspath(s[0]), s[1]
         else:
             return s
@@ -271,7 +271,7 @@ class OCPInterface:
                 tracks[idx] = track.as_media_entry
             elif isinstance(track, list) and not isinstance(track, Playlist):
                 tracks[idx] = OCPInterface.norm_tracks(track)
-            elif not isinstance(track, MediaEntry):
+            elif not isinstance(track, (Playlist, MediaEntry)):
                 # TODO - support string uris
                 # let it fail in next assert
                 # log all bad entries before failing
