@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.0.9a26](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a26) (2024-07-05)
+## [0.0.9a27](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a27) (2024-07-12)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a26)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a27)
 
 **Breaking changes:**
 
@@ -17,6 +17,7 @@
 
 **Fixed bugs:**
 
+- fix/ocp\_api\_context [\#103](https://github.com/OpenVoiceOS/ovos-bus-client/pull/103) ([JarbasAl](https://github.com/JarbasAl))
 - fix/ocp\_uris [\#102](https://github.com/OpenVoiceOS/ovos-bus-client/pull/102) ([JarbasAl](https://github.com/JarbasAl))
 - hotfix/StreamPlugin [\#100](https://github.com/OpenVoiceOS/ovos-bus-client/pull/100) ([JarbasAl](https://github.com/JarbasAl))
 - Update error handling to reduce unhandled exceptions [\#96](https://github.com/OpenVoiceOS/ovos-bus-client/pull/96) ([NeonDaniel](https://github.com/NeonDaniel))
