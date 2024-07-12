@@ -12,6 +12,7 @@
 #
 import time
 from datetime import timedelta
+from functools import wraps
 from os.path import abspath
 from threading import Lock
 from typing import List, Union, Optional
@@ -48,22 +49,29 @@ def ensure_uri(s: str):
         raise ValueError('Invalid track')
 
 
-def _format_msg(msg_type, msg_data=None, source_message: Optional[Message] = None):
-    # this method ensures all skills are .forward from the utterance
-    # that triggered the skill, this ensures proper routing and metadata
-    msg_data = msg_data or {}
-    source_message = source_message or dig_for_message()
-    if source_message:
-        source_message = source_message.forward(msg_type, msg_data)
-    else:
-        LOG.warning("source message could not be determined, message.context has been lost!")
-        source_message = Message(msg_type, msg_data)
+def _ensure_message_kwarg():
+    """
+    ensure message kwarg is present
+    """
 
-    # at this stage source == skills, lets indicate audio service took over
-    sauce = source_message.context.get("source")
-    if sauce == "skills":
-        source_message.context["source"] = "audio_service"
-    return source_message
+    def message_injector(func):
+        # this method ensures all skills messages are .forward from the utterance
+        # that triggered the skill, this ensures proper routing and metadata in message.context
+        @wraps(func)
+        def call_function(*args, **kwargs):
+            m = kwargs.get("source_message")
+            if not m:
+                source_message = dig_for_message(max_records=50)
+                if source_message:
+                    kwargs["source_message"] = source_message
+                else:
+                    LOG.warning("source message could not be determined, message.context has been lost!")
+                    kwargs["source_message"] = Message("")
+            return func(*args, **kwargs)
+
+        return call_function
+
+    return message_injector
 
 
 class ClassicAudioServiceInterface:
@@ -86,6 +94,7 @@ class ClassicAudioServiceInterface:
     def __init__(self, bus=None):
         self.bus = bus or get_mycroft_bus()
 
+    @_ensure_message_kwarg()
     def queue(self, tracks=None, source_message: Optional[Message] = None):
         """Queue up a track to playing playlist.
 
@@ -93,6 +102,7 @@ class ClassicAudioServiceInterface:
             tracks: track uri or list of track uri's
                     Each track can be added as a tuple with (uri, mime)
                     to give a hint of the mime type to the system
+            source_message: bus message that triggered this action
         """
         tracks = tracks or []
         if isinstance(tracks, (str, tuple)):
@@ -100,11 +110,10 @@ class ClassicAudioServiceInterface:
         elif not isinstance(tracks, list):
             raise ValueError
         tracks = [ensure_uri(t) for t in tracks]
-        m = _format_msg(msg_type='mycroft.audio.service.queue',
-                        msg_data={'tracks': tracks},
-                        source_message=source_message)
-        self.bus.emit(m)
+        self.bus.emit(source_message.forward('mycroft.audio.service.queue',
+                                             {'tracks': tracks}))
 
+    @_ensure_message_kwarg()
     def play(self, tracks=None, utterance=None, repeat=None, source_message: Optional[Message] = None):
         """Start playback.
 
@@ -115,6 +124,7 @@ class ClassicAudioServiceInterface:
             utterance: forward utterance for further processing by the
                         audio service.
             repeat: if the playback should be looped
+            source_message: bus message that triggered this action
         """
         repeat = repeat or False
         tracks = tracks or []
@@ -124,141 +134,154 @@ class ClassicAudioServiceInterface:
         elif not isinstance(tracks, list):
             raise ValueError
         tracks = [ensure_uri(t) for t in tracks]
-        m = _format_msg(msg_type='mycroft.audio.service.play',
-                        msg_data={'tracks': tracks,
-                                  'utterance': utterance,
-                                  'repeat': repeat},
-                        source_message=source_message)
-        self.bus.emit(m)
+        self.bus.emit(source_message.forward('mycroft.audio.service.play',
+                                             {'tracks': tracks,
+                                              'utterance': utterance,
+                                              'repeat': repeat}))
 
+    @_ensure_message_kwarg()
     def stop(self, source_message: Optional[Message] = None):
-        """Stop the track."""
-        m = _format_msg(msg_type='mycroft.audio.service.stop',
-                        source_message=source_message)
-        self.bus.emit(m)
+        """Stop the track.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward('mycroft.audio.service.stop'))
 
+    @_ensure_message_kwarg()
     def next(self, source_message: Optional[Message] = None):
-        """Change to next track."""
-        m = _format_msg(msg_type='mycroft.audio.service.next',
-                        source_message=source_message)
-        self.bus.emit(m)
+        """Change to next track.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward('mycroft.audio.service.next'))
 
+    @_ensure_message_kwarg()
     def prev(self, source_message: Optional[Message] = None):
-        """Change to previous track."""
-        m = _format_msg(msg_type='mycroft.audio.service.prev',
-                        source_message=source_message)
-        self.bus.emit(m)
+        """Change to previous track.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward('mycroft.audio.service.prev'))
 
+    @_ensure_message_kwarg()
     def pause(self, source_message: Optional[Message] = None):
-        """Pause playback."""
-        m = _format_msg(msg_type='mycroft.audio.service.pause',
-                        source_message=source_message)
-        self.bus.emit(m)
+        """Pause playback.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward('mycroft.audio.service.pause'))
 
+    @_ensure_message_kwarg()
     def resume(self, source_message: Optional[Message] = None):
-        """Resume paused playback."""
-        m = _format_msg(msg_type='mycroft.audio.service.resume',
-                        source_message=source_message)
-        self.bus.emit(m)
+        """Resume paused playback.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward('mycroft.audio.service.resume'))
 
+    @_ensure_message_kwarg()
     def get_track_length(self, source_message: Optional[Message] = None):
         """
         getting the duration of the audio in seconds
+         Args:
+            source_message: bus message that triggered this action
         """
         length = 0
-        m = _format_msg(msg_type='mycroft.audio.service.get_track_length',
-                        source_message=source_message)
+        m = source_message.forward(msg_type='mycroft.audio.service.get_track_length')
         info = self.bus.wait_for_response(m, timeout=1)
         if info:
             length = info.data.get("length") or 0
         return length / 1000  # convert to seconds
 
+    @_ensure_message_kwarg()
     def get_track_position(self, source_message: Optional[Message] = None):
         """
         get current position in seconds
+         Args:
+            source_message: bus message that triggered this action
         """
         pos = 0
-        m = _format_msg(msg_type='mycroft.audio.service.get_track_position',
-                        source_message=source_message)
+        m = source_message.forward('mycroft.audio.service.get_track_position')
         info = self.bus.wait_for_response(m, timeout=1)
         if info:
             pos = info.data.get("position") or 0
         return pos / 1000  # convert to seconds
 
+    @_ensure_message_kwarg()
     def set_track_position(self, seconds, source_message: Optional[Message] = None):
         """Seek X seconds.
 
         Arguments:
             seconds (int): number of seconds to seek, if negative rewind
+            source_message: bus message that triggered this action
         """
-        m = _format_msg(msg_type='mycroft.audio.service.set_track_position',
-                        msg_data={"position": seconds * 1000},
-                        source_message=source_message)
-        self.bus.emit(m)
+        self.bus.emit(source_message.forward('mycroft.audio.service.set_track_position',
+                                             {"position": seconds * 1000}))
 
+    @_ensure_message_kwarg()
     def seek(self, seconds: Union[int, float, timedelta] = 1,
              source_message: Optional[Message] = None):
         """Seek X seconds.
 
         Args:
             seconds (int): number of seconds to seek, if negative rewind
+            source_message: bus message that triggered this action
         """
         if isinstance(seconds, timedelta):
             seconds = seconds.total_seconds()
         if seconds < 0:
-            self.seek_backward(abs(seconds))
+            self.seek_backward(abs(seconds), source_message=source_message)
         else:
-            self.seek_forward(seconds)
+            self.seek_forward(seconds, source_message=source_message)
 
+    @_ensure_message_kwarg()
     def seek_forward(self, seconds: Union[int, float, timedelta] = 1,
                      source_message: Optional[Message] = None):
         """Skip ahead X seconds.
 
         Args:
             seconds (int): number of seconds to skip
+            source_message: bus message that triggered this action
         """
         if isinstance(seconds, timedelta):
             seconds = seconds.total_seconds()
-        m = _format_msg(msg_type='mycroft.audio.service.seek_forward',
-                        msg_data={"seconds": seconds},
-                        source_message=source_message)
-        self.bus.emit(m)
+        self.bus.emit(source_message.forward('mycroft.audio.service.seek_forward',
+                                             {"seconds": seconds}))
 
+    @_ensure_message_kwarg()
     def seek_backward(self, seconds: Union[int, float, timedelta] = 1, source_message: Optional[Message] = None):
         """Rewind X seconds
 
          Args:
             seconds (int): number of seconds to rewind
+            source_message: bus message that triggered this action
         """
         if isinstance(seconds, timedelta):
             seconds = seconds.total_seconds()
-        m = _format_msg(msg_type='mycroft.audio.service.seek_backward',
-                        msg_data={"seconds": seconds},
-                        source_message=source_message)
-        self.bus.emit(m)
+        self.bus.emit(source_message.forward('mycroft.audio.service.seek_backward',
+                                             {"seconds": seconds}))
 
+    @_ensure_message_kwarg()
     def track_info(self, source_message: Optional[Message] = None):
         """Request information of current playing track.
+         Args:
+            source_message: bus message that triggered this action
 
         Returns:
             Dict with track info.
         """
-        m = _format_msg(msg_type='mycroft.audio.service.track_info',
-                        source_message=source_message)
+        m = source_message.forward('mycroft.audio.service.track_info')
 
         info = self.bus.wait_for_response(m,
                                           reply_type='mycroft.audio.service.track_info_reply',
                                           timeout=1)
         return info.data if info else {}
 
+    @_ensure_message_kwarg()
     def available_backends(self, source_message: Optional[Message] = None):
         """Return available audio backends.
+         Args:
+            source_message: bus message that triggered this action
 
         Returns:
             dict with backend names as keys
         """
-        m = _format_msg(msg_type='mycroft.audio.service.list_backends',
-                        source_message=source_message)
+        m = source_message.forward('mycroft.audio.service.list_backends')
         response = self.bus.wait_for_response(m)
         return response.data if response else {}
 
@@ -307,140 +330,153 @@ class OCPInterface:
         assert all(isinstance(t, (MediaEntry, Playlist, PluginStream)) for t in tracks)
         return tracks
 
+    @_ensure_message_kwarg()
     def queue(self, tracks: list, source_message: Optional[Message] = None):
         """Queue up a track to OCP playing playlist.
 
         Args:
             tracks: track dict or list of track dicts (OCP result style)
+            source_message: bus message that triggered this action
         """
         tracks = self.norm_tracks(tracks)
-        msg = _format_msg('ovos.common_play.playlist.queue',
-                          {'tracks': tracks},
-                          source_message=source_message)
-        self.bus.emit(msg)
+        self.bus.emit(source_message.forward('ovos.common_play.playlist.queue',
+                                             {'tracks': tracks}))
 
+    @_ensure_message_kwarg()
     def play(self, tracks: list, utterance=None, source_message: Optional[Message] = None):
         """Start playback.
         Args:
             tracks: track dict or list of track dicts (OCP result style)
             utterance: forward utterance for further processing by OCP
+            source_message: bus message that triggered this action
         """
         tracks = self.norm_tracks(tracks)
 
         utterance = utterance or ''
         tracks = [t.as_dict for t in tracks]
-        msg = _format_msg('ovos.common_play.play',
-                          {"media": tracks[0],
-                           "playlist": tracks,
-                           "utterance": utterance},
-                          source_message=source_message)
-        self.bus.emit(msg)
+        self.bus.emit(source_message.forward('ovos.common_play.play',
+                                             {"media": tracks[0],
+                                              "playlist": tracks,
+                                              "utterance": utterance}))
 
+    @_ensure_message_kwarg()
     def stop(self, source_message: Optional[Message] = None):
-        """Stop the track."""
-        msg = _format_msg("ovos.common_play.stop",
-                          source_message=source_message)
-        self.bus.emit(msg)
+        """Stop the track.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward("ovos.common_play.stop"))
 
+    @_ensure_message_kwarg()
     def next(self, source_message: Optional[Message] = None):
-        """Change to next track."""
-        msg = _format_msg("ovos.common_play.next",
-                          source_message=source_message)
-        self.bus.emit(msg)
+        """Change to next track.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward("ovos.common_play.next"))
 
+    @_ensure_message_kwarg()
     def prev(self, source_message: Optional[Message] = None):
-        """Change to previous track."""
-        msg = _format_msg("ovos.common_play.previous",
-                          source_message=source_message)
-        self.bus.emit(msg)
+        """Change to previous track.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward("ovos.common_play.previous"))
 
+    @_ensure_message_kwarg()
     def pause(self, source_message: Optional[Message] = None):
-        """Pause playback."""
-        msg = _format_msg("ovos.common_play.pause",
-                          source_message=source_message)
-        self.bus.emit(msg)
+        """Pause playback.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward("ovos.common_play.pause"))
 
+    @_ensure_message_kwarg()
     def resume(self, source_message: Optional[Message] = None):
-        """Resume paused playback."""
-        msg = _format_msg("ovos.common_play.resume",
-                          source_message=source_message)
-        self.bus.emit(msg)
+        """Resume paused playback.
+         Args:
+            source_message: bus message that triggered this action"""
+        self.bus.emit(source_message.forward("ovos.common_play.resume"))
 
+    @_ensure_message_kwarg()
     def seek_forward(self, seconds=1, source_message: Optional[Message] = None):
         """Skip ahead X seconds.
         Args:
             seconds (int): number of seconds to skip
+            source_message: bus message that triggered this action
         """
         if isinstance(seconds, timedelta):
             seconds = seconds.total_seconds()
-        msg = _format_msg('ovos.common_play.seek',
-                          {"seconds": seconds},
-                          source_message=source_message)
-        self.bus.emit(msg)
+        self.bus.emit(source_message.forward('ovos.common_play.seek',
+                                             {"seconds": seconds}))
 
+    @_ensure_message_kwarg()
     def seek_backward(self, seconds=1, source_message: Optional[Message] = None):
         """Rewind X seconds
          Args:
             seconds (int): number of seconds to rewind
+            source_message: bus message that triggered this action
         """
         if isinstance(seconds, timedelta):
             seconds = seconds.total_seconds()
-        msg = _format_msg('ovos.common_play.seek',
-                          {"seconds": seconds * -1},
-                          source_message=source_message)
-        self.bus.emit(msg)
+        self.bus.emit(source_message.forward('ovos.common_play.seek',
+                                             {"seconds": seconds * -1}))
 
+    @_ensure_message_kwarg()
     def get_track_length(self, source_message: Optional[Message] = None):
         """
         getting the duration of the audio in miliseconds
+         Args:
+            source_message: bus message that triggered this action
         """
         length = 0
-        msg = _format_msg('ovos.common_play.get_track_length',
-                          source_message=source_message)
+        msg = source_message.forward('ovos.common_play.get_track_length')
         info = self.bus.wait_for_response(msg, timeout=1)
         if info:
             length = info.data.get("length", 0)
         return length
 
+    @_ensure_message_kwarg()
     def get_track_position(self, source_message: Optional[Message] = None):
         """
         get current position in miliseconds
+         Args:
+            source_message: bus message that triggered this action
         """
         pos = 0
-        msg = _format_msg('ovos.common_play.get_track_position',
-                          source_message=source_message)
+        msg = source_message.forward('ovos.common_play.get_track_position')
         info = self.bus.wait_for_response(msg, timeout=1)
         if info:
             pos = info.data.get("position", 0)
         return pos
 
+    @_ensure_message_kwarg()
     def set_track_position(self, miliseconds, source_message: Optional[Message] = None):
         """Go to X position.
         Arguments:
-           miliseconds (int): position to go to in miliseconds
+            miliseconds (int): position to go to in miliseconds
+            source_message: bus message that triggered this action
         """
-        msg = _format_msg('ovos.common_play.set_track_position',
-                          {"position": miliseconds},
-                          source_message=source_message)
-        self.bus.emit(msg)
+        self.bus.emit(source_message.forward('ovos.common_play.set_track_position',
+                                             {"position": miliseconds}))
 
+    @_ensure_message_kwarg()
     def track_info(self, source_message: Optional[Message] = None):
         """Request information of current playing track.
+         Args:
+            source_message: bus message that triggered this action
         Returns:
             Dict with track info.
         """
-        msg = _format_msg('ovos.common_play.track_info',
-                          source_message=source_message)
+        msg = source_message.forward('ovos.common_play.track_info')
         response = self.bus.wait_for_response(msg)
         return response.data if response else {}
 
+    @_ensure_message_kwarg()
     def available_backends(self, source_message: Optional[Message] = None):
         """Return available audio backends.
+         Args:
+            source_message: bus message that triggered this action
         Returns:
             dict with backend names as keys
         """
-        msg = _format_msg('ovos.common_play.list_backends',
-                          source_message=source_message)
+        msg = source_message.forward('ovos.common_play.list_backends')
         response = self.bus.wait_for_response(msg)
         return response.data if response else {}
 
