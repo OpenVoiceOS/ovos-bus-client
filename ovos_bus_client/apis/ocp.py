@@ -182,7 +182,7 @@ class ClassicAudioServiceInterface:
             source_message: bus message that triggered this action
         """
         length = 0
-        m = source_message.forward(msg_type='mycroft.audio.service.get_track_length')
+        m = source_message.forward('mycroft.audio.service.get_track_length')
         info = self.bus.wait_for_response(m, timeout=1)
         if info:
             length = info.data.get("length") or 0
@@ -211,7 +211,7 @@ class ClassicAudioServiceInterface:
             source_message: bus message that triggered this action
         """
         self.bus.emit(source_message.forward('mycroft.audio.service.set_track_position',
-                                             {"position": seconds * 1000}))
+                                             {"position": seconds * 1000}))  # convert to ms
 
     @_ensure_message_kwarg()
     def seek(self, seconds: Union[int, float, timedelta] = 1,
@@ -266,7 +266,6 @@ class ClassicAudioServiceInterface:
             Dict with track info.
         """
         m = source_message.forward('mycroft.audio.service.track_info')
-
         info = self.bus.wait_for_response(m,
                                           reply_type='mycroft.audio.service.track_info_reply',
                                           timeout=1)
