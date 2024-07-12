@@ -529,20 +529,21 @@ class OCPQuery:
         else:
             self.has_gui = is_gui_running() or is_gui_connected(self.bus)
 
-    def send(self, skill_id: str = None):
+    @_ensure_message_kwarg()
+    def send(self, skill_id: str = None, source_message: Optional[Message] = None):
         self.query_replies = []
         self.query_timeouts = self.config.get("min_timeout", 5)
         self.search_start = time.time()
         self.searching = True
         self.register_events()
         if skill_id:
-            self.bus.emit(Message(f'ovos.common_play.query.{skill_id}',
-                                  {"phrase": self.query,
-                                   "question_type": self.media_type}))
+            self.bus.emit(source_message.forward(f'ovos.common_play.query.{skill_id}',
+                                                 {"phrase": self.query,
+                                                  "question_type": self.media_type}))
         else:
-            self.bus.emit(Message('ovos.common_play.query',
-                                  {"phrase": self.query,
-                                   "question_type": self.media_type}))
+            self.bus.emit(source_message.forward('ovos.common_play.query',
+                                                 {"phrase": self.query,
+                                                  "question_type": self.media_type}))
 
     def wait(self):
         try:
