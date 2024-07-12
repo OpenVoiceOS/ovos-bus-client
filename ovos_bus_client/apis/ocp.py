@@ -50,8 +50,8 @@ def ensure_uri(s: str):
 
 
 def _ensure_message_kwarg():
-    """
-    ensure message kwarg is present
+    """ensure message kwarg is present
+    NOTE: this is meant for usage only in this module, it is not a generic decorator!
     """
 
     def message_injector(func):
@@ -59,14 +59,15 @@ def _ensure_message_kwarg():
         # that triggered the skill, this ensures proper routing and metadata in message.context
         @wraps(func)
         def call_function(*args, **kwargs):
-            m = kwargs.get("source_message")
-            if not m:
-                source_message = dig_for_message(max_records=50)
-                if source_message:
-                    kwargs["source_message"] = source_message
-                else:
-                    LOG.warning("source message could not be determined, message.context has been lost!")
-                    kwargs["source_message"] = Message("")
+            if not any([isinstance(a, Message) for a in args]):
+                m = kwargs.get("source_message")
+                if not m:
+                    source_message = dig_for_message(max_records=50)
+                    if source_message:
+                        kwargs["source_message"] = source_message
+                    else:
+                        LOG.warning("source message could not be determined, message.context has been lost!")
+                        kwargs["source_message"] = Message("")
             return func(*args, **kwargs)
 
         return call_function
@@ -182,8 +183,9 @@ class ClassicAudioServiceInterface:
             source_message: bus message that triggered this action
         """
         length = 0
-        m = source_message.forward('mycroft.audio.service.get_track_length')
-        info = self.bus.wait_for_response(m, timeout=1)
+        info = self.bus.wait_for_response(
+            source_message.forward('mycroft.audio.service.get_track_length'),
+            timeout=1)
         if info:
             length = info.data.get("length") or 0
         return length / 1000  # convert to seconds
@@ -196,8 +198,9 @@ class ClassicAudioServiceInterface:
             source_message: bus message that triggered this action
         """
         pos = 0
-        m = source_message.forward('mycroft.audio.service.get_track_position')
-        info = self.bus.wait_for_response(m, timeout=1)
+        info = self.bus.wait_for_response(
+            source_message.forward('mycroft.audio.service.get_track_position'),
+            timeout=1)
         if info:
             pos = info.data.get("position") or 0
         return pos / 1000  # convert to seconds
@@ -265,10 +268,10 @@ class ClassicAudioServiceInterface:
         Returns:
             Dict with track info.
         """
-        m = source_message.forward('mycroft.audio.service.track_info')
-        info = self.bus.wait_for_response(m,
-                                          reply_type='mycroft.audio.service.track_info_reply',
-                                          timeout=1)
+        info = self.bus.wait_for_response(
+            source_message.forward('mycroft.audio.service.track_info'),
+            reply_type='mycroft.audio.service.track_info_reply',
+            timeout=1)
         return info.data if info else {}
 
     @_ensure_message_kwarg()
