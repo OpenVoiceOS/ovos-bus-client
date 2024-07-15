@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.0.9a28](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a28) (2024-07-12)
+## [0.0.9a29](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a29) (2024-07-15)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a28)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9a29)
 
 **Breaking changes:**
 
@@ -17,6 +17,7 @@
 
 **Fixed bugs:**
 
+- fix/KeyError [\#105](https://github.com/OpenVoiceOS/ovos-bus-client/pull/105) ([JarbasAl](https://github.com/JarbasAl))
 - fix/ocp\_missing\_context [\#104](https://github.com/OpenVoiceOS/ovos-bus-client/pull/104) ([JarbasAl](https://github.com/JarbasAl))
 - fix/ocp\_api\_context [\#103](https://github.com/OpenVoiceOS/ovos-bus-client/pull/103) ([JarbasAl](https://github.com/JarbasAl))
 - fix/ocp\_uris [\#102](https://github.com/OpenVoiceOS/ovos-bus-client/pull/102) ([JarbasAl](https://github.com/JarbasAl))
