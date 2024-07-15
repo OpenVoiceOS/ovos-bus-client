@@ -340,7 +340,7 @@ class MessageBusClient(_MessageBusClientBase):
             if event_name not in self.emitter._events:
                 LOG.debug("Not able to find '%s'", event_name)
             self.emitter.remove_listener(event_name, func)
-        except ValueError:
+        except (ValueError, KeyError):
             LOG.warning('Failed to remove event %s: %s',
                         event_name, str(func))
             for line in traceback.format_stack():
