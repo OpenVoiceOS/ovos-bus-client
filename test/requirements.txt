@@ -1,3 +1,4 @@
 pytest
 pytest-cov
 mycroft-messagebus-client
+ovos-messagebus
