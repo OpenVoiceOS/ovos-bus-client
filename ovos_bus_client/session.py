@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 
 from ovos_bus_client.message import dig_for_message, Message
 
@@ -289,9 +289,9 @@ class Session:
         @param context: IntentContextManager for this Session
         """
         if tts_prefs:
-            LOG.warning("tts_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
+            log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         if stt_prefs:
-            LOG.warning("stt_prefs have been deprecated! value will be ignored and fully removed in 0.1.0")
+            log_deprecation("'stt_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         self.session_id = session_id or str(uuid4())
         self.blacklisted_skills = (blacklisted_skills or
                                    Configuration().get("skills", {}).get("blacklisted_skills", []))
