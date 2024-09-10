@@ -1,8 +1,16 @@
 # Changelog
 
-## [0.0.9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9) (2024-09-02)
+## [0.0.9a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a2) (2024-09-10)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...0.0.9)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.9a1...0.0.9a2)
+
+**Merged pull requests:**
+
+- chore:semver\_versioning [\#116](https://github.com/OpenVoiceOS/ovos-bus-client/pull/116) ([JarbasAl](https://github.com/JarbasAl))
+
+## [0.0.9a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a1) (2024-09-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9...0.0.9a1)
 
 **Breaking changes:**
 
@@ -27,108 +35,10 @@
 
 **Merged pull requests:**
 
+- chore:semver\_automations [\#114](https://github.com/OpenVoiceOS/ovos-bus-client/pull/114) ([JarbasAl](https://github.com/JarbasAl))
+- deprecation warnings [\#111](https://github.com/OpenVoiceOS/ovos-bus-client/pull/111) ([JarbasAl](https://github.com/JarbasAl))
 - refactor/handle\_new\_SEIs [\#97](https://github.com/OpenVoiceOS/ovos-bus-client/pull/97) ([JarbasAl](https://github.com/JarbasAl))
 - Update imports to support ovos-utils~=0.0.x with compat. warnings [\#94](https://github.com/OpenVoiceOS/ovos-bus-client/pull/94) ([NeonDaniel](https://github.com/NeonDaniel))
-
-## [V](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V) (2024-03-10)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a12...V)
-
-**Merged pull requests:**
-
-- chore\(docs\): add a long description to PyPi [\#86](https://github.com/OpenVoiceOS/ovos-bus-client/pull/86) ([mikejgray](https://github.com/mikejgray))
-
-## [V0.0.9a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a12) (2024-02-21)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a11...V0.0.9a12)
-
-**Implemented enhancements:**
-
-- feat/session\_location [\#85](https://github.com/OpenVoiceOS/ovos-bus-client/pull/85) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.9a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a11) (2024-02-02)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a10...V0.0.9a11)
-
-**Merged pull requests:**
-
-- feat/remove\_all\_pages [\#84](https://github.com/OpenVoiceOS/ovos-bus-client/pull/84) ([NeonJarbas](https://github.com/NeonJarbas))
-
-## [V0.0.9a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a10) (2024-01-29)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a9...V0.0.9a10)
-
-**Fixed bugs:**
-
-- Update default values [\#83](https://github.com/OpenVoiceOS/ovos-bus-client/pull/83) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.9a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a9) (2024-01-23)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a8...V0.0.9a9)
-
-**Fixed bugs:**
-
-- fix/info\_leak [\#81](https://github.com/OpenVoiceOS/ovos-bus-client/pull/81) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.9a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a8) (2024-01-13)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a7...V0.0.9a8)
-
-## [V0.0.9a7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a7) (2024-01-13)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a6...V0.0.9a7)
-
-**Merged pull requests:**
-
-- refactor/orjson [\#75](https://github.com/OpenVoiceOS/ovos-bus-client/pull/75) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.9a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a6) (2024-01-12)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a5...V0.0.9a6)
-
-**Fixed bugs:**
-
-- typo\_and\_docstr [\#79](https://github.com/OpenVoiceOS/ovos-bus-client/pull/79) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.9a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a5) (2024-01-12)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a4...V0.0.9a5)
-
-**Implemented enhancements:**
-
-- feat/ovos-media [\#78](https://github.com/OpenVoiceOS/ovos-bus-client/pull/78) ([NeonJarbas](https://github.com/NeonJarbas))
-
-## [V0.0.9a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a4) (2024-01-09)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a3...V0.0.9a4)
-
-**Fixed bugs:**
-
-- hotfix/avoid\_c++\_crash [\#76](https://github.com/OpenVoiceOS/ovos-bus-client/pull/76) ([JarbasAl](https://github.com/JarbasAl))
-
-## [V0.0.9a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a3) (2024-01-08)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a2...V0.0.9a3)
-
-**Fixed bugs:**
-
-- fix/ocp api [\#77](https://github.com/OpenVoiceOS/ovos-bus-client/pull/77) ([NeonJarbas](https://github.com/NeonJarbas))
-
-## [V0.0.9a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a2) (2024-01-06)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a1...V0.0.9a2)
-
-**Implemented enhancements:**
-
-- fix/ocp api [\#74](https://github.com/OpenVoiceOS/ovos-bus-client/pull/74) ([NeonJarbas](https://github.com/NeonJarbas))
-
-## [V0.0.9a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a1) (2023-12-30)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.8...V0.0.9a1)
-
-**Fixed bugs:**
-
-- fix/log spam [\#73](https://github.com/OpenVoiceOS/ovos-bus-client/pull/73) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
