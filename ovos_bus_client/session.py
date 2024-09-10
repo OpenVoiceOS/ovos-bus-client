@@ -1,12 +1,12 @@
 import enum
 import time
-from threading import Lock
+from threading import Lock, Event
 from typing import Optional, List, Tuple, Union, Iterable, Dict
 from uuid import uuid4
 
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 
 from ovos_bus_client.message import dig_for_message, Message
 
@@ -261,14 +261,24 @@ class IntentContextManager:
 
 
 class Session:
-    def __init__(self, session_id: str = None, expiration_seconds: int = None,
+    def __init__(self, session_id: str = None,
+                 expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
-                 utterance_states: Dict = None, lang: str = None,
+                 utterance_states: Dict = None,
+                 lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
                  pipeline: List[str] = None,
                  stt_prefs: Dict = None,
-                 tts_prefs: Dict = None):
+                 tts_prefs: Dict = None,
+                 location_prefs: Dict = None,
+                 system_unit: str = None,
+                 time_format: str = None,
+                 date_format: str = None,
+                 is_speaking: bool = False,
+                 is_recording: bool = False,
+                 blacklisted_intents: Optional[List[str]] = None,
+                 blacklisted_skills: Optional[List[str]] = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -278,11 +288,23 @@ class Session:
         @param lang: language associated with this Session
         @param context: IntentContextManager for this Session
         """
+        if tts_prefs:
+            log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
+        if stt_prefs:
+            log_deprecation("'stt_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         self.session_id = session_id or str(uuid4())
-
+        self.blacklisted_skills = (blacklisted_skills or
+                                   Configuration().get("skills", {}).get("blacklisted_skills", []))
+        self.blacklisted_intents = (blacklisted_intents or
+                                    Configuration().get("intents", {}).get("blacklisted_intents", []))
         self.lang = lang or get_default_lang()
+        self.system_unit = system_unit or Configuration().get("system_unit", "metric")
+        self.date_format = date_format or Configuration().get("date_format", "DMY")
+        self.time_format = time_format or Configuration().get("time_format", "full")
 
-        self.site_id = site_id or "unknown"  # indoors placement info
+        self.is_recording = is_recording
+        self.is_speaking = is_speaking
+        self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
 
         self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
         self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
@@ -291,31 +313,22 @@ class Session:
         self.expiration_seconds = expiration_seconds or \
                                   Configuration().get('session', {}).get("ttl", -1)
         self.pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
+            "stop_high",
             "converse",
             "padatious_high",
-            "adapt",
-            "common_qa",
+            "adapt_high",
             "fallback_high",
+            "stop_medium",
             "padatious_medium",
+            "adapt_medium",
+            "adapt_low",
+            "common_qa",
             "fallback_medium",
-            "padatious_low",
             "fallback_low"
         ]
         self.context = context or IntentContextManager()
 
-        if not stt_prefs:
-            stt = Configuration().get("stt", {})
-            sttm = stt.get("module", "ovos-stt-plugin-server")
-            stt_prefs = {"plugin_id": sttm,
-                         "config": stt.get(sttm) or {}}
-        self.stt_preferences = stt_prefs
-
-        if not tts_prefs:
-            tts = Configuration().get("tts", {})
-            ttsm = tts.get("module", "ovos-tts-plugin-server")
-            tts_prefs = {"plugin_id": ttsm,
-                         "config": tts.get(ttsm) or {}}
-        self.tts_preferences = tts_prefs
+        self.location_preferences = location_prefs or Configuration().get("location", {})
 
     @property
     def active(self) -> bool:
@@ -411,8 +424,14 @@ class Session:
             "context": self.context.serialize(),
             "site_id": self.site_id,
             "pipeline": self.pipeline,
-            "stt": self.stt_preferences,
-            "tts": self.tts_preferences
+            "location": self.location_preferences,
+            "system_unit": self.system_unit,
+            "time_format": self.time_format,
+            "date_format": self.date_format,
+            "is_speaking": self.is_speaking,
+            "is_recording": self.is_recording,
+            "blacklisted_skills": self.blacklisted_skills,
+            "blacklisted_intents": self.blacklisted_intents
         }
 
     def update_history(self, message: Message = None):
@@ -437,8 +456,14 @@ class Session:
         context = IntentContextManager.deserialize(data.get("context", {}))
         site_id = data.get("site_id", "unknown")
         pipeline = data.get("pipeline", [])
-        tts = data.get("tts_preferences", {})
-        stt = data.get("stt_preferences", {})
+        location = data.get("location", {})
+        system_unit = data.get("system_unit")
+        date_format = data.get("date_format")
+        time_format = data.get("time_format")
+        is_recording = data.get("is_recording", False)
+        is_speaking = data.get("is_speaking", False)
+        blacklisted_skills = data.get("blacklisted_skills", [])
+        blacklisted_intents = data.get("blacklisted_intents", [])
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -446,8 +471,14 @@ class Session:
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id,
-                       tts_prefs=tts,
-                       stt_prefs=stt)
+                       location_prefs=location,
+                       system_unit=system_unit,
+                       date_format=date_format,
+                       time_format=time_format,
+                       is_recording=is_recording,
+                       is_speaking=is_speaking,
+                       blacklisted_intents=blacklisted_intents,
+                       blacklisted_skills=blacklisted_skills)
 
     @staticmethod
     def from_message(message: Message = None):
@@ -498,13 +529,12 @@ class SessionManager:
     @classmethod
     def connect_to_bus(cls, bus):
         cls.bus = bus
-        cls.bus.on("ovos.session.sync",
-                   cls.handle_default_session_request)
+        cls.bus.on("recognizer_loop:record_begin", cls.handle_recording_start)
+        cls.bus.on("recognizer_loop:record_end", cls.handle_recording_end)
+        cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
+        cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
+        cls.bus.on("ovos.session.sync", cls.handle_default_session_request)
         cls.sync()
-
-    @classmethod
-    def handle_default_session_request(cls, message=None):
-        cls.sync(message)
 
     @staticmethod
     def prune_sessions():
@@ -543,7 +573,9 @@ class SessionManager:
 
         if make_default:
             sess.session_id = "default"
-            LOG.debug(f"replacing default session with: {sess.serialize()}")
+            # this log is dangerous, session may contain things like passwords and access keys
+            # this comment is here to avoid reintroducing it by accident
+            # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
 
         if sess.session_id == "default":
             SessionManager.default_session = sess
@@ -583,3 +615,99 @@ class SessionManager:
         """
         sess = SessionManager.get(message)
         sess.touch()
+
+    ##############################
+    # util methods for skill consumption
+    @classmethod
+    def is_speaking(cls, session: Session = None):
+        session = session or SessionManager.get()
+        return session.is_speaking
+
+    @classmethod
+    def wait_while_speaking(cls, timeout=15, session: Session = None):
+        """ wait until audio service reports end of audio output """
+        if not cls.bus:
+            LOG.error("SessionManager not connected to bus, can not monitor speech state")
+            return
+
+        session = session or SessionManager.get()
+        if not cls.is_speaking(session):
+            return
+
+        # wait until end of speech
+        event = Event()
+        sessid = session.session_id
+
+        def handle_output_end(msg):
+            nonlocal sessid, event
+            sess = SessionManager.get(msg)
+            if sessid == sess.session_id:
+                event.set()
+
+        cls.bus.on("recognizer_loop:audio_output_end", handle_output_end)
+        event.wait(timeout=timeout)
+        cls.bus.remove("recognizer_loop:audio_output_end", handle_output_end)
+
+    @classmethod
+    def is_recording(cls, session: Session = None):
+        session = session or SessionManager.get()
+        return session.is_recording
+
+    @classmethod
+    def wait_while_recording(cls, timeout=45, session: Session = None):
+        """ wait until listener service reports end of recording"""
+        if not cls.bus:
+            LOG.error("SessionManager not connected to bus, can not monitor recording state")
+            return
+
+        session = session or SessionManager.get()
+        if not cls.is_recording(session):
+            return
+
+        # wait until end of recording
+        event = Event()
+        sessid = session.session_id
+
+        def handle_rec_end(msg):
+            nonlocal sessid, event
+            sess = SessionManager.get(msg)
+            if sessid == sess.session_id:
+                event.set()
+
+        cls.bus.on("recognizer_loop:record_end", handle_rec_end)
+        event.wait(timeout=timeout)
+        cls.bus.remove("recognizer_loop:record_end", handle_rec_end)
+
+    ###############################
+    # State tracking events
+    @classmethod
+    def handle_recording_start(cls, message):
+        """track when a session is recording audio"""
+        sess = cls.get(message)
+        sess.is_recording = True
+        cls.update(sess)
+
+    @classmethod
+    def handle_recording_end(cls, message):
+        """track when a session stops recording audio"""
+        sess = cls.get(message)
+        sess.is_recording = False
+        cls.update(sess)
+
+    @classmethod
+    def handle_audio_output_start(cls, message):
+        """track when a session is outputting audio"""
+        sess = cls.get(message)
+        sess.is_speaking = True
+        cls.update(sess)
+
+    @classmethod
+    def handle_audio_output_end(cls, message):
+        """track when a session stops outputting audio"""
+        sess = cls.get(message)
+        sess.is_speaking = False
+        cls.update(sess)
+
+    @classmethod
+    def handle_default_session_request(cls, message=None):
+        cls.sync(message)

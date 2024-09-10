@@ -4,6 +4,7 @@
 from ovos_bus_client import MessageBusClient, Message
 from ovos_config import Configuration
 import sys
+import time
 
 
 def ovos_speak():
@@ -22,6 +23,7 @@ def ovos_speak():
     if not client.connected_event.is_set():
         client.connected_event.wait()
     client.emit(Message("speak", {"utterance": utt, "lang": lang}))
+    time.sleep(0.5)  # avoids crash in c++ bus server
     client.close()
 
 
@@ -41,6 +43,7 @@ def ovos_say_to():
     if not client.connected_event.is_set():
         client.connected_event.wait()
     client.emit(Message("recognizer_loop:utterance", {"utterances": [utt], "lang": lang}))
+    time.sleep(0.5)  # avoids crash in c++ bus server
     client.close()
 
 
@@ -50,6 +53,7 @@ def ovos_listen():
     if not client.connected_event.is_set():
         client.connected_event.wait()
     client.emit(Message("mycroft.mic.listen"))
+    time.sleep(0.5)  # avoids crash in c++ bus server
     client.close()
 
 
@@ -80,6 +84,7 @@ def simple_cli():
             client.emit(Message("recognizer_loop:utterance",
                                 {"utterances": [utt], "lang": lang},
                                 {"session": sess.serialize()}))
+            time.sleep(0.5)  # avoids crash in c++ bus server
         except KeyboardInterrupt:
             break
 

@@ -1,4 +1,4 @@
-import json
+import orjson
 import time
 import traceback
 from os import getpid
@@ -116,11 +116,16 @@ class MessageBusClient(_MessageBusClientBase):
             LOG.warning('Could not send message because connection has closed')
         elif isinstance(error, ConnectionRefusedError):
             LOG.warning('Connection Refused. Is Messagebus Service running?')
+        elif isinstance(error, ConnectionResetError):
+            LOG.warning('Connection Reset. Did the Messagebus Service stop?')
         else:
             LOG.exception('=== %s ===', repr(error))
+            try:
+                self.emitter.emit('error', error)
+            except Exception as e:
+                LOG.exception(f'Failed to emit error event: {e}')
 
         try:
-            self.emitter.emit('error', error)
             if self.client.keep_running:
                 self.client.close()
         except Exception as e:
@@ -184,7 +189,7 @@ class MessageBusClient(_MessageBusClientBase):
         if hasattr(message, 'serialize'):
             msg = message.serialize()
         else:
-            msg = json.dumps(message.__dict__)
+            msg = orjson.dumps(message.__dict__).decode("utf-8")
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
@@ -335,7 +340,7 @@ class MessageBusClient(_MessageBusClientBase):
             if event_name not in self.emitter._events:
                 LOG.debug("Not able to find '%s'", event_name)
             self.emitter.remove_listener(event_name, func)
-        except ValueError:
+        except (ValueError, KeyError):
             LOG.warning('Failed to remove event %s: %s',
                         event_name, str(func))
             for line in traceback.format_stack():
@@ -417,7 +422,7 @@ class GUIWebsocketClient(MessageBusClient):
             if hasattr(message, 'serialize'):
                 self.client.send(message.serialize())
             else:
-                self.client.send(json.dumps(message.__dict__))
+                self.client.send(orjson.dumps(message.__dict__).decode("utf-8"))
         except WebSocketConnectionClosedException:
             LOG.warning('Could not send %s message because connection '
                         'has been closed', message.msg_type)

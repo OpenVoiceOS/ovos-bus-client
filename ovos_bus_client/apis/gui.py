@@ -6,7 +6,7 @@ from ovos_utils.file_utils import resolve_ovos_resource_file, resolve_resource_f
 from ovos_utils.log import LOG, log_deprecation
 from ovos_bus_client.util import get_mycroft_bus
 from ovos_utils.gui import can_use_gui
-
+from ovos_config import Configuration
 from ovos_bus_client.message import Message
 
 
@@ -91,14 +91,7 @@ class GUIInterface:
             `all` key should reference a `gui` directory containing all
             specific resource subdirectories
         """
-        if not config:
-            log_deprecation(f"Expected a dict config and got None.", "0.1.0")
-            try:
-                from ovos_config.config import read_mycroft_config
-                config = read_mycroft_config().get("gui", {})
-            except ImportError:
-                LOG.warning("Config not provided and ovos_config not available")
-                config = dict()
+        config = config or Configuration().get("gui", {})
         self.config = config
         if remote_server:
             self.config["remote-server"] = remote_server
@@ -153,7 +146,9 @@ class GUIInterface:
         """
         Return the active GUI page name to show
         """
-        return self._pages[self.current_page_idx] if len(self._pages) else None
+        if not len(self._pages) or self.current_page_idx >= len(self._pages):
+            return None
+        return self._pages[self.current_page_idx]
 
     @property
     def connected(self) -> bool:
@@ -364,8 +359,8 @@ class GUIInterface:
             # Prefer plugin-specific resources first, then fallback to core
             page = resolve_ovos_resource_file(name, extra_dirs) or \
                    resolve_ovos_resource_file(join('ui', name), extra_dirs) or \
-                   resolve_resource_file(name, self.config) or \
-                   resolve_resource_file(join('ui', name), self.config)
+                   resolve_resource_file(name, config=self.config) or \
+                   resolve_resource_file(join('ui', name), config=self.config)
 
             if page:
                 if self.remote_url:
@@ -403,7 +398,8 @@ class GUIInterface:
 
     # base gui interactions
     def show_page(self, name: str, override_idle: Union[bool, int] = None,
-                  override_animations: bool = False):
+                  override_animations: bool = False, index: int = 0,
+                   remove_others=False):
         """
         Request to show a page in the GUI.
         @param name: page resource requested
@@ -411,11 +407,12 @@ class GUIInterface:
             if True, override display indefinitely
         @param override_animations: if True, disables all GUI animations
         """
-        self.show_pages([name], 0, override_idle, override_animations)
+        self.show_pages([name], index, override_idle, override_animations, remove_others)
 
     def show_pages(self, page_names: List[str], index: int = 0,
                    override_idle: Union[bool, int] = None,
-                   override_animations: bool = False):
+                   override_animations: bool = False,
+                   remove_others=False):
         """
         Request to show a list of pages in the GUI.
         @param page_names: list of page resources requested
@@ -438,6 +435,9 @@ class GUIInterface:
         # TODO: deprecate sending page_urls after ovos_gui implementation
         page_urls = self._pages2uri(page_names)
         page_names = [self._normalize_page_name(n) for n in page_names]
+
+        if remove_others:
+            self.remove_all_pages(except_pages=page_names)
 
         self._pages = page_names
         self.current_page_idx = index
@@ -483,6 +483,17 @@ class GUIInterface:
                               {"page": page_urls,
                                "page_names": page_names,
                                "__from": self.skill_id}))
+
+    def remove_all_pages(self, except_pages=None):
+        """
+        Request to remove all pages from the GUI.
+        @param except_pages: list of optional page resources to keep
+        """
+        if not self.bus:
+            raise RuntimeError("bus not set, did you call self.bind() ?")
+        self.bus.emit(Message("gui.page.delete.all",
+                              {"__from": self.skill_id,
+                               "except": except_pages or []}))
 
     # Utils / Templates
 
