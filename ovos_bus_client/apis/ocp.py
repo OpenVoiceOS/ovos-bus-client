@@ -345,6 +345,22 @@ class OCPInterface:
                                              {'tracks': tracks}))
 
     @_ensure_message_kwarg()
+    def populate_search_results(self, tracks: list,
+                                replace: bool = True,
+                                sort_by_conf: bool = True,
+                                source_message: Optional[Message] = None):
+        """populate search results in OCP with new tracks
+        Args:
+            tracks: track dict or list of track dicts (OCP result style)
+            replace: if False, extend existing search, if True replace current search results
+            source_message: bus message that triggered this action
+        """
+        tracks = self.norm_tracks(tracks)
+        self.bus.emit(source_message.forward('ovos.common_play.search.populate',
+                                             {"playlist": [t.as_dict for t in tracks],
+                                              "replace": replace, "sort_by_conf": sort_by_conf}))
+
+    @_ensure_message_kwarg()
     def play(self, tracks: list, utterance=None, source_message: Optional[Message] = None):
         """Start playback.
         Args:
@@ -353,12 +369,22 @@ class OCPInterface:
             source_message: bus message that triggered this action
         """
         tracks = self.norm_tracks(tracks)
-
         utterance = utterance or ''
-        tracks = [t.as_dict for t in tracks]
+        playlist = tracks
+        disambiguation = []
+        try:
+            from ovos_utils.ocp import Playlist, MediaEntry, PluginStream, dict2entry
+            if isinstance(tracks[0], Playlist):
+                playlist = tracks[0]
+                disambiguation = tracks
+        except ImportError as e:
+            LOG.warning("can't handle Playlist results properly, please update ovos-utils to >= 0.1.0")
+
+        media = playlist[0]
         self.bus.emit(source_message.forward('ovos.common_play.play',
-                                             {"media": tracks[0],
-                                              "playlist": tracks,
+                                             {"media": media.as_dict,
+                                              "playlist": [t.as_dict for t in playlist],
+                                              "disambiguation": [t.as_dict for t in disambiguation],
                                               "utterance": utterance}))
 
     @_ensure_message_kwarg()
