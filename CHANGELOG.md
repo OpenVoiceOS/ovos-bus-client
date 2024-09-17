@@ -1,44 +1,12 @@
 # Changelog
 
-## [0.0.9a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a2) (2024-09-10)
+## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.0a1) (2024-09-17)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.9a1...0.0.9a2)
-
-**Merged pull requests:**
-
-- chore:semver\_versioning [\#116](https://github.com/OpenVoiceOS/ovos-bus-client/pull/116) ([JarbasAl](https://github.com/JarbasAl))
-
-## [0.0.9a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a1) (2024-09-10)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9...0.0.9a1)
-
-**Breaking changes:**
-
-- refactor/remove\_stt+tts\_prefs [\#91](https://github.com/OpenVoiceOS/ovos-bus-client/pull/91) ([JarbasAl](https://github.com/JarbasAl))
-
-**Implemented enhancements:**
-
-- feat/blacklist\_from\_session [\#98](https://github.com/OpenVoiceOS/ovos-bus-client/pull/98) ([JarbasAl](https://github.com/JarbasAl))
-- feat/track\_speaking+recording\_per\_session [\#93](https://github.com/OpenVoiceOS/ovos-bus-client/pull/93) ([JarbasAl](https://github.com/JarbasAl))
-- feat/add\_units\_to\_session [\#90](https://github.com/OpenVoiceOS/ovos-bus-client/pull/90) ([JarbasAl](https://github.com/JarbasAl))
-- feat/targeted OCP queries [\#88](https://github.com/OpenVoiceOS/ovos-bus-client/pull/88) ([NeonJarbas](https://github.com/NeonJarbas))
-
-**Fixed bugs:**
-
-- fix/KeyError [\#105](https://github.com/OpenVoiceOS/ovos-bus-client/pull/105) ([JarbasAl](https://github.com/JarbasAl))
-- fix/ocp\_missing\_context [\#104](https://github.com/OpenVoiceOS/ovos-bus-client/pull/104) ([JarbasAl](https://github.com/JarbasAl))
-- fix/ocp\_api\_context [\#103](https://github.com/OpenVoiceOS/ovos-bus-client/pull/103) ([JarbasAl](https://github.com/JarbasAl))
-- fix/ocp\_uris [\#102](https://github.com/OpenVoiceOS/ovos-bus-client/pull/102) ([JarbasAl](https://github.com/JarbasAl))
-- hotfix/StreamPlugin [\#100](https://github.com/OpenVoiceOS/ovos-bus-client/pull/100) ([JarbasAl](https://github.com/JarbasAl))
-- Update error handling to reduce unhandled exceptions [\#96](https://github.com/OpenVoiceOS/ovos-bus-client/pull/96) ([NeonDaniel](https://github.com/NeonDaniel))
-- Update setup.py to resolve version automation bug [\#95](https://github.com/OpenVoiceOS/ovos-bus-client/pull/95) ([NeonDaniel](https://github.com/NeonDaniel))
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.10...0.1.0a1)
 
 **Merged pull requests:**
 
-- chore:semver\_automations [\#114](https://github.com/OpenVoiceOS/ovos-bus-client/pull/114) ([JarbasAl](https://github.com/JarbasAl))
-- deprecation warnings [\#111](https://github.com/OpenVoiceOS/ovos-bus-client/pull/111) ([JarbasAl](https://github.com/JarbasAl))
-- refactor/handle\_new\_SEIs [\#97](https://github.com/OpenVoiceOS/ovos-bus-client/pull/97) ([JarbasAl](https://github.com/JarbasAl))
-- Update imports to support ovos-utils~=0.0.x with compat. warnings [\#94](https://github.com/OpenVoiceOS/ovos-bus-client/pull/94) ([NeonDaniel](https://github.com/NeonDaniel))
+- feat:ovos.common\_play.search.populate event [\#118](https://github.com/OpenVoiceOS/ovos-bus-client/pull/118) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
