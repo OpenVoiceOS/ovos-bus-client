@@ -75,17 +75,13 @@ class GUIInterface:
     """
 
     def __init__(self, skill_id: str, bus=None,
-                 config: dict = None,
-                 ui_directories: dict = None):
+                 config: dict = None):
         """
         Create an interface to the GUI module. Values set here are exposed to
         the GUI client as sessionData
         @param skill_id: ID of this interface
         @param bus: MessagebusClient object to connect to
         @param config: dict gui Configuration
-        @param ui_directories: dict framework to directory containing resources
-            `all` key should reference a `gui` directory containing all
-            specific resource subdirectories
         """
         config = config or Configuration().get("gui", {})
         self.config = config
@@ -96,7 +92,6 @@ class GUIInterface:
         self._skill_id = skill_id
         self.on_gui_changed_callback = None
         self._events = []
-        self.ui_directories = ui_directories or dict()
         if bus:
             self.set_bus(bus)
 
@@ -344,7 +339,6 @@ class GUIInterface:
         # finally tell gui what to show
         self.bus.emit(Message("gui.page.show",
                               {"page_names": page_names,
-                               "ui_directories": self.ui_directories,
                                "index": index,
                                "__from": self.skill_id,
                                "__idle": override_idle,
