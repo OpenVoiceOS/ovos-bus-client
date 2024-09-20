@@ -1,5 +1,6 @@
 import os
 import shutil
+from os.path import splitext, isfile
 from typing import List, Union, Optional, Callable
 
 from ovos_config import Configuration
@@ -314,10 +315,30 @@ class GUIInterface:
                                "event_name": event_name,
                                "params": params}))
 
+    @staticmethod
+    def _normalize_page_name(page_name: str) -> str:
+        """
+        Normalize a requested GUI resource
+        @param page_name: string name of a GUI resource
+        @return: normalized string name (`.qml` removed for other GUI support)
+        """
+        if isfile(page_name):
+            LOG.error("GUI resources should specify a resource name and "
+                      "not a file path.", "0.1.0")
+            return page_name
+        file, ext = splitext(page_name)
+        if ext == ".qml":
+            LOG.error("GUI resources should exclude gui-specific file "
+                      f"extensions. This call should probably pass "
+                      f"`{file}`, instead of `{page_name}`", "0.1.0")
+            return file
+
+        return page_name
+
     # base gui interactions
     def show_page(self, name: str, override_idle: Union[bool, int] = None,
                   override_animations: bool = False, index: int = 0,
-                   remove_others=False):
+                  remove_others=False):
         """
         Request to show a page in the GUI.
         @param name: page resource requested
@@ -350,11 +371,10 @@ class GUIInterface:
             LOG.error('Default index is larger than page list length')
             index = len(page_names) - 1
 
-        # TODO backwards compat, remove eventually, the deprecation happened in ovos-workshop already
         if any(p.endswith(".qml") for p in page_names):
             LOG.warning("received invalid page, please remove '.qml' extension from your code, "
                         "this has been deprecated in ovos-gui and may stop working anytime")
-            page_names = [p.replace(".qml", "") for p in page_names]
+            page_names = [self._normalize_page_name(n) for n in page_names]
 
         if remove_others:
             self.remove_all_pages(except_pages=page_names)
@@ -398,11 +418,11 @@ class GUIInterface:
             page_names = [page_names]
         if not isinstance(page_names, list):
             raise ValueError('page_names must be a list')
-        # TODO backwards compat, remove eventually, the deprecation happened in ovos-workshop already
         if any(p.endswith(".qml") for p in page_names):
             LOG.warning("received invalid page, please remove '.qml' extension from your code, "
                         "this has been deprecated in ovos-gui and may stop working anytime")
-            page_names = [p.replace(".qml", "") for p in page_names]
+            page_names = [self._normalize_page_name(n) for n in page_names]
+
         self.bus.emit(Message("gui.page.delete",
                               {"page_names": page_names,
                                "__from": self.skill_id}))
