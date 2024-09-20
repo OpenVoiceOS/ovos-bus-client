@@ -118,10 +118,8 @@ class GUIInterface:
 
         for framework, bpath in self.ui_directories.items():
             if framework == "all":
-                LOG.warning("Assuming 'all' means 'qt5'!")
-                LOG.error(f"GUI resources moved to platform specific subfolder, "
-                            f"please move contents from {bpath} to 'qt5' subfolder")
-                framework = "qt5"
+                LOG.warning(f"'all' is deprecated! ignoring path: {bpath}")
+                continue
             shutil.copytree(bpath, f"{output_path}/{framework}")
             LOG.debug(f"Copied {self.skill_id} resources from {bpath} to {output_path}/{framework}")
 
