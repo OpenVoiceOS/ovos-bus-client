@@ -322,6 +322,12 @@ class GUIInterface:
             LOG.error('Default index is larger than page list length')
             index = len(page_names) - 1
 
+        # TODO backwards compat, remove eventually, the deprecation happened in ovos-workshop already
+        if any(p.endswith(".qml") for p in page_names):
+            LOG.warning("received invalid page, please remove '.qml' extension from your code, "
+                        "this has been deprecated in ovos-workshop and may stop working anytime")
+            page_names = [p.replace(".qml", "") for p in page_names]
+
         if remove_others:
             self.remove_all_pages(except_pages=page_names)
 
@@ -364,6 +370,11 @@ class GUIInterface:
             page_names = [page_names]
         if not isinstance(page_names, list):
             raise ValueError('page_names must be a list')
+        # TODO backwards compat, remove eventually, the deprecation happened in ovos-workshop already
+        if any(p.endswith(".qml") for p in page_names):
+            LOG.warning("received invalid page, please remove '.qml' extension from your code, "
+                        "this has been deprecated in ovos-workshop and may stop working anytime")
+            page_names = [p.replace(".qml", "") for p in page_names]
         self.bus.emit(Message("gui.page.delete",
                               {"page_names": page_names,
                                "__from": self.skill_id}))
