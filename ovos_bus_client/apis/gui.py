@@ -324,13 +324,13 @@ class GUIInterface:
         """
         if isfile(page_name):
             LOG.error("GUI resources should specify a resource name and "
-                      "not a file path.", "0.1.0")
+                      "not a file path.")
             return page_name
         file, ext = splitext(page_name)
         if ext == ".qml":
             LOG.error("GUI resources should exclude gui-specific file "
                       f"extensions. This call should probably pass "
-                      f"`{file}`, instead of `{page_name}`", "0.1.0")
+                      f"`{file}`, instead of `{page_name}`")
             return file
 
         return page_name
