@@ -1,10 +1,14 @@
+import os
+import shutil
 from typing import List, Union, Optional, Callable
 
-from ovos_utils.log import LOG
-from ovos_bus_client.util import get_mycroft_bus
-from ovos_utils.gui import can_use_gui
 from ovos_config import Configuration
+from ovos_config.locations import get_xdg_cache_save_path
+from ovos_utils.gui import can_use_gui
+from ovos_utils.log import LOG
+
 from ovos_bus_client.message import Message
+from ovos_bus_client.util import get_mycroft_bus
 
 
 def extend_about_data(about_data: Union[list, dict],
@@ -75,13 +79,15 @@ class GUIInterface:
     """
 
     def __init__(self, skill_id: str, bus=None,
-                 config: dict = None):
+                 config: dict = None,
+                 ui_directories: dict = None):
         """
         Create an interface to the GUI module. Values set here are exposed to
         the GUI client as sessionData
         @param skill_id: ID of this interface
         @param bus: MessagebusClient object to connect to
         @param config: dict gui Configuration
+        @param ui_directories: dict framework to directory containing resources
         """
         config = config or Configuration().get("gui", {})
         self.config = config
@@ -92,8 +98,32 @@ class GUIInterface:
         self._skill_id = skill_id
         self.on_gui_changed_callback = None
         self._events = []
+        self.ui_directories = ui_directories or dict()
         if bus:
             self.set_bus(bus)
+        self._cache_gui_files()
+
+    def _cache_gui_files(self):
+        if not self.ui_directories:
+            LOG.debug(f"{self.skill_id} has no GUI resources")
+            return
+
+        # this path is hardcoded in ovos_gui.constants and follows XDG spec
+        GUI_CACHE_PATH = get_xdg_cache_save_path('ovos_gui')
+
+        output_path = f"{GUI_CACHE_PATH}/{self.skill_id}"
+        if os.path.exists(output_path):
+            LOG.info(f"Removing existing {self.skill_id} cached GUI resources before updating")
+            shutil.rmtree(output_path)
+
+        for framework, bpath in self.ui_directories.items():
+            if framework == "all":
+                LOG.warning("Assuming 'all' means 'qt5'!")
+                LOG.error(f"GUI resources moved to platform specific subfolder, "
+                            f"please move contents from {bpath} to 'qt5' subfolder")
+                framework = "qt5"
+            shutil.copytree(bpath, f"{output_path}/{framework}")
+            LOG.debug(f"Copied {self.skill_id} resources from {bpath} to {output_path}/{framework}")
 
     def set_bus(self, bus=None):
         self._bus = bus or get_mycroft_bus()
@@ -325,7 +355,7 @@ class GUIInterface:
         # TODO backwards compat, remove eventually, the deprecation happened in ovos-workshop already
         if any(p.endswith(".qml") for p in page_names):
             LOG.warning("received invalid page, please remove '.qml' extension from your code, "
-                        "this has been deprecated in ovos-workshop and may stop working anytime")
+                        "this has been deprecated in ovos-gui and may stop working anytime")
             page_names = [p.replace(".qml", "") for p in page_names]
 
         if remove_others:
@@ -373,7 +403,7 @@ class GUIInterface:
         # TODO backwards compat, remove eventually, the deprecation happened in ovos-workshop already
         if any(p.endswith(".qml") for p in page_names):
             LOG.warning("received invalid page, please remove '.qml' extension from your code, "
-                        "this has been deprecated in ovos-workshop and may stop working anytime")
+                        "this has been deprecated in ovos-gui and may stop working anytime")
             page_names = [p.replace(".qml", "") for p in page_names]
         self.bus.emit(Message("gui.page.delete",
                               {"page_names": page_names,
