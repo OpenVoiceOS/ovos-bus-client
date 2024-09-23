@@ -626,15 +626,23 @@ class SessionManager:
     @classmethod
     def wait_while_speaking(cls, timeout=15, session: Session = None):
         """ wait until audio service reports end of audio output """
+        if isinstance(timeout, bool):
+            LOG.warning(f"expected timeout in seconds, got boolean '{timeout}', "
+                        f"defaulting to 15 seconds")
+            timeout = 15
+
         if not cls.bus:
             LOG.error("SessionManager not connected to bus, can not monitor speech state")
             return
 
         session = session or SessionManager.get()
         if not cls.is_speaking(session):
+            LOG.warning(f"can't 'wait_while_speaking' because "
+                        f"session '{session.session_id}' is not currently speaking")
             return
 
         # wait until end of speech
+        LOG.debug(f"waiting for session '{session.session_id}' audio output to end with timeout: {timeout}")
         event = Event()
         sessid = session.session_id
 
@@ -642,10 +650,13 @@ class SessionManager:
             nonlocal sessid, event
             sess = SessionManager.get(msg)
             if sessid == sess.session_id:
+                LOG.debug(f"session: {sessid} audio output ended")
                 event.set()
 
         cls.bus.on("recognizer_loop:audio_output_end", handle_output_end)
         event.wait(timeout=timeout)
+        if not event.is_set():
+            LOG.warning("waiting for audio output end timed out! not waiting anymore")
         cls.bus.remove("recognizer_loop:audio_output_end", handle_output_end)
 
     @classmethod
