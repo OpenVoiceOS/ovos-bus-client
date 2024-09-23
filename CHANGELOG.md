@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.0a1) (2024-09-17)
+## [0.1.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.1a1) (2024-09-23)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.10...0.1.0a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.0...0.1.1a1)
 
 **Merged pull requests:**
 
-- feat:ovos.common\_play.search.populate event [\#118](https://github.com/OpenVoiceOS/ovos-bus-client/pull/118) ([JarbasAl](https://github.com/JarbasAl))
+- troubleshoot issues around wait\_while\_speaking [\#121](https://github.com/OpenVoiceOS/ovos-bus-client/pull/121) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
