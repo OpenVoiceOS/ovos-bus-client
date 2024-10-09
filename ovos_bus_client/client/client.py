@@ -7,7 +7,7 @@ from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
 
 from ovos_utils.log import LOG, deprecated
-from pyee import ExecutorEventEmitter
+from pyee.executor import ExecutorEventEmitter
 from websocket import (WebSocketApp,
                        WebSocketConnectionClosedException,
                        WebSocketException)
