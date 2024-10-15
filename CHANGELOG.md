@@ -1,12 +1,20 @@
 # Changelog
 
-## [0.1.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.1a1) (2024-09-23)
+## [0.1.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.3a1) (2024-10-15)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.0...0.1.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.2a1...0.1.3a1)
 
 **Merged pull requests:**
 
-- troubleshoot issues around wait\_while\_speaking [\#121](https://github.com/OpenVoiceOS/ovos-bus-client/pull/121) ([JarbasAl](https://github.com/JarbasAl))
+- fix:allow newer pyee [\#124](https://github.com/OpenVoiceOS/ovos-bus-client/pull/124) ([JarbasAl](https://github.com/JarbasAl))
+
+## [0.1.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.2a1) (2024-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.1...0.1.2a1)
+
+**Merged pull requests:**
+
+- port/tests\_from\_core [\#125](https://github.com/OpenVoiceOS/ovos-bus-client/pull/125) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
