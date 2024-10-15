@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.3a1) (2024-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.2a1...0.1.3a1)
+
+**Merged pull requests:**
+
+- fix:allow newer pyee [\#124](https://github.com/OpenVoiceOS/ovos-bus-client/pull/124) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.1.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.2a1) (2024-10-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.1...0.1.2a1)
