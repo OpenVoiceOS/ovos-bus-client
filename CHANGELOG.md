@@ -1,20 +1,12 @@
 # Changelog
 
-## [0.1.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.3a1) (2024-10-15)
+## [0.1.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.4a1) (2024-10-16)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.2a1...0.1.3a1)
-
-**Merged pull requests:**
-
-- fix:allow newer pyee [\#124](https://github.com/OpenVoiceOS/ovos-bus-client/pull/124) ([JarbasAl](https://github.com/JarbasAl))
-
-## [0.1.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.2a1) (2024-10-15)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.1...0.1.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.3...0.1.4a1)
 
 **Merged pull requests:**
 
-- port/tests\_from\_core [\#125](https://github.com/OpenVoiceOS/ovos-bus-client/pull/125) ([JarbasAl](https://github.com/JarbasAl))
+- fix:standardize\_lang [\#128](https://github.com/OpenVoiceOS/ovos-bus-client/pull/128) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
