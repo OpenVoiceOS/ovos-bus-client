@@ -7,7 +7,7 @@ from uuid import uuid4
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
-
+from ovos_utils.lang import standardize_lang_tag
 from ovos_bus_client.message import dig_for_message, Message
 
 
@@ -297,7 +297,7 @@ class Session:
                                    Configuration().get("skills", {}).get("blacklisted_skills", []))
         self.blacklisted_intents = (blacklisted_intents or
                                     Configuration().get("intents", {}).get("blacklisted_intents", []))
-        self.lang = lang or get_default_lang()
+        self.lang = standardize_lang_tag(lang or get_default_lang())
         self.system_unit = system_unit or Configuration().get("system_unit", "metric")
         self.date_format = date_format or Configuration().get("date_format", "DMY")
         self.time_format = time_format or Configuration().get("time_format", "full")

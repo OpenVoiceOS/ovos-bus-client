@@ -20,6 +20,7 @@ import orjson
 from ovos_config.config import read_mycroft_config
 from ovos_config.locale import get_default_lang
 from ovos_utils.json_helper import merge_dict
+from ovos_utils.lang import standardize_lang_tag
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.session import SessionManager
@@ -39,14 +40,14 @@ def get_message_lang(message=None):
     # old style lang param
     lang = message.data.get("lang") or message.context.get("lang")
     if lang:
-        return lang
+        return standardize_lang_tag(lang)
 
     # new style session lang
     if "session_id" in message.context or "session" in message.context:
         sess = SessionManager.get(message)
         return sess.lang
 
-    return get_default_lang()
+    return standardize_lang_tag(get_default_lang())
 
 
 def get_websocket(host, port, route='/', ssl=False, threaded=True):
