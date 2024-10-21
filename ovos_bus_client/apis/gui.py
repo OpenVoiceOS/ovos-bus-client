@@ -74,7 +74,7 @@ class GUIInterface:
     via the built-in sessionData mechanism.  For example, in Python you can
     write in a skill:
         self.gui['temp'] = 33
-        self.gui.show_page('Weather.qml')
+        self.gui.show_page('Weather')
     Then in the Weather.qml you'd access the temp via code such as:
         text: sessionData.time
     """
@@ -527,7 +527,7 @@ class GUIInterface:
         """
         self["text"] = text
         self["title"] = title
-        self.show_page("SYSTEM_TextFrame.qml", override_idle,
+        self.show_page("SYSTEM_TextFrame", override_idle,
                        override_animations)
 
     def show_image(self, url: str, caption: Optional[str] = None,
@@ -559,7 +559,7 @@ class GUIInterface:
         self["caption"] = caption
         self["fill"] = fill
         self["background_color"] = background_color
-        self.show_page("SYSTEM_ImageFrame.qml", override_idle,
+        self.show_page("SYSTEM_ImageFrame", override_idle,
                        override_animations)
 
     def show_animated_image(self, url: str, caption: Optional[str] = None,
@@ -591,7 +591,7 @@ class GUIInterface:
         self["caption"] = caption
         self["fill"] = fill
         self["background_color"] = background_color
-        self.show_page("SYSTEM_AnimatedImageFrame.qml", override_idle,
+        self.show_page("SYSTEM_AnimatedImageFrame", override_idle,
                        override_animations)
 
     def show_html(self, html: str, resource_url: Optional[str] = None,
@@ -613,7 +613,7 @@ class GUIInterface:
         """
         self["html"] = html
         self["resourceLocation"] = resource_url
-        self.show_page("SYSTEM_HtmlFrame.qml", override_idle,
+        self.show_page("SYSTEM_HtmlFrame", override_idle,
                        override_animations)
 
     def show_url(self, url: str, override_idle: Union[int, bool] = None,
@@ -632,7 +632,7 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         self["url"] = url
-        self.show_page("SYSTEM_UrlFrame.qml", override_idle,
+        self.show_page("SYSTEM_UrlFrame", override_idle,
                        override_animations)
 
     def show_input_box(self, title: Optional[str] = None,
@@ -664,7 +664,7 @@ class GUIInterface:
         else:
             self["exit_text"] = exit_text
 
-        self.show_page("SYSTEM_InputBox.qml", override_idle,
+        self.show_page("SYSTEM_InputBox", override_idle,
                        override_animations)
 
     def remove_input_box(self):
@@ -673,7 +673,7 @@ class GUIInterface:
         """
         LOG.info(f"GUI pages length {len(self._pages)}")
         if len(self._pages) > 1:
-            self.remove_page("SYSTEM_InputBox.qml")
+            self.remove_page("SYSTEM_InputBox")
         else:
             self.release()
 
