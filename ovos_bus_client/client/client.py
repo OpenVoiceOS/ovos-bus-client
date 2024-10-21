@@ -343,20 +343,8 @@ class MessageBusClient(_MessageBusClientBase):
         except (ValueError, KeyError):
             LOG.warning('Failed to remove event %s: %s',
                         event_name, str(func))
-            for line in traceback.format_stack():
-                LOG.warning(line.strip())
-
             if event_name not in self.emitter._events:
                 LOG.debug("Not able to find '%s'", event_name)
-            LOG.warning("Existing events: %s", repr(self.emitter._events))
-            for evt in self.emitter._events:
-                LOG.warning("   %s", repr(evt))
-                LOG.warning("       %s", repr(self.emitter._events[evt]))
-            if event_name in self.emitter._events:
-                LOG.debug("Removing found '%s'", event_name)
-            else:
-                LOG.debug("Not able to find '%s'", event_name)
-            LOG.warning('----- End dump -----')
 
     def remove_all_listeners(self, event_name: str):
         """
