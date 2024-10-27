@@ -120,6 +120,10 @@ class GUIInterface:
         self.setup_default_handlers()
 
     @property
+    def gui_disabled(self) -> bool:
+        return Configuration().get("gui", {}).get("disable_gui", False)
+
+    @property
     def bus(self):
         """
         Return the attached MessageBusClient
@@ -276,6 +280,8 @@ class GUIInterface:
             self.on_gui_changed_callback()
 
     def _sync_data(self):
+        if self.gui_disabled:
+            return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
         data = self.__session_data.copy()
@@ -322,6 +328,8 @@ class GUIInterface:
         self.__session_data = {}
         self._pages = []
         self.current_page_idx = -1
+        if self.gui_disabled:
+            return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
         self.bus.emit(Message("gui.clear.namespace",
@@ -337,6 +345,8 @@ class GUIInterface:
             params: json serializable object containing any parameters that
                     should be sent along with the request.
         """
+        if self.gui_disabled:
+            return
         params = params or {}
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
@@ -442,6 +452,8 @@ class GUIInterface:
         self._pages = page_names
         self.current_page_idx = index
 
+        if self.gui_disabled:
+            return
         # First sync any data...
         data = self.__session_data.copy()
         data.update({'__from': self.skill_id})
@@ -470,6 +482,8 @@ class GUIInterface:
         Request to remove a list of pages from the GUI.
         @param page_names: list of page resources requested
         """
+        if self.gui_disabled:
+            return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
         if isinstance(page_names, str):
@@ -489,6 +503,8 @@ class GUIInterface:
         Request to remove all pages from the GUI.
         @param except_pages: list of optional page resources to keep
         """
+        if self.gui_disabled:
+            return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
         self.bus.emit(Message("gui.page.delete.all",
