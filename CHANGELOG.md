@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.1.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.5a1) (2024-10-21)
+## [0.1.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.6a1) (2024-10-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.4...0.1.5a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.5...0.1.6a1)
 
 **Merged pull requests:**
 
-- fix:log spam [\#131](https://github.com/OpenVoiceOS/ovos-bus-client/pull/131) ([JarbasAl](https://github.com/JarbasAl))
+- fix:gui spam [\#133](https://github.com/OpenVoiceOS/ovos-bus-client/pull/133) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
