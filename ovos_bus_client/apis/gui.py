@@ -121,6 +121,9 @@ class GUIInterface:
             if framework == "all":
                 LOG.warning(f"'all' is deprecated! ignoring path: {bpath}")
                 continue
+            if not os.path.isdir(bpath):
+                LOG.error(f"invalid '{framework}' resources directory: {bpath}")
+                continue
             shutil.copytree(bpath, f"{output_path}/{framework}")
             LOG.debug(f"Copied {self.skill_id} resources from {bpath} to {output_path}/{framework}")
 
