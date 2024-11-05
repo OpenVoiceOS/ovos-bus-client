@@ -1,12 +1,16 @@
 # Changelog
 
-## [0.1.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.6a1) (2024-10-27)
+## [1.0.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.0a1) (2024-11-05)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.5...0.1.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.6...1.0.0a1)
 
-**Merged pull requests:**
+**Breaking changes:**
 
-- fix:gui spam [\#133](https://github.com/OpenVoiceOS/ovos-bus-client/pull/133) ([JarbasAl](https://github.com/JarbasAl))
+- refactor!:deprecate QML upload from bus [\#120](https://github.com/OpenVoiceOS/ovos-bus-client/pull/120) ([JarbasAl](https://github.com/JarbasAl))
+
+**Fixed bugs:**
+
+- Latest git tag is invalid [\#99](https://github.com/OpenVoiceOS/ovos-bus-client/issues/99)
 
 
 
