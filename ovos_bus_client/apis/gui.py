@@ -536,20 +536,39 @@ class GUIInterface:
                        override_animations)
 
     def _resolve_url(self, url: str) -> str:
+        """Resolve a URL to a valid file path.
+        
+        Args:
+            url (str): URL or file path to resolve
+            
+        Returns:
+            str: Resolved absolute file path or original URL
+            
+        Raises:
+            ValueError: If url is None or empty
+        """
+        if not url or not isinstance(url, str):
+            raise ValueError("URL must be a non-empty string")
+            
+        # Sanitize the url to prevent path traversal
+        url = os.path.normpath(url)
+        if url.startswith("..") or url.startswith("/"):
+            return url
+
         if not url.startswith("http") and not os.path.isfile(url):
             GUI_CACHE_PATH = get_xdg_cache_save_path('ovos_gui')
-            gui_cache = f"{GUI_CACHE_PATH}/{self.skill_id}/{url}"
+            # Use os.path.join for path construction
+            gui_cache = os.path.join(GUI_CACHE_PATH, self.skill_id, url)
             if os.path.isfile(gui_cache):
                 LOG.debug(f"Resolved image: {gui_cache}")
                 return gui_cache
             else:
                 for framework in self.ui_directories:
-                    gui_cache = f"{GUI_CACHE_PATH}/{self.skill_id}/{framework}/{url}"
+                    gui_cache = os.path.join(GUI_CACHE_PATH, self.skill_id, framework, url)
                     if os.path.isfile(gui_cache):
                         LOG.debug(f"Resolved image: {gui_cache}")
                         return gui_cache
         return url
-
     def show_image(self, url: str, caption: Optional[str] = None,
                    title: Optional[str] = None,
                    fill: str = None, background_color: str = None,
