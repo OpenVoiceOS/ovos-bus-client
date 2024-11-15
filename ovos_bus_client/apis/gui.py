@@ -119,13 +119,15 @@ class GUIInterface:
 
         for framework, bpath in self.ui_directories.items():
             if framework == "all":
-                LOG.warning(f"'all' is deprecated! ignoring path: {bpath}")
+                # mostly applies to image files
+                shutil.copytree(bpath, output_path)
+                LOG.debug(f"Copied {self.skill_id} shared GUI resources from {bpath} to {output_path}")
                 continue
             if not os.path.isdir(bpath):
                 LOG.error(f"invalid '{framework}' resources directory: {bpath}")
                 continue
             shutil.copytree(bpath, f"{output_path}/{framework}")
-            LOG.debug(f"Copied {self.skill_id} resources from {bpath} to {output_path}/{framework}")
+            LOG.debug(f"Copied {self.skill_id} GUI resources from {bpath} to {output_path}/{framework}")
 
     def set_bus(self, bus=None):
         self._bus = bus or get_mycroft_bus()
@@ -533,6 +535,43 @@ class GUIInterface:
         self.show_page("SYSTEM_TextFrame", override_idle,
                        override_animations)
 
+    def _resolve_url(self, url: str) -> str:
+        """Resolve a URL to a valid file path.
+        
+        Args:
+            url (str): URL or file path to resolve
+            
+        Returns:
+            str: Resolved absolute file path or original URL
+            
+        Raises:
+            ValueError: If url is None or empty
+        """
+        if not url or not isinstance(url, str):
+            raise ValueError("URL must be a non-empty string")
+        if url.startswith("http"):
+            return url
+
+        # Sanitize the url to prevent path traversal
+        url = os.path.normpath(url)
+        if url.startswith("..") or url.startswith("/"):
+            return url
+
+        if not os.path.isfile(url):
+            GUI_CACHE_PATH = get_xdg_cache_save_path('ovos_gui')
+            # Use os.path.join for path construction
+            gui_cache = os.path.join(GUI_CACHE_PATH, self.skill_id, url)
+            if os.path.isfile(gui_cache):
+                LOG.debug(f"Resolved image: {gui_cache}")
+                return gui_cache
+            else:
+                for framework in self.ui_directories:
+                    gui_cache = os.path.join(GUI_CACHE_PATH, self.skill_id, framework, url)
+                    if os.path.isfile(gui_cache):
+                        LOG.debug(f"Resolved image: {gui_cache}")
+                        return gui_cache
+        return url
+
     def show_image(self, url: str, caption: Optional[str] = None,
                    title: Optional[str] = None,
                    fill: str = None, background_color: str = None,
@@ -557,6 +596,10 @@ class GUIInterface:
                 True: Disables showing all platform skill animations.
                 False: 'Default' always show animations.
         """
+        url = self._resolve_url(url)
+        if not os.path.isfile(url):
+            LOG.error(f"Provided image file does not exist! '{url}'")
+            return
         self["image"] = url
         self["title"] = title
         self["caption"] = caption
@@ -589,6 +632,10 @@ class GUIInterface:
                 True: Disables showing all platform skill animations.
                 False: 'Default' always show animations.
         """
+        url = self._resolve_url(url)
+        if not os.path.isfile(url):
+            LOG.error(f"Provided image file does not exist! '{url}'")
+            return
         self["image"] = url
         self["title"] = title
         self["caption"] = caption
