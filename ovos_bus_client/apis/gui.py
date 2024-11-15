@@ -533,6 +533,21 @@ class GUIInterface:
         self.show_page("SYSTEM_TextFrame", override_idle,
                        override_animations)
 
+    def _resolve_url(self, url: str) -> str:
+        if not url.startswith("http") and not os.path.isfile(url):
+            GUI_CACHE_PATH = get_xdg_cache_save_path('ovos_gui')
+            gui_cache = f"{GUI_CACHE_PATH}/{self.skill_id}/{url}"
+            if os.path.isfile(gui_cache):
+                LOG.debug(f"Resolved image: {gui_cache}")
+                return gui_cache
+            else:
+                for framework in self.ui_directories:
+                    gui_cache = f"{GUI_CACHE_PATH}/{self.skill_id}/{framework}/{url}"
+                    if os.path.isfile(gui_cache):
+                        LOG.debug(f"Resolved image: {gui_cache}")
+                        return gui_cache
+        return url
+
     def show_image(self, url: str, caption: Optional[str] = None,
                    title: Optional[str] = None,
                    fill: str = None, background_color: str = None,
@@ -557,6 +572,10 @@ class GUIInterface:
                 True: Disables showing all platform skill animations.
                 False: 'Default' always show animations.
         """
+        url = self._resolve_url(url)
+        if not os.path.isfile(url):
+            LOG.error(f"Provided image file does not exist! '{url}'")
+            return
         self["image"] = url
         self["title"] = title
         self["caption"] = caption
@@ -589,6 +608,10 @@ class GUIInterface:
                 True: Disables showing all platform skill animations.
                 False: 'Default' always show animations.
         """
+        url = self._resolve_url(url)
+        if not os.path.isfile(url):
+            LOG.error(f"Provided image file does not exist! '{url}'")
+            return
         self["image"] = url
         self["title"] = title
         self["caption"] = caption
