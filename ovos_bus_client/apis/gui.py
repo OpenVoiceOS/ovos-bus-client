@@ -597,7 +597,7 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         url = self._resolve_url(url)
-        if not os.path.isfile(url):
+        if not url.startswith("http") and not os.path.isfile(url):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
         self["image"] = url
@@ -633,7 +633,7 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         url = self._resolve_url(url)
-        if not os.path.isfile(url):
+        if not url.startswith("http") and not os.path.isfile(url):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
         self["image"] = url
