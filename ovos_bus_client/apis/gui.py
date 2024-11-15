@@ -119,13 +119,15 @@ class GUIInterface:
 
         for framework, bpath in self.ui_directories.items():
             if framework == "all":
-                LOG.warning(f"'all' is deprecated! ignoring path: {bpath}")
+                # mostly applies to image files
+                shutil.copytree(bpath, output_path)
+                LOG.debug(f"Copied {self.skill_id} shared GUI resources from {bpath} to {output_path}")
                 continue
             if not os.path.isdir(bpath):
                 LOG.error(f"invalid '{framework}' resources directory: {bpath}")
                 continue
             shutil.copytree(bpath, f"{output_path}/{framework}")
-            LOG.debug(f"Copied {self.skill_id} resources from {bpath} to {output_path}/{framework}")
+            LOG.debug(f"Copied {self.skill_id} GUI resources from {bpath} to {output_path}/{framework}")
 
     def set_bus(self, bus=None):
         self._bus = bus or get_mycroft_bus()
