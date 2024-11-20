@@ -349,14 +349,3 @@ class EventScheduler(Thread):
                 self.store()
             raise e
 
-
-class EventContainer(_EventContainer):
-    def __init__(self, *args, **kwargs):
-        log_deprecation("Import from `ovos_utils.events`", "0.1.0")
-        _EventContainer.__init__(self, *args, **kwargs)
-
-
-class EventSchedulerInterface(_SchedulerInterface):
-    def __init__(self, *args, **kwargs):
-        log_deprecation("Import from `ovos_utils.events`", "0.1.0")
-        _SchedulerInterface.__init__(self, *args, **kwargs)
