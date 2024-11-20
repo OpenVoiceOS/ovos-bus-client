@@ -18,7 +18,6 @@ on:
       - master
     paths-ignore:
       - "ovos_bus_client/version.py"
-      - "requirements/**"
       - "examples/**"
       - ".github/**"
       - ".gitignore"
