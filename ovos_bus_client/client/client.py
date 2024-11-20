@@ -9,7 +9,7 @@ from uuid import uuid4
 from ovos_utils.log import LOG, deprecated
 try:
     from pyee import ExecutorEventEmitter
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     from pyee.executor import ExecutorEventEmitter
 
 from websocket import (WebSocketApp,

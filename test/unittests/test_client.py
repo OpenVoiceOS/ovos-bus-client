@@ -15,7 +15,7 @@ from unittest.mock import call, Mock, patch
 
 try:
     from pyee import ExecutorEventEmitter
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     from pyee.executor import ExecutorEventEmitter
 
 from ovos_bus_client.message import Message

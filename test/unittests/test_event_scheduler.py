@@ -6,7 +6,7 @@ import unittest
 import time
 try:
     from pyee import ExecutorEventEmitter
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     from pyee.executor import ExecutorEventEmitter
 
 
