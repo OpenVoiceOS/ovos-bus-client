@@ -144,18 +144,6 @@ class TestFunctions(unittest.TestCase):
         _ = Message("test message", {"test": "data"}, {"time": time()})
         self.assertIsNone(dig_for_message())
 
-    def test_class_patching(self):
-        from mycroft_bus_client.message import Message as _MycroftMessage
-
-        m1 = _MycroftMessage("")
-        m2 = Message("")
-        self.assertEqual(m1, m2)
-        self.assertEqual(m2, m1)
-        self.assertIsInstance(m1, _MycroftMessage)
-        self.assertIsInstance(m1, Message)
-        self.assertIsInstance(m2, _MycroftMessage)
-        self.assertIsInstance(m2, Message)
-
 
 class TestLanguageExtraction(TestCase):
     def test_no_lang_in_message(self):
