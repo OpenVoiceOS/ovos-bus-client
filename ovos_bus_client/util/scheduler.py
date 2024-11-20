@@ -31,8 +31,7 @@ from threading import Thread, Lock
 from ovos_config.config import Configuration
 from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
 from ovos_utils.log import LOG
-from ovos_utils.events import EventContainer
-from ovos_utils.events import EventSchedulerInterface
+from ovos_utils.events import EventContainer, EventSchedulerInterface
 from ovos_bus_client.message import Message
 
 
