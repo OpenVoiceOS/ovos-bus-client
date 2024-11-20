@@ -53,7 +53,7 @@ jobs:
       - name: Install test dependencies
         run: |
           pip install -r test/requirements.txt
-          pip install -U pyee<12.0.0
+          pip install -U "pyee<12.0.0"
       - name: Run unittests
         run: |
           pytest --cov=ovos_bus_client --cov-report=xml test/unittests
@@ -62,7 +62,7 @@ jobs:
           #       (for an example, see OVOS Skill Manager's workflow)
       - name: Maintain Pyee backwards compat
         run: |
-          pip install -U pyee>12.0.0
+          pip install -U "pyee>12.0.0"
           pytest --cov=ovos_bus_client --cov-report=xml --cov-append test/unittests
       - name: Upload coverage
         if: "${{ matrix.python-version == '3.9' }}"
