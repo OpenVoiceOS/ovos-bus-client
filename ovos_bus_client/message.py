@@ -129,7 +129,7 @@ class Message:
         return obj
 
     @staticmethod
-    def deserialize(value: str) -> _MsgBase:
+    def deserialize(value: str) -> Message:
         """
         This takes a string and constructs a message object.
 
@@ -150,7 +150,7 @@ class Message:
                        obj.get('data') or {},
                        obj.get('context') or {})
 
-    def forward(self, msg_type: str, data: dict = None) -> _MsgBase:
+    def forward(self, msg_type: str, data: dict = None) -> Message:
         """
         Keep context and forward message
 
@@ -169,7 +169,7 @@ class Message:
         return Message(msg_type, data, context=self.context)
 
     def reply(self, msg_type: str, data: dict = None,
-              context: dict = None) -> _MsgBase:
+              context: dict = None) -> Message:
         """
         Construct a reply message for a given message
 
@@ -204,7 +204,7 @@ class Message:
             new_context['source'] = s
         return Message(msg_type, data, context=new_context)
 
-    def response(self, data: dict = None, context: dict = None) -> _MsgBase:
+    def response(self, data: dict = None, context: dict = None) -> Message:
         """
         Construct a response message for the message
 
@@ -220,7 +220,7 @@ class Message:
         return self.reply(self.msg_type + '.response', data, context)
 
     def publish(self, msg_type: str, data: dict,
-                context: dict = None) -> _MsgBase:
+                context: dict = None) -> Message:
         """
         Copy the original context and add passed in context.  Delete
         any target in the new context. Return a new message object with
