@@ -8,10 +8,9 @@ from pyee import ExecutorEventEmitter
 
 from unittest.mock import MagicMock, patch
 from ovos_utils.messagebus import FakeBus
-from ovos_bus_client.util.scheduler import EventScheduler, EventSchedulerInterface
+from ovos_bus_client.util.scheduler import EventScheduler
 
 
-# TODO - move to ovos-bus-client
 class TestEventScheduler(unittest.TestCase):
     @patch('threading.Thread')
     @patch('json.load')
@@ -102,23 +101,3 @@ class TestEventScheduler(unittest.TestCase):
         self.assertEqual(emitter.emit.call_args[0][0].data, {})
         es.shutdown()
 
-
-class TestEventSchedulerInterface(unittest.TestCase):
-    def test_shutdown(self):
-        def f(message):
-            print('TEST FUNC')
-
-        bus = ExecutorEventEmitter()
-
-        es = EventSchedulerInterface('tester')
-        es.set_bus(FakeBus())
-        es.set_id('id')
-
-        # Schedule a repeating event
-        es.schedule_repeating_event(f, None, 10, name='f')
-        self.assertTrue(len(es.bus.ee._events['id:f']) == 1)
-
-        es.shutdown()
-        # Check that the reference to the function has been removed from the
-        # bus emitter
-        self.assertTrue(len(bus._events['id:f']) == 0)
