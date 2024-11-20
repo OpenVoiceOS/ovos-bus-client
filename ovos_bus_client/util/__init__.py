@@ -25,7 +25,6 @@ from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.session import SessionManager
 from ovos_bus_client.util.scheduler import EventScheduler
-from ovos_bus_client.util.utils import create_echo_function
 
 _DEFAULT_WS_CONFIG = {"host": "0.0.0.0",
                       "port": 8181,
