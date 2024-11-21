@@ -4,42 +4,41 @@ on:
     branches:
       - dev
     paths-ignore:
-      - 'ovos_bus_client/version.py'
-      - 'examples/**'
-      - '.github/**'
-      - '.gitignore'
-      - 'LICENSE'
-      - 'CHANGELOG.md'
-      - 'MANIFEST.in'
-      - 'README.md'
-      - 'scripts/**'
+      - "ovos_bus_client/version.py"
+      - "examples/**"
+      - ".github/**"
+      - ".gitignore"
+      - "LICENSE"
+      - "CHANGELOG.md"
+      - "MANIFEST.in"
+      - "README.md"
+      - "scripts/**"
   push:
     branches:
       - master
     paths-ignore:
-      - 'ovos_bus_client/version.py'
-      - 'requirements/**'
-      - 'examples/**'
-      - '.github/**'
-      - '.gitignore'
-      - 'LICENSE'
-      - 'CHANGELOG.md'
-      - 'MANIFEST.in'
-      - 'README.md'
-      - 'scripts/**'
+      - "ovos_bus_client/version.py"
+      - "examples/**"
+      - ".github/**"
+      - ".gitignore"
+      - "LICENSE"
+      - "CHANGELOG.md"
+      - "MANIFEST.in"
+      - "README.md"
+      - "scripts/**"
   workflow_dispatch:
 
 jobs:
   unit_tests:
     strategy:
       matrix:
-        python-version: [ 3.7, 3.8, 3.9, '3.10']
+        python-version: [3.9, "3.10", "3.11", "3.12", "3.13"]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install System Dependencies
@@ -59,9 +58,13 @@ jobs:
           # NOTE: additional pytest invocations should also add the --cov-append flag
           #       or they will overwrite previous invocations' coverage reports
           #       (for an example, see OVOS Skill Manager's workflow)
+      - name: Maintain Pyee backwards compat
+        run: |
+          pip install -U "pyee==8.1.0"
+          pytest --cov=ovos_bus_client --cov-report=xml --cov-append test/unittests
       - name: Upload coverage
         if: "${{ matrix.python-version == '3.9' }}"
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{secrets.CODECOV_TOKEN}}
           files: coverage.xml

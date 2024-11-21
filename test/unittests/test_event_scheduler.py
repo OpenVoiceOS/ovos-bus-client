@@ -4,7 +4,11 @@
 
 import unittest
 import time
-from pyee import ExecutorEventEmitter
+try:
+    from pyee import ExecutorEventEmitter
+except (ImportError, ModuleNotFoundError):
+    from pyee.executor import ExecutorEventEmitter
+
 
 from unittest.mock import MagicMock, patch
 from ovos_utils.messagebus import FakeBus
