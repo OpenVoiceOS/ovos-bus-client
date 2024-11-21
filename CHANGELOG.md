@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.0.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.2a1) (2024-11-15)
+## [1.0.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.3a1) (2024-11-21)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.1...1.0.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.2...1.0.3a1)
 
 **Merged pull requests:**
 
-- fix: image urls [\#138](https://github.com/OpenVoiceOS/ovos-bus-client/pull/138) ([JarbasAl](https://github.com/JarbasAl))
+- fix: remove dead code [\#141](https://github.com/OpenVoiceOS/ovos-bus-client/pull/141) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
