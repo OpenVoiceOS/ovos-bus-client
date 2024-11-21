@@ -30,9 +30,8 @@ from threading import Thread, Lock
 
 from ovos_config.config import Configuration
 from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
-from ovos_utils.log import LOG, log_deprecation
-from ovos_utils.events import EventContainer as _EventContainer
-from ovos_utils.events import EventSchedulerInterface as _SchedulerInterface
+from ovos_utils.log import LOG
+from ovos_utils.events import EventContainer, EventSchedulerInterface
 from ovos_bus_client.message import Message
 
 
@@ -349,14 +348,3 @@ class EventScheduler(Thread):
                 self.store()
             raise e
 
-
-class EventContainer(_EventContainer):
-    def __init__(self, *args, **kwargs):
-        log_deprecation("Import from `ovos_utils.events`", "0.1.0")
-        _EventContainer.__init__(self, *args, **kwargs)
-
-
-class EventSchedulerInterface(_SchedulerInterface):
-    def __init__(self, *args, **kwargs):
-        log_deprecation("Import from `ovos_utils.events`", "0.1.0")
-        _SchedulerInterface.__init__(self, *args, **kwargs)

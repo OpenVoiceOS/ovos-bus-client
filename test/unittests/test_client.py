@@ -22,21 +22,7 @@ from ovos_bus_client.client import MessageWaiter, MessageCollector
 WS_CONF = {"websocket": {"host": "testhost", "port": 1337, "route": "/core", "ssl": False}}
 
 
-class TestClient(unittest.TestCase):
-    def test_echo(self):
-        from ovos_bus_client.client.client import echo
-
-        # TODO
-
-    def test_inheritance(self):
-        from mycroft_bus_client.client import MessageBusClient as _Client
-
-        self.assertTrue(issubclass(MessageBusClient, _Client))
-
-
 class TestMessageBusClient(unittest.TestCase):
-    from ovos_bus_client.client.client import MessageBusClient
-
     client = MessageBusClient()
 
     def test_build_url(self):

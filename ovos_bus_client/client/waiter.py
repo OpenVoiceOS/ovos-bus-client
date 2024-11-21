@@ -10,19 +10,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from threading import Event
 from typing import List, Union
-
-try:
-    from mycroft_bus_client.client.waiter import MessageWaiter as _MessageWaiterBase
-except ImportError:
-    # TODO - code in the wild does isinstance checks
-    # this conditional subclassing should be removed ASAP, it is only here for the migration period
-    # mycroft_bus_client is abandonware until further notice from MycroftAI
-
-    class _MessageWaiterBase:
-        pass
 
 
 class MessageWaiter:

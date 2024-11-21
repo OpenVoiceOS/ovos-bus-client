@@ -57,8 +57,3 @@ class TestEventScheduler(unittest.TestCase):
         self.assertNotEqual(scheduler, self.scheduler)
         scheduler.shutdown()
 
-
-class TestUtils(unittest.TestCase):
-    def test_create_echo_function(self):
-        from ovos_bus_client.util.utils import create_echo_function
-        # TODO

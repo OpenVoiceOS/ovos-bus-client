@@ -26,6 +26,7 @@ from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.session import SessionManager
 from ovos_bus_client.util.scheduler import EventScheduler
 
+
 _DEFAULT_WS_CONFIG = {"host": "0.0.0.0",
                       "port": 8181,
                       "route": "/core",

@@ -30,44 +30,8 @@ from ovos_utils.log import LOG, deprecated
 from ovos_utils.security import encrypt, decrypt
 from ovos_config.config import Configuration
 
-try:
-    from lingua_franca.parse import normalize
-except ImportError:
-    # optional LF import
-    def normalize(text, *args, **kwargs):
-        return text
 
-try:
-    from mycroft_bus_client.message import Message as _MsgBase, \
-        CollectionMessage as _CollectionMsgBase
-
-except ImportError:
-
-    # TODO - code in the wild does isinstance checks
-    # this conditional subclassing should be removed ASAP, it is only here for the migration period
-    # mycroft_bus_client is abandonware until further notice from MycroftAI
-
-    class _MsgBase:
-        pass
-
-
-    class _CollectionMsgBase(_MsgBase):
-        pass
-
-
-class _MessageMeta(type):
-    """ To override isinstance checks we need to use a metaclass """
-
-    def __instancecheck__(self, instance):
-        try:
-            from mycroft_bus_client.message import Message as _MycroftMessage
-            return isinstance(instance, _MycroftMessage) or \
-                super().__instancecheck__(instance)
-        except:
-            return super().__instancecheck__(instance)
-
-
-class Message(_MsgBase, metaclass=_MessageMeta):
+class Message:
     """Holds and manipulates data sent over the websocket
 
         Message objects will be used to send information back and forth
@@ -165,7 +129,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         return obj
 
     @staticmethod
-    def deserialize(value: str) -> _MsgBase:
+    def deserialize(value: str) -> 'Message':
         """
         This takes a string and constructs a message object.
 
@@ -186,7 +150,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
                        obj.get('data') or {},
                        obj.get('context') or {})
 
-    def forward(self, msg_type: str, data: dict = None) -> _MsgBase:
+    def forward(self, msg_type: str, data: dict = None) -> 'Message':
         """
         Keep context and forward message
 
@@ -204,8 +168,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         data = data or {}
         return Message(msg_type, data, context=self.context)
 
-    def reply(self, msg_type: str, data: dict = None,
-              context: dict = None) -> _MsgBase:
+    def reply(self, msg_type: str, data: dict = None, context: dict = None) -> 'Message':
         """
         Construct a reply message for a given message
 
@@ -240,7 +203,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             new_context['source'] = s
         return Message(msg_type, data, context=new_context)
 
-    def response(self, data: dict = None, context: dict = None) -> _MsgBase:
+    def response(self, data: dict = None, context: dict = None) -> 'Message':
         """
         Construct a response message for the message
 
@@ -255,8 +218,7 @@ class Message(_MsgBase, metaclass=_MessageMeta):
         """
         return self.reply(self.msg_type + '.response', data, context)
 
-    def publish(self, msg_type: str, data: dict,
-                context: dict = None) -> _MsgBase:
+    def publish(self, msg_type: str, data: dict, context: dict = None) -> 'Message':
         """
         Copy the original context and add passed in context.  Delete
         any target in the new context. Return a new message object with
@@ -279,27 +241,6 @@ class Message(_MsgBase, metaclass=_MessageMeta):
             del new_context['target']
 
         return Message(msg_type, data, context=new_context)
-
-    @deprecated("This method is deprecated with no replacement", "0.1.0")
-    def utterance_remainder(self):
-        """
-        DEPRECATED - mycroft-core hack, used by some skills in the wild
-
-        For intents get the portion not consumed by Adapt.
-
-        For example: if they say 'Turn on the family room light' and there are
-        entity matches for "turn on" and "light", then it will leave behind
-        " the family room " which is then normalized to "family room".
-
-        Returns:
-            str: Leftover words or None if not an utterance.
-        """
-        utt = normalize(self.data.get("utterance", ""))
-        if utt and "__tags__" in self.data:
-            for token in self.data["__tags__"]:
-                # Substitute only whole words matching the token
-                utt = re.sub(r'\b' + token.get("key", "") + r"\b", "", utt)
-        return normalize(utt)
 
 
 def encrypt_as_dict(key: str, data: str, nonce=None) -> dict:
@@ -340,7 +281,7 @@ def dig_for_message(max_records: int = 10) -> Optional[Message]:
     return None
 
 
-class CollectionMessage(Message, _CollectionMsgBase):
+class CollectionMessage(Message):
     """Extension of the Message class for use with collect handlers.
 
     The class provides the convenience methods success and failure to report
