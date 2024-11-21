@@ -1,12 +1,13 @@
 # Changelog
 
-## [1.0.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.3a1) (2024-11-21)
+## [1.0.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.4a1) (2024-11-21)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.2...1.0.3a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.3...1.0.4a1)
 
 **Merged pull requests:**
 
-- fix: remove dead code [\#141](https://github.com/OpenVoiceOS/ovos-bus-client/pull/141) ([JarbasAl](https://github.com/JarbasAl))
+- chore: Update README.md [\#143](https://github.com/OpenVoiceOS/ovos-bus-client/pull/143) ([JarbasAl](https://github.com/JarbasAl))
+- chore: fix pyee import, maintain backwards compat [\#140](https://github.com/OpenVoiceOS/ovos-bus-client/pull/140) ([mikejgray](https://github.com/mikejgray))
 
 
 
