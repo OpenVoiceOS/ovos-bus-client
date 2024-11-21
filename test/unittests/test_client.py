@@ -13,7 +13,10 @@
 import unittest
 from unittest.mock import call, Mock, patch
 
-from pyee import ExecutorEventEmitter
+try:
+    from pyee import ExecutorEventEmitter
+except (ImportError, ModuleNotFoundError):
+    from pyee.executor import ExecutorEventEmitter
 
 from ovos_bus_client.message import Message
 from ovos_bus_client.client.client import MessageBusClient, GUIWebsocketClient
