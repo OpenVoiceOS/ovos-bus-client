@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.6a1) (2024-11-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.5a1...1.0.6a1)
+
+**Merged pull requests:**
+
+- fix:gui\_caching [\#147](https://github.com/OpenVoiceOS/ovos-bus-client/pull/147) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.5a1) (2024-11-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.4...1.0.5a1)
