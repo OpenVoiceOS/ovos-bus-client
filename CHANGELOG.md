@@ -1,13 +1,20 @@
 # Changelog
 
-## [1.0.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.4a1) (2024-11-21)
+## [1.0.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.6a1) (2024-11-26)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.3...1.0.4a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.5a1...1.0.6a1)
 
 **Merged pull requests:**
 
-- chore: Update README.md [\#143](https://github.com/OpenVoiceOS/ovos-bus-client/pull/143) ([JarbasAl](https://github.com/JarbasAl))
-- chore: fix pyee import, maintain backwards compat [\#140](https://github.com/OpenVoiceOS/ovos-bus-client/pull/140) ([mikejgray](https://github.com/mikejgray))
+- fix:gui\_caching [\#147](https://github.com/OpenVoiceOS/ovos-bus-client/pull/147) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.0.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.5a1) (2024-11-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.4...1.0.5a1)
+
+**Merged pull requests:**
+
+- Update ovos-config requirement from \<1.0.0,\>=0.0.12 to \>=0.0.12,\<2.0.0 [\#145](https://github.com/OpenVoiceOS/ovos-bus-client/pull/145) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 
 

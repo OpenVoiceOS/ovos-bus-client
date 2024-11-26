@@ -120,13 +120,13 @@ class GUIInterface:
         for framework, bpath in self.ui_directories.items():
             if framework == "all":
                 # mostly applies to image files
-                shutil.copytree(bpath, output_path)
+                shutil.copytree(bpath, output_path, dirs_exist_ok=True)
                 LOG.debug(f"Copied {self.skill_id} shared GUI resources from {bpath} to {output_path}")
                 continue
             if not os.path.isdir(bpath):
                 LOG.error(f"invalid '{framework}' resources directory: {bpath}")
                 continue
-            shutil.copytree(bpath, f"{output_path}/{framework}")
+            shutil.copytree(bpath, f"{output_path}/{framework}", dirs_exist_ok=True)
             LOG.debug(f"Copied {self.skill_id} GUI resources from {bpath} to {output_path}/{framework}")
 
     def set_bus(self, bus=None):
@@ -550,11 +550,6 @@ class GUIInterface:
         if not url or not isinstance(url, str):
             raise ValueError("URL must be a non-empty string")
         if url.startswith("http"):
-            return url
-
-        # Sanitize the url to prevent path traversal
-        url = os.path.normpath(url)
-        if url.startswith("..") or url.startswith("/"):
             return url
 
         if not os.path.isfile(url):
