@@ -81,6 +81,9 @@ class EventScheduler(Thread):
             with open(self.clock_cache, "w") as f:
                 f.write(str(self.last_sync))
         self._dropped_events = 0
+        # to check if its our first connection to the internet via clock_skew
+        self._past_date = datetime.datetime(day=1, month=12, year=2024)
+
         # Convert Unix timestamp to human-readable datetime
         pretty_last_sync = datetime.datetime.fromtimestamp(self.last_sync).strftime("%Y-%m-%d %H:%M:%S")
         LOG.debug(f"Last clock sync: {pretty_last_sync}")
@@ -211,7 +214,7 @@ class EventScheduler(Thread):
                                       context to send when the
                                       handler is called
         """
-        if datetime.datetime.fromtimestamp(self.last_sync) < datetime.datetime(day=1, month=12, year=2024):
+        if datetime.datetime.fromtimestamp(self.last_sync) < self._past_date:
             # this works around problems in raspOVOS images and other
             # systems without RTC that didnt sync clock with the internet yet
             # eg. issue demonstration without this:
@@ -276,7 +279,7 @@ class EventScheduler(Thread):
 
     def handle_system_clock_sync(self, message: Message):
         # clock sync, are we in the past?
-        if self.last_sync - time.time() > datetime.timedelta(hours=6).total_seconds():
+        if datetime.datetime.fromtimestamp(self.last_sync) < self._past_date:
             LOG.warning(f"Clock was in the past!!! {self._dropped_events} scheduled events have been dropped")
 
         self.last_sync = time.time()
