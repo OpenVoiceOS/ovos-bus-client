@@ -18,20 +18,20 @@ The scheduler module allows setting up scheduled messages.
 A scheduled message will be kept and not sent until the system clock time
 criteria is met.
 """
-
+import datetime
 import json
+import os
 import shutil
 import time
-
-from typing import Optional
-from threading import Event
 from os.path import isfile, join, expanduser
+from threading import Event
 from threading import Thread, Lock
+from typing import Optional
 
 from ovos_config.config import Configuration
-from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
+from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path, get_xdg_cache_save_path
 from ovos_utils.log import LOG
-from ovos_utils.events import EventContainer, EventSchedulerInterface
+
 from ovos_bus_client.message import Message
 
 
@@ -65,12 +65,25 @@ class EventScheduler(Thread):
         autostart: if True, start scheduler on init
     """
 
-    def __init__(self, bus,
-                 schedule_file: str = 'schedule.json', autostart: bool = True):
+    def __init__(self, bus, schedule_file: str = 'schedule.json', autostart: bool = True):
         super().__init__()
 
         self.events = {}
         self.event_lock = Lock()
+        clock_cache = get_xdg_cache_save_path("ovos_clock")
+        os.makedirs(clock_cache, exist_ok=True)
+        self.clock_cache = os.path.join(clock_cache, "ovos_clock_sync.ts")
+        self.last_sync = time.time()
+        if os.path.isfile(self.clock_cache):
+            with open(self.clock_cache) as f:
+                self.last_sync = float(f.read())
+        else:
+            with open(self.clock_cache, "w") as f:
+                f.write(str(self.last_sync))
+        self._dropped_events = 0
+        # Convert Unix timestamp to human-readable datetime
+        pretty_last_sync = datetime.datetime.fromtimestamp(self.last_sync).strftime("%Y-%m-%d %H:%M:%S")
+        LOG.debug(f"Last clock sync: {pretty_last_sync}")
 
         self.bus = bus
 
@@ -85,14 +98,11 @@ class EventScheduler(Thread):
         if self.schedule_file:
             self.load()
 
-        self.bus.on('mycroft.scheduler.schedule_event',
-                    self.schedule_event_handler)
-        self.bus.on('mycroft.scheduler.remove_event',
-                    self.remove_event_handler)
-        self.bus.on('mycroft.scheduler.update_event',
-                    self.update_event_handler)
-        self.bus.on('mycroft.scheduler.get_event',
-                    self.get_event_handler)
+        self.bus.on('mycroft.scheduler.schedule_event', self.schedule_event_handler)
+        self.bus.on('mycroft.scheduler.remove_event', self.remove_event_handler)
+        self.bus.on('mycroft.scheduler.update_event', self.update_event_handler)
+        self.bus.on('mycroft.scheduler.get_event', self.get_event_handler)
+        self.bus.on('system.clock.synced', self.handle_system_clock_sync)  # emitted by raspOVOS
 
         self._running = Event()
         self._stopping = Event()
@@ -201,6 +211,17 @@ class EventScheduler(Thread):
                                       context to send when the
                                       handler is called
         """
+        if datetime.datetime.fromtimestamp(self.last_sync) < datetime.datetime(day=1, month=12, year=2024):
+            # this works around problems in raspOVOS images and other
+            # systems without RTC that didnt sync clock with the internet yet
+            # eg. issue demonstration without this:
+            #   date time skill schedulling the hour change sound N times (+1hour every time until present)
+            LOG.error("Refusing to schedule event, system clock is in the past!")
+            self._dropped_events += 1
+            return
+        elif datetime.datetime.fromtimestamp(sched_time) < datetime.datetime.now():
+            LOG.error("Refusing to schedule event, it is in the past!")
+            return
         data = data or {}
         with self.event_lock:
             # get current list of scheduled times for event, [] if missing
@@ -238,7 +259,7 @@ class EventScheduler(Thread):
         if event and sched_time:
             self.schedule_event(event, sched_time, repeat, data, context)
         elif not event:
-            LOG.error('Scheduled event name not provided')
+            LOG.error('Scheduled event msg_type not provided')
         else:
             LOG.error('Scheduled event time not provided')
 
@@ -252,6 +273,18 @@ class EventScheduler(Thread):
         with self.event_lock:
             if event in self.events:
                 self.events.pop(event)
+
+    def handle_system_clock_sync(self, message: Message):
+        # clock sync, are we in the past?
+        if self.last_sync - time.time() > datetime.timedelta(hours=6).total_seconds():
+            LOG.warning(f"Clock was in the past!!! {self._dropped_events} scheduled events have been dropped")
+
+        self.last_sync = time.time()
+        # Convert Unix timestamp to human-readable datetime
+        pretty_last_sync = datetime.datetime.fromtimestamp(self.last_sync).strftime("%Y-%m-%d %H:%M:%S")
+        LOG.info(f"clock sync: {pretty_last_sync}")
+        with open(self.clock_cache, "w") as f:
+            f.write(str(self.last_sync))
 
     def remove_event_handler(self, message: Message):
         """
@@ -347,4 +380,3 @@ class EventScheduler(Thread):
             if not isinstance(e, OSError):
                 self.store()
             raise e
-
