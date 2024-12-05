@@ -222,9 +222,7 @@ class EventScheduler(Thread):
             LOG.error("Refusing to schedule event, system clock is in the past!")
             self._dropped_events += 1
             return
-        elif datetime.datetime.fromtimestamp(sched_time) < datetime.datetime.now():
-            LOG.error("Refusing to schedule event, it is in the past!")
-            return
+        
         data = data or {}
         with self.event_lock:
             # get current list of scheduled times for event, [] if missing
