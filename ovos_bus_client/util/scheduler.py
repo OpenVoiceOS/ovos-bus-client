@@ -77,7 +77,7 @@ class EventScheduler(Thread):
         self._past_date = datetime.datetime(day=1, month=12, year=2024)
         # Convert Unix timestamp to human-readable datetime
         pretty_last_sync = datetime.datetime.fromtimestamp(self._last_sync).strftime("%Y-%m-%d %H:%M:%S")
-        LOG.debug(f"Last clock sync: {pretty_last_sync}")
+        LOG.debug(f"Boot time clock: {pretty_last_sync}")
 
         self.bus = bus
 
