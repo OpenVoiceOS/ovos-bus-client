@@ -1,20 +1,12 @@
 # Changelog
 
-## [1.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.1.0a1) (2024-12-26)
+## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0a1) (2024-12-26)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.7a1...1.1.0a1)
-
-**Merged pull requests:**
-
-- feat:loading\_status\_templates [\#151](https://github.com/OpenVoiceOS/ovos-bus-client/pull/151) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.0.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.7a1) (2024-12-05)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.6...1.0.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.1.0...1.2.0a1)
 
 **Merged pull requests:**
 
-- fix:events\_in\_the\_past [\#149](https://github.com/OpenVoiceOS/ovos-bus-client/pull/149) ([JarbasAl](https://github.com/JarbasAl))
+- feat:face\_template [\#153](https://github.com/OpenVoiceOS/ovos-bus-client/pull/153) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
