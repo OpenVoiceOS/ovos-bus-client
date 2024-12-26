@@ -513,9 +513,28 @@ class GUIInterface:
             raise RuntimeError("bus not set, did you call self.bind() ?")
         self.bus.emit(Message("ovos.notification.api.remove.controlled"))
 
+    def show_face(self, awake: bool = True,
+                  override_idle: Union[int, bool] = True,
+                  override_animations: bool = True):
+        """
+        Display a sleeping/awake face
+
+        Arguments:
+            awake (bool): open or closed eyes
+            override_idle (boolean, int):
+                True: Takes over the resting page indefinitely
+                (int): Delays resting page for the specified number of
+                       seconds.
+            override_animations (boolean):
+                True: Disables showing all platform skill animations.
+                False: 'Default' always show animations.
+        """
+        self["sleeping"] = not awake
+        self.show_page("SYSTEM_Face", override_idle, override_animations)
+
     def show_loading_animation(self, text: str,
-                                 override_idle: Union[int, bool] = None,
-                                 override_animations: bool = False):
+                               override_idle: Union[int, bool] = None,
+                               override_animations: bool = False):
         """
         Display a GUI loading animation
 
@@ -533,8 +552,8 @@ class GUIInterface:
         self.show_page("SYSTEM_Loading", override_idle, override_animations)
 
     def show_status_animation(self, text: str, success: bool,
-                                 override_idle: Union[int, bool] = None,
-                                 override_animations: bool = False):
+                              override_idle: Union[int, bool] = None,
+                              override_animations: bool = False):
         """
         Display a success/failure animation.
 
