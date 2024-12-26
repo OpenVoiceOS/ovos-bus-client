@@ -513,6 +513,46 @@ class GUIInterface:
             raise RuntimeError("bus not set, did you call self.bind() ?")
         self.bus.emit(Message("ovos.notification.api.remove.controlled"))
 
+    def show_loading_animation(self, text: str,
+                                 override_idle: Union[int, bool] = None,
+                                 override_animations: bool = False):
+        """
+        Display a GUI loading animation
+
+        Arguments:
+            text (str): Main text content.
+            override_idle (boolean, int):
+                True: Takes over the resting page indefinitely
+                (int): Delays resting page for the specified number of
+                       seconds.
+            override_animations (boolean):
+                True: Disables showing all platform skill animations.
+                False: 'Default' always show animations.
+        """
+        self["label"] = text
+        self.show_page("SYSTEM_Loading", override_idle, override_animations)
+
+    def show_status_animation(self, text: str, success: bool,
+                                 override_idle: Union[int, bool] = None,
+                                 override_animations: bool = False):
+        """
+        Display a success/failure animation.
+
+        Arguments:
+            text (str): Main text content.
+            success (bool): Success (True) or Failure (False) animation
+            override_idle (boolean, int):
+                True: Takes over the resting page indefinitely
+                (int): Delays resting page for the specified number of
+                       seconds.
+            override_animations (boolean):
+                True: Disables showing all platform skill animations.
+                False: 'Default' always show animations.
+        """
+        self["status"] = "Enabled" if success else "Disabled"  # string check in QML
+        self["label"] = text
+        self.show_page("SYSTEM_Status", override_idle, override_animations)
+
     def show_text(self, text: str, title: Optional[str] = None,
                   override_idle: Union[int, bool] = None,
                   override_animations: bool = False):
