@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0a1) (2024-12-26)
+## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0a1) (2024-12-28)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.1.0...1.2.0a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.2.0...1.3.0a1)
 
 **Merged pull requests:**
 
-- feat:face\_template [\#153](https://github.com/OpenVoiceOS/ovos-bus-client/pull/153) ([JarbasAl](https://github.com/JarbasAl))
+- feat:hivemind-plugin-manager [\#155](https://github.com/OpenVoiceOS/ovos-bus-client/pull/155) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
