@@ -2,14 +2,25 @@
 
 This module is a simple interface for the OVOS messagebus and can be used to connect to OVOS, send messages and react to messages sent by the OpenVoiceOS system.
 
+---
 
-## MycroftBusClient()
+## 📡 HiveMind Integration
+
+This project includes a native [hivemind-plugin-manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager) integration, providing seamless interoperability with the HiveMind ecosystem.
+
+- **Agent Protocol**: Provides `hivemind-ovos-agent-plugin` allowing to connect satellites to OVOS
+  
+---
+
+## 🐍 Python Usage
+
+### MycroftBusClient()
 
 The `MycroftBusClient()` object can be setup to connect to any host and port as well as any endpont on that host. this makes it quite versitile and will work on the main bus as well as on a gui bus. If no arguments are provided it will try to connect to a local instance of OVOS on the default endpoint and port.
 
 > NOTE: we kept the original pre-fork class name for compatibility reasons
 
-## Message()
+### Message()
 
 The `Message` object is a representation of the messagebus message, this will always contain a message type but can also contain data and context. Data is usually real information while the context typically contain information on where the message originated or who the intended recipient is.
 
@@ -17,12 +28,11 @@ The `Message` object is a representation of the messagebus message, this will al
 Message('MESSAGE_TYPE', data={'meaning': 42}, context={'origin': 'A.Dent'})
 ```
 
-## Examples
+### Examples
 
-Below are some a couple of simple cases for sending a message on the bus as well
-as reacting to messages on the bus
+Below are some a couple of simple cases for sending a message on the bus as well as reacting to messages on the bus
 
-### Sending a message on the bus.
+#### Sending a message on the bus.
 
 ```python
 from ovos_bus_client import MessageBusClient, Message
@@ -35,7 +45,7 @@ print('Sending speak message...')
 client.emit(Message('speak', data={'utterance': 'Hello World'}))
 ```
 
-### Catching a message on the messagebus
+#### Catching a message on the messagebus
 
 ```python
 from ovos_bus_client import MessageBusClient, Message

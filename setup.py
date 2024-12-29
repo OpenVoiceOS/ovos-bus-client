@@ -18,8 +18,7 @@ def required(requirements_file):
 
 
 def get_version():
-    """ Find the version of ovos-core"""
-    version = None
+    """ Find the version of the package"""
     version_file = os.path.join(BASEDIR, 'ovos_bus_client', 'version.py')
     major, minor, build, alpha = (None, None, None, None)
     with open(version_file) as f:
@@ -44,6 +43,8 @@ def get_version():
 
 with open(os.path.join(BASEDIR, "README.md"), "r") as f:
     long_description = f.read()
+
+PLUGIN_ENTRY_POINT = 'hivemind-ovos-agent-plugin=ovos_bus_client.hpm:OVOSProtocol'
 
 setup(
     name='ovos-bus-client',
@@ -72,6 +73,7 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     entry_points={
+        'hivemind.agent.protocol': PLUGIN_ENTRY_POINT,
         'console_scripts': [
             'ovos-listen=ovos_bus_client.scripts:ovos_listen',
             'ovos-speak=ovos_bus_client.scripts:ovos_speak',
