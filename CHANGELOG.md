@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0a1) (2024-12-28)
+## [1.3.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.1a1) (2024-12-29)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.2.0...1.3.0a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.0...1.3.1a1)
 
 **Merged pull requests:**
 
-- feat:hivemind-plugin-manager [\#155](https://github.com/OpenVoiceOS/ovos-bus-client/pull/155) ([JarbasAl](https://github.com/JarbasAl))
+- fix: missing hivemind entrypoint in setup.py [\#157](https://github.com/OpenVoiceOS/ovos-bus-client/pull/157) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
