@@ -6,7 +6,7 @@ from threading import Event, Thread
 from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
 
-from ovos_utils.log import LOG, deprecated
+from ovos_utils.log import LOG
 try:
     from pyee import ExecutorEventEmitter
 except (ImportError, ModuleNotFoundError):
