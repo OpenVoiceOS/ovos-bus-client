@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 import time
 from datetime import timedelta
 from functools import wraps
@@ -93,6 +94,12 @@ class ClassicAudioServiceInterface:
     @deprecated("removed from ovos-audio with the adoption of ovos-media service, "
                 "use OCPInterface instead", "0.1.0")
     def __init__(self, bus=None):
+
+        warnings.warn(
+            "use OCPInterface instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.bus = bus or get_mycroft_bus()
 
     @_ensure_message_kwarg()
