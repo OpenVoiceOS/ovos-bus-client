@@ -22,11 +22,9 @@ serializing / deserializing the message for transmission.
 
 import inspect
 import orjson
-import re
 from copy import deepcopy
 from typing import Optional
 from binascii import hexlify, unhexlify
-from ovos_utils.log import LOG, deprecated
 from ovos_utils.security import encrypt, decrypt
 from ovos_config.config import Configuration
 
