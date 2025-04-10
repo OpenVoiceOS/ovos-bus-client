@@ -44,7 +44,8 @@ def get_version():
 with open(os.path.join(BASEDIR, "README.md"), "r") as f:
     long_description = f.read()
 
-PLUGIN_ENTRY_POINT = 'hivemind-ovos-agent-plugin=ovos_bus_client.hpm:OVOSProtocol'
+HM_PLUGIN_ENTRY_POINT = 'hivemind-ovos-agent-plugin=ovos_bus_client.hpm:OVOSProtocol'
+PLUGIN_ENTRY_POINT = 'ovos-solver-bus-plugin=ovos_bus_client.opm:OVOSMessagebusSolver'
 
 setup(
     name='ovos-bus-client',
@@ -73,7 +74,8 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     entry_points={
-        'hivemind.agent.protocol': PLUGIN_ENTRY_POINT,
+        'hivemind.agent.protocol': HM_PLUGIN_ENTRY_POINT,
+        'neon.plugin.solver': PLUGIN_ENTRY_POINT,
         'console_scripts': [
             'ovos-listen=ovos_bus_client.scripts:ovos_listen',
             'ovos-speak=ovos_bus_client.scripts:ovos_speak',
