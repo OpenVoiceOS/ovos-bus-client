@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.3.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.2a1) (2025-01-04)
+## [1.3.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.3a1) (2025-04-10)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.1...1.3.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.2...1.3.3a1)
 
 **Merged pull requests:**
 
-- chore: add warnings [\#159](https://github.com/OpenVoiceOS/ovos-bus-client/pull/159) ([JarbasAl](https://github.com/JarbasAl))
+- Feat/solver plugin [\#163](https://github.com/OpenVoiceOS/ovos-bus-client/pull/163) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
