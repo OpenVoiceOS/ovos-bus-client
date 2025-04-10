@@ -1,11 +1,14 @@
+from threading import Event
+from typing import Optional, Iterable
+from uuid import uuid4
+
 from ovos_bus_client import MessageBusClient
-from ovos_bus_client.util import get_mycroft_bus
 from ovos_bus_client.message import Message
+from ovos_bus_client.session import Session
+from ovos_bus_client.util import get_mycroft_bus
 from ovos_plugin_manager.templates.language import LanguageDetector, LanguageTranslator
 from ovos_plugin_manager.templates.solvers import QuestionSolver
 from ovos_utils.log import LOG
-from threading import Event
-from typing import Optional
 
 
 class OVOSMessagebusSolver(QuestionSolver):
@@ -26,6 +29,8 @@ class OVOSMessagebusSolver(QuestionSolver):
         if self.config.get("autoconnect"):
             self.bind(get_mycroft_bus())
         self._extend_timeout = False
+        self.session = Session(session_id=str(uuid4()))
+        self._stream = False
 
     def bind(self, hm: MessageBusClient):
         """if you want to re-use a open connection"""
@@ -42,28 +47,47 @@ class OVOSMessagebusSolver(QuestionSolver):
         self._responses.append(utt)
         self._extend_timeout = True
 
-    # abstract Solver methods
-    def get_data(self, query, context=None):
-        return {"answer": self.get_spoken_answer(query, context)}
-
-    def get_spoken_answer(self, query, context=None, timeout=5):
+    def _ask_ovos(self, query: str,
+                  lang: Optional[str] = None,
+                  units: Optional[str] = None,):
         if self.bus is None:
             LOG.error("not connected to OVOS")
             return
+
+        self.session.lang = lang or self.session.lang
+        self.session.system_unit = units or self.session.system_unit
+
         self._response.clear()
         self._responses = []
         self._extend_timeout = False
-        context = context or {}
-        if "session" in context:
-            lang = context["session"]["lang"]
-        else:
-            lang = context.get("lang") or self.config.get("lang", "en-us")
         mycroft_msg = Message("recognizer_loop:utterance",
-                              {"utterances": [query], "lang": lang})
+                              {"utterances": [query],
+                               "lang": self.session.lang},
+                              {"session": self.session.serialize()})
         self.bus.emit(mycroft_msg)
+        LOG.debug("waiting for end of intent handling...")
+
+    ############################
+    # abstract methods
+    def get_spoken_answer(self, query: str,
+                          lang: Optional[str] = None,
+                          units: Optional[str] = None,
+                          timeout: int = 5) -> Optional[str]:
+        """
+        Obtain the spoken answer for a given query.
+
+        Args:
+            query (str): The query text.
+            lang (Optional[str]): Optional language code. Defaults to None.
+            units (Optional[str]): Optional units for the query. Defaults to None.
+
+        Returns:
+            str: The spoken answer as a text response.
+        """
+        self._ask_ovos(query, lang, units)
+
         self._response.wait(timeout=timeout)
         while self._extend_timeout:
-            LOG.debug("waiting for end of intent handling...")
             self._extend_timeout = False
             self._response.wait(timeout=5)
         if self._responses:
@@ -72,9 +96,33 @@ class OVOSMessagebusSolver(QuestionSolver):
         return None  # let next solver attempt
 
 
+    def stream_utterances(self, query: str,
+                          lang: Optional[str] = None,
+                          units: Optional[str] = None) -> Iterable[str]:
+        """
+        Stream utterances for the given query as they become available.
+
+        Args:
+            query (str): The query text.
+            lang (Optional[str]): Optional language code. Defaults to None.
+            units (Optional[str]): Optional units for the query. Defaults to None.
+
+        Returns:
+            Iterable[str]: An iterable of utterances.
+        """
+        self._ask_ovos(query, lang, units)
+        while not self._response.is_set():
+            if self._responses:
+                yield self._responses.pop(0)
+            self._response.wait(timeout=0.1)
+
+        while self._responses:
+            yield self._responses.pop(0)
+
 if __name__ == "__main__":
     cfg = {
         "autoconnect": True
     }
     bot = OVOSMessagebusSolver(config=cfg)
-    print(bot.spoken_answer("what is the speed of light?", lang="en-US"))
+    for a in bot.stream_utterances("what is the speed of light?"):
+        print(a)
