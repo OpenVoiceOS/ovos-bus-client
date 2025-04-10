@@ -1,34 +1,69 @@
-from threading import Event
-from typing import Optional, Iterable
+import threading
+from dataclasses import dataclass
+from typing import Optional, Iterable, Dict, List
 from uuid import uuid4
 
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import Session
-from pyee import EventEmitter
+from ovos_bus_client.session import Session, SessionManager
 from ovos_plugin_manager.templates.language import LanguageDetector, LanguageTranslator
 from ovos_plugin_manager.templates.solvers import QuestionSolver
 from ovos_utils.log import LOG
+from pyee import EventEmitter
+
+
+@dataclass
+class Query:
+    """Data structure to track an active query sent to OVOS."""
+    utterance: str
+    session: Session
+    responses: List[str]
+    handled: threading.Event
+    _extend_timeout: bool = False
 
 
 class OVOSMessagebusSolver(QuestionSolver):
-    def __init__(self, config=None,
+    """
+    A solver plugin that connects to OVOS via the messagebus to query spoken answers.
+
+    Attributes:
+        bus (Optional[MessageBusClient]): Active messagebus connection.
+        queries (Dict[str, Query]): Tracks active sessions and their responses.
+    """
+
+    def __init__(self,
+                 config: Optional[dict] = None,
                  translator: Optional[LanguageTranslator] = None,
                  detector: Optional[LanguageDetector] = None,
                  priority: int = 70,
                  enable_tx: bool = False,
                  enable_cache: bool = False,
                  internal_lang: Optional[str] = None):
-        super().__init__(config=config, translator=translator,
-                         detector=detector, priority=priority,
-                         enable_tx=enable_tx, enable_cache=enable_cache,
+        """
+        Initialize the messagebus solver.
+
+        Args:
+            config: Configuration dictionary.
+            translator: Optional language translator.
+            detector: Optional language detector.
+            priority: Solver priority level.
+            enable_tx: Whether to enable translation.
+            enable_cache: Whether to cache results.
+            internal_lang: Internal processing language.
+        """
+        super().__init__(config=config or {},
+                         translator=translator,
+                         detector=detector,
+                         priority=priority,
+                         enable_tx=enable_tx,
+                         enable_cache=enable_cache,
                          internal_lang=internal_lang)
-        self.bus = None
-        self._response = Event()
-        self._responses = []
+        self.bus: Optional[MessageBusClient] = None
+        self.queries: Dict[str, Query] = {}
+
         if self.config.get("autoconnect"):
-            ovos_bus_address = self.config.get("host") or "127.0.0.1"
-            ovos_bus_port = self.config.get("port") or 8181
+            ovos_bus_address = self.config.get("host", "127.0.0.1")
+            ovos_bus_port = self.config.get("port", 8181)
             self.bus = MessageBusClient(
                 host=ovos_bus_address,
                 port=ovos_bus_port,
@@ -37,44 +72,72 @@ class OVOSMessagebusSolver(QuestionSolver):
             self.bus.run_in_thread()
             self.bus.connected_event.wait()
             self.bind(self.bus)
-        self._extend_timeout = False
-        self.session = Session(session_id=str(uuid4()))
-        self._stream = False
 
-    def bind(self, bus: MessageBusClient):
-        """if you want to re-use a open connection"""
+    def bind(self, bus: MessageBusClient) -> None:
+        """
+        Bind to an already connected MessageBusClient instance.
+
+        Args:
+            bus: The connected bus instance.
+        """
         self.bus = bus
         self.bus.on("speak", self._receive_answer)
         self.bus.on("ovos.utterance.handled", self._end_of_response)
 
-    def _end_of_response(self, message):
-        self._response.set()
-        self._extend_timeout = False
+    def _end_of_response(self, message: Message) -> None:
+        """Callback for end of utterance handling signal."""
+        sess = SessionManager.get(message)
+        query = self.queries.get(sess.session_id)
+        if query:
+            query._extend_timeout = False
+            query.handled.set()
 
-    def _receive_answer(self, message):
-        utt = message.data["utterance"]
-        self._responses.append(utt)
-        self._extend_timeout = True
+    def _receive_answer(self, message: Message) -> None:
+        """Callback to collect a spoken response."""
+        utt = message.data.get("utterance")
+        sess = SessionManager.get(message)
+        query = self.queries.get(sess.session_id)
+        if query and utt:
+            query.responses.append(utt)
+            query._extend_timeout = True
 
     def _ask_ovos(self, query: str,
                   lang: Optional[str] = None,
-                  units: Optional[str] = None,):
-        if self.bus is None:
-            LOG.error("not connected to OVOS")
-            return
+                  units: Optional[str] = None) -> Optional[Query]:
+        """
+        Send a query to OVOS through the bus.
 
-        self.session.lang = lang or self.session.lang
-        self.session.system_unit = units or self.session.system_unit
+        Args:
+            query: The input query string.
+            lang: Optional language code override.
+            units: Optional system unit preferences.
 
-        self._response.clear()
-        self._responses = []
-        self._extend_timeout = False
+        Returns:
+            Query: An internal tracking object for the active query.
+        """
+        if not self.bus:
+            LOG.error("Not connected to OVOS messagebus.")
+            return None
+
+        sess = Session(str(uuid4()))
+        sess.lang = lang or sess.lang
+        sess.system_unit = units or sess.system_unit
+
+        ovos_query = Query(
+            utterance=query,
+            session=sess,
+            responses=[],
+            handled=threading.Event()
+        )
+        self.queries[sess.session_id] = ovos_query
+
         mycroft_msg = Message("recognizer_loop:utterance",
-                              {"utterances": [query],
-                               "lang": self.session.lang},
-                              {"session": self.session.serialize()})
+                              {"utterances": [query], "lang": sess.lang},
+                              {"session": sess.serialize()})
+
         self.bus.emit(mycroft_msg)
-        LOG.debug("waiting for end of intent handling...")
+        LOG.debug(f"Sent query to OVOS: {query}")
+        return ovos_query
 
     ############################
     # abstract methods
@@ -83,55 +146,69 @@ class OVOSMessagebusSolver(QuestionSolver):
                           units: Optional[str] = None,
                           timeout: int = 5) -> Optional[str]:
         """
-        Obtain the spoken answer for a given query.
+        Get the final spoken response from OVOS to a query.
 
         Args:
-            query (str): The query text.
-            lang (Optional[str]): Optional language code. Defaults to None.
-            units (Optional[str]): Optional units for the query. Defaults to None.
+            query: User query.
+            lang: Optional language code.
+            units: Optional unit system (e.g. metric).
+            timeout: Time in seconds to wait for a response.
 
         Returns:
-            str: The spoken answer as a text response.
+            A single string combining all utterances returned, or None if unanswered.
         """
-        self._ask_ovos(query, lang, units)
+        ovos_query = self._ask_ovos(query, lang, units)
+        if not ovos_query:
+            return None
 
-        self._response.wait(timeout=timeout)
-        while self._extend_timeout:
-            self._extend_timeout = False
-            self._response.wait(timeout=5)
-        if self._responses:
-            # merge multiple speak messages into one
-            return "\n".join(self._responses)
-        return None  # let next solver attempt
+        ovos_query.handled.wait(timeout=timeout)
 
+        while ovos_query._extend_timeout:
+            ovos_query._extend_timeout = False
+            ovos_query.handled.wait(timeout=timeout)
+
+        responses = ovos_query.responses
+        self.queries.pop(ovos_query.session.session_id, None)
+
+        return "\n".join(responses) if responses else None
 
     def stream_utterances(self, query: str,
                           lang: Optional[str] = None,
                           units: Optional[str] = None) -> Iterable[str]:
         """
-        Stream utterances for the given query as they become available.
+        Stream responses to a query as they are emitted.
 
         Args:
-            query (str): The query text.
-            lang (Optional[str]): Optional language code. Defaults to None.
-            units (Optional[str]): Optional units for the query. Defaults to None.
+            query: The input query text.
+            lang: Optional language code.
+            units: Optional system unit.
 
-        Returns:
-            Iterable[str]: An iterable of utterances.
+        Yields:
+            Individual spoken responses from OVOS.
         """
-        self._ask_ovos(query, lang, units)
-        while not self._response.is_set():
-            if self._responses:
-                yield self._responses.pop(0)
-            self._response.wait(timeout=0.1)
+        ovos_query = self._ask_ovos(query, lang, units)
+        if not ovos_query:
+            return
 
-        while self._responses:
-            yield self._responses.pop(0)
+        session_id = ovos_query.session.session_id
+        query_obj = self.queries[session_id]
+
+        while not query_obj.handled.is_set():
+            query_obj.handled.wait(timeout=0.5)
+            while query_obj.responses:
+                yield query_obj.responses.pop(0)
+
+        while query_obj.responses:
+            yield query_obj.responses.pop(0)
+
+        self.queries.pop(session_id, None)
+
 
 if __name__ == "__main__":
-    cfg = {
-        "autoconnect": True
-    }
+    cfg = {"autoconnect": True}
     bot = OVOSMessagebusSolver(config=cfg)
-    for a in bot.stream_utterances("what is the speed of light?"):
+
+    print(bot.spoken_answer("what is the speed of light", lang="en"))
+
+    for a in bot.stream_utterances("execute a speed test", lang="en"):
         print(a)
