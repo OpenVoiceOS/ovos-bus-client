@@ -5,7 +5,7 @@ from uuid import uuid4
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
-from ovos_bus_client.util import get_mycroft_bus
+from pyee import EventEmitter
 from ovos_plugin_manager.templates.language import LanguageDetector, LanguageTranslator
 from ovos_plugin_manager.templates.solvers import QuestionSolver
 from ovos_utils.log import LOG
@@ -27,14 +27,23 @@ class OVOSMessagebusSolver(QuestionSolver):
         self._response = Event()
         self._responses = []
         if self.config.get("autoconnect"):
-            self.bind(get_mycroft_bus())
+            ovos_bus_address = self.config.get("host") or "127.0.0.1"
+            ovos_bus_port = self.config.get("port") or 8181
+            self.bus = MessageBusClient(
+                host=ovos_bus_address,
+                port=ovos_bus_port,
+                emitter=EventEmitter(),
+            )
+            self.bus.run_in_thread()
+            self.bus.connected_event.wait()
+            self.bind(self.bus)
         self._extend_timeout = False
         self.session = Session(session_id=str(uuid4()))
         self._stream = False
 
-    def bind(self, hm: MessageBusClient):
+    def bind(self, bus: MessageBusClient):
         """if you want to re-use a open connection"""
-        self.bus = hm
+        self.bus = bus
         self.bus.on("speak", self._receive_answer)
         self.bus.on("ovos.utterance.handled", self._end_of_response)
 
