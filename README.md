@@ -8,11 +8,28 @@ This module is a simple interface for the OVOS messagebus and can be used to con
 
 The project also includes the `ovos-solver-bus-plugin`, a plugin for interacting with `ovos-core` wherever a solver can be used.
 
+example `persona.json`
+```json
+{
+  "name": "Open Voice OS",
+  "solvers": [
+    "ovos-solver-bus-plugin",
+    "ovos-solver-failure-plugin"
+  ],
+  "ovos-solver-bus-plugin": {
+    "autoconnect": true,
+    "host": "192.168.1.200",
+    "port": 8181
+  }
+}
+```
+
 ### Use Cases:
 - Expose `ovos-core` to any OpenAI-compatible project via [ovos-persona-server](https://github.com/OpenVoiceOS/ovos-persona-server)
     - Chat with OVOS via the Open Web UI
     - Expose OVOS as an agent for Home Assistant
 - Integrate OpenVoiceOS into a [Mixture Of Solvers (MOS)](https://github.com/TigreGotico/ovos-MoS)
+
 ---
 
 ## 📡 HiveMind Integration
