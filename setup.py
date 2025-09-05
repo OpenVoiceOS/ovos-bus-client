@@ -59,9 +59,6 @@ setup(
     },
     include_package_data=True,
     install_requires=required('requirements.txt'),
-    extras_require={
-        'extras': required('extras.txt')
-    },
     url='https://github.com/OpenVoiceOS/ovos-bus-client',
     license='Apache-2.0',
     author='JarbasAI',

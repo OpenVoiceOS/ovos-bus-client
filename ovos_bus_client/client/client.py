@@ -1,6 +1,7 @@
 
 import time
-from ovos_bus_client.util import json_dumps, json_loads
+
+from ovos_utils import json_dumps
 
 from os import getpid
 from threading import Event, Thread

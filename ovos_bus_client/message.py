@@ -19,9 +19,8 @@ The Message object is the core construct passed on the message bus
 it contains methods for tracking message context and
 serializing / deserializing the message for transmission.
 """
-import json
 import inspect
-from ovos_bus_client.util import json_dumps, json_loads
+from ovos_utils import json_dumps, json_loads
 
 from copy import deepcopy
 from typing import Optional
