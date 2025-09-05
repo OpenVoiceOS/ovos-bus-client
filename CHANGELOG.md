@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.5a1...1.3.6a1)
+
+**Merged pull requests:**
+
+- fix: make orjson optional [\#169](https://github.com/OpenVoiceOS/ovos-bus-client/pull/169) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.3.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.5a1) (2025-06-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4...1.3.5a1)
