@@ -1,6 +1,7 @@
-import orjson
+
 import time
-import traceback
+from ovos_bus_client.util import json_dumps, json_loads
+
 from os import getpid
 from threading import Event, Thread
 from typing import Union, Callable, Any, List, Optional
@@ -183,7 +184,7 @@ class MessageBusClient:
         if hasattr(message, 'serialize'):
             msg = message.serialize()
         else:
-            msg = orjson.dumps(message.__dict__).decode("utf-8")
+            msg = json_dumps(message.__dict__)
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
@@ -404,7 +405,7 @@ class GUIWebsocketClient(MessageBusClient):
             if hasattr(message, 'serialize'):
                 self.client.send(message.serialize())
             else:
-                self.client.send(orjson.dumps(message.__dict__).decode("utf-8"))
+                self.client.send(json_dumps(message.__dict__))
         except WebSocketConnectionClosedException:
             LOG.warning('Could not send %s message because connection '
                         'has been closed', message.msg_type)
