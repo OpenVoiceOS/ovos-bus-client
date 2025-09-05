@@ -69,13 +69,10 @@ class Message:
             other.context == self.context
 
     def serialize(self) -> str:
-        """This returns a string of the message info.
-
-        This makes it easy to send over a websocket. This uses
-        json dumps to generate the string with type, data and context
-
-        Returns:
-            str: a json string representation of the message.
+        """
+        Serialize the Message to a string suitable for transmission.
+        
+        Returns a JSON string containing the message's `type`, `data`, and `context`. If a module-level secret key is configured, the message is encrypted and this function returns a JSON string of the encrypted payload (a dict with ciphertext, tag, and nonce).
         """
         # handle Session and Message objects
         data = self._json_dump(self.data)
@@ -89,11 +86,33 @@ class Message:
 
     @property
     def as_dict(self) -> dict:
+        """
+        Return a dictionary representation of the message.
+        
+        Parses the message's serialized form and returns a dict with the message fields (typically containing the keys "type", "data", and "context"). The returned dict reflects any encryption/decryption behavior performed during serialization/deserialization.
+        """
         return json_loads(self.serialize())
 
     @staticmethod
     def _json_dump(value):
 
+        """
+        Recursively prepare a dict for JSON serialization by replacing elements that provide a `serialize()` method with their serialized form.
+        
+        The function accepts a dict and returns a new dict where:
+        - any object with a `serialize()` method is replaced by the result of that call (exceptions from `serialize()` are ignored and the original object is preserved),
+        - lists are processed recursively,
+        - dicts are processed recursively except for instances of `_GUIDict`, which are left intact.
+        
+        Parameters:
+            value (dict): The input dictionary to process. Must be a dict (otherwise an AssertionError is raised).
+        
+        Returns:
+            dict: A new dictionary mirroring `value` with serializable items replaced.
+        
+        Raises:
+            AssertionError: If `value` is not a dict.
+        """
         from ovos_bus_client.apis.gui import _GUIDict
 
         def serialize_item(x):
@@ -115,6 +134,24 @@ class Message:
 
     @staticmethod
     def _json_load(value):
+        """
+        Load a message payload into a plain dictionary, decrypting if necessary.
+        
+        If `value` is a JSON string it is parsed; if it's already a dict it is returned (after checks).
+        When a secret key is configured on Message:
+        - If the dict contains an encrypted payload (a `'ciphertext'` entry), it is decrypted and the resulting dict is returned.
+        - If the dict is unencrypted and unencrypted messages are disallowed, a RuntimeError is raised.
+        
+        Parameters:
+            value (str | dict): JSON string or dict representing the message payload.
+        
+        Returns:
+            dict: The resulting message dictionary (decrypted if needed).
+        
+        Raises:
+            AssertionError: if the parsed/received object is not a dict.
+            RuntimeError: if a secret key is configured and an unencrypted dict is received while unencrypted messages are disallowed.
+        """
         obj = json_loads(value)  if isinstance(value, str) else value
         assert isinstance(obj, dict)
         if Message._secret_key:
@@ -374,13 +411,13 @@ class GUIMessage(Message):
         super().__init__(msg_type, data=kwargs)
 
     def serialize(self) -> str:
-        """This returns a string of the message info.
-
-        This makes it easy to send over a websocket. This uses
-        json dumps to generate the string with type, data and context
-
+        """
+        Serialize the message to a JSON string suitable for transmission.
+        
+        Produces a JSON string with a top-level "type" key and the serialized message data merged at the same level. If a module-level secret key is configured, the JSON string is encrypted and a JSON string of the encrypted payload (dict with ciphertext, tag, and nonce) is returned.
+        
         Returns:
-            str: a json string representation of the message.
+            str: JSON string of the plain message or, when encryption is enabled, JSON string of the encrypted payload.
         """
         data = self._json_dump(self.data)
         msg = json_dumps({'type': self.msg_type, **data})

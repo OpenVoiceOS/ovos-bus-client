@@ -1,4 +1,3 @@
-
 import time
 from ovos_bus_client.util import json_dumps, json_loads
 
@@ -162,13 +161,20 @@ class MessageBusClient:
 
     def emit(self, message: Message):
         """
-        Send a message onto the message bus.
-
-        This will both send the message to the local process using the
-        event emitter and onto the Mycroft websocket for other processes.
-
-        Args:
-            message (Message): Message to send
+        Send a Message to the local emitter and the remote message bus via WebSocket.
+        
+        Ensures the message context contains a serialized session (inserts the client's current
+        session if missing), waits up to 10 seconds for a WebSocket connection (raises
+        ValueError if the client has not been started with run_forever), serializes the message
+        (using its .serialize() method if present, otherwise JSON-serializing the message
+        dictionary), and sends it on the websocket.
+        
+        Parameters:
+            message: Message-like object to send. Should provide a `msg_type` attribute and
+                either a `serialize()` method or a dict-like `__dict__` for JSON serialization.
+        
+        Raises:
+            ValueError: If the client has not been started with run_forever() before emitting.
         """
         if "session" not in message.context:
             sess = SessionManager.sessions.get(self.session_id) or \
@@ -386,13 +392,21 @@ class GUIWebsocketClient(MessageBusClient):
 
     def emit(self, message: GUIMessage):
         """
-        Send a message onto the message bus.
-
-        This will both send the message to the local process using the
-        event emitter and onto the Mycroft websocket for other processes.
-
-        Args:
-            message (GUIMessage): Message to send
+        Emit a GUIMessage over the websocket message bus.
+        
+        Waits up to 10 seconds for the client connection to be established. If the client
+        has not been started via run_forever() this method raises ValueError. The
+        message is sent using message.serialize() when available; otherwise the
+        message's __dict__ is serialized via json_dumps and sent. Connection-closed
+        errors are caught and logged; this method does not raise on send failure due
+        to a closed websocket.
+        
+        Parameters:
+            message (GUIMessage): Message to send. Should contain a valid msg_type and
+                any payload fields expected by GUI listeners.
+        
+        Raises:
+            ValueError: If the websocket run loop has not been started (run_forever()).
         """
 
         if not self.connected_event.wait(10):

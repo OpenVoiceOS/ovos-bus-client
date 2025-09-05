@@ -40,20 +40,45 @@ _DEFAULT_WS_CONFIG = {"host": "0.0.0.0",
 
 
 def json_dumps(payload: Dict[str, Any]) -> str:
-    """helper to use orjson if available with fallback to stdlib"""
+    """
+    Serialize a JSON-serializable mapping to a JSON string, using orjson when available.
+    
+    Uses orjson.dumps for faster serialization if the orjson module is present; otherwise falls back to the standard library json.dumps. Returns a UTF-8 string (orjson output is decoded from bytes).
+    """
     if orjson is None:
         return json.dumps(payload)
     else:
         return orjson.dumps(payload).decode("utf-8")
 
 def json_loads(payload: str) ->  Dict[str, Any]:
-    """helper to use orjson if available with fallback to stdlib"""
+    """
+    Deserialize a JSON string into a Python dictionary, preferring orjson when available.
+    
+    If orjson is installed it will be used for parsing for better performance; otherwise the standard library json.loads is used.
+    
+    Parameters:
+        payload (str): JSON-formatted string to parse.
+    
+    Returns:
+        Dict[str, Any]: Parsed JSON as a Python dictionary (or other JSON-equivalent structure).
+    """
     if orjson is None:
         return json.loads(payload)
     else:
         return orjson.loads(payload)
 
 def get_message_lang(message=None):
+    """
+    Return the BCP-47 language tag for a message.
+    
+    If no message is provided, attempts to locate one via dig_for_message(). Checks legacy locations first (message.data["lang"] or message.context["lang"]); if present returns the standardized tag. If the message contains a session reference ("session_id" or "session"), returns the language from the session (SessionManager.get(message).lang). Otherwise returns the standardized default language from get_default_lang(). Returns None when no message can be found.
+    
+    Parameters:
+        message: Optional message object. If omitted, dig_for_message() will be used to locate a message.
+    
+    Returns:
+        A standardized language tag string (e.g., "en-US"), or None if no message is available.
+    """
     message = message or dig_for_message()
     if not message:
         return None
@@ -124,15 +149,31 @@ def listen_once_for_message(msg_type, handler, bus=None):
 
 
 def wait_for_reply(message, reply_type=None, timeout=3.0, bus=None):
-    """Send a message and wait for a response.
-
-    Args:
-        message (FakeMessage or str or dict): message object or type to send
-        reply_type (str): the message type of the expected reply.
-                          Defaults to "<message.type>.response".
-        timeout: seconds to wait before timeout, defaults to 3
+    """
+    Send a message (or message descriptor) and wait for a matching reply.
+    
+    Accepts a Message instance, a dict with keys "type", optional "data" and "context",
+    or a string. If a string is provided, the function will attempt to parse it as JSON;
+    on failure the string is treated as a message type. The function sends the resulting
+    Message on the bus and waits up to `timeout` seconds for a response. If `reply_type`
+    is None, the handler that receives the message will typically respond to
+    "<message.type>.response".
+    
+    Parameters:
+        message: Message | dict | str — message to send or a descriptor to construct one from.
+        reply_type (str, optional): Specific message type to wait for (defaults to
+            the standard "<message.type>.response" convention when None).
+        timeout (float, optional): Seconds to wait for a reply (default 3.0).
+    
     Returns:
-        The received message or None if the response timed out
+        The received Message instance, or None if the wait timed out.
+    
+    Raises:
+        ValueError: If `message` cannot be converted to a Message.
+    
+    Side effects:
+        If no `bus` is provided, a temporary bus connection is created and closed
+        automatically when the call completes.
     """
     auto_close = bus is None
     bus = bus or get_mycroft_bus()
@@ -156,6 +197,26 @@ def wait_for_reply(message, reply_type=None, timeout=3.0, bus=None):
 
 
 def send_message(message, data=None, context=None, bus=None):
+    """
+    Send a Message to the Mycroft/OVOS message bus, accepting several input forms.
+    
+    If `message` is a string and `data` or `context` is a dict, they are used to construct a Message. If `message` is a string that parses as JSON, the JSON object is converted to a Message. If `message` is a dict, its "type", optional "data", and optional "context" keys are used to construct a Message. The function emits the resulting Message on the bus and closes the bus when one was not provided.
+    
+    Parameters:
+        message (str | dict | Message): Message to send. May be:
+            - a Message instance (sent as-is),
+            - a dict with "type" (and optional "data"/"context"),
+            - a string containing a message type (optionally parsed as JSON),
+            - or a JSON string representing a message object.
+        data (dict | None): Optional data payload used when `message` is a plain string representing the type.
+        context (dict | None): Optional context used when `message` is a plain string representing the type.
+    
+    Raises:
+        ValueError: If the final value cannot be converted to a Message.
+    
+    Note:
+        The `bus` parameter (if provided) is used for emission; if not provided the function obtains a temporary bus and closes it after sending.
+    """
     auto_close = bus is None
     bus = bus or get_mycroft_bus()
     if isinstance(message, str):
@@ -198,6 +259,17 @@ def send_binary_file_message(filepath, msg_type="mycroft.binary.file",
 
 
 def decode_binary_message(message):
+    """
+    Decode and return binary data from a message-like input as a bytearray.
+    
+    Accepts:
+    - a JSON string containing either a top-level "binary" key or a nested "data":{"binary": "..."} field,
+    - a plain hex string,
+    - a dict with "binary" or "data"->"binary",
+    - or a message object exposing a .data mapping with a "binary" entry.
+    
+    The function extracts the hex-encoded binary string from the appropriate location and returns its decoded bytes as a bytearray.
+    """
     if isinstance(message, str):
         try:  # json string
             message = json_loads(message)
