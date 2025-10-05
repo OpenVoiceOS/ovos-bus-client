@@ -128,11 +128,16 @@ class TestEventScheduler(unittest.TestCase):
         # Call the handler
         es.list_events_handler(mock_message)
 
-        # Verify message.reply was called with correct data
-        mock_message.reply.assert_called_once_with(mock_message.context, data={"scheduled_events": es.events})
-
-        # Verify the events dict was passed correctly
+        # Verify message.reply was called with correct msg_type and data
+        mock_message.reply.assert_called_once()
         call_args = mock_message.reply.call_args
+        self.assertEqual(call_args[0][0], "mycroft.scheduler.list_events.response")
+        self.assertIn("scheduled_events", call_args[1]["data"])
+
+        # Verify emitter.emit was called with the reply message
+        emitter.emit.assert_called()
+
+        # Verify the scheduled events contain our test events
         scheduled_events = call_args[1]["data"]["scheduled_events"]
         self.assertIn("test-event-1", scheduled_events)
         self.assertIn("test-event-2", scheduled_events)
