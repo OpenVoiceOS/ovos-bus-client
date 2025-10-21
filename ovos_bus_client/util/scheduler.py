@@ -314,8 +314,7 @@ class EventScheduler(Thread):
         """
         with self.event_lock:
             events_snapshot = dict(self.events)
-        reply_type = 'mycroft.scheduler.list_events.response'
-        self.bus.emit(message.reply(reply_type, data={"scheduled_events": events_snapshot}, context=message.context))
+        self.bus.emit(message.response(data={"scheduled_events": events_snapshot}))
 
     def get_event_handler(self, message: Message):
         """
