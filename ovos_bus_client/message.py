@@ -19,9 +19,9 @@ The Message object is the core construct passed on the message bus
 it contains methods for tracking message context and
 serializing / deserializing the message for transmission.
 """
-
 import inspect
-import orjson
+from ovos_utils import json_dumps, json_loads
+
 from copy import deepcopy
 from typing import Optional
 from binascii import hexlify, unhexlify
@@ -80,15 +80,15 @@ class Message:
         data = self._json_dump(self.data)
         ctxt = self._json_dump(self.context)
 
-        msg = orjson.dumps({'type': self.msg_type, 'data': data, 'context': ctxt}).decode("utf-8")
+        msg = json_dumps({'type': self.msg_type, 'data': data, 'context': ctxt})
         if self._secret_key:
             payload = encrypt_as_dict(self._secret_key, msg)
-            return orjson.dumps(payload).decode("utf-8")
+            return json_dumps(payload)
         return msg
 
     @property
     def as_dict(self) -> dict:
-        return orjson.loads(self.serialize())
+        return json_loads(self.serialize())
 
     @staticmethod
     def _json_dump(value):
@@ -114,10 +114,7 @@ class Message:
 
     @staticmethod
     def _json_load(value):
-        if isinstance(value, str):
-            obj = orjson.loads(value)
-        else:
-            obj = value
+        obj = json_loads(value)  if isinstance(value, str) else value
         assert isinstance(obj, dict)
         if Message._secret_key:
             if 'ciphertext' in obj:
@@ -385,10 +382,10 @@ class GUIMessage(Message):
             str: a json string representation of the message.
         """
         data = self._json_dump(self.data)
-        msg = orjson.dumps({'type': self.msg_type, **data}).decode("utf-8")
+        msg = json_dumps({'type': self.msg_type, **data})
         if self._secret_key:
             payload = encrypt_as_dict(self._secret_key, msg)
-            return orjson.dumps(payload).decode("utf-8")
+            return json_dumps(payload)
         return msg
 
     @staticmethod

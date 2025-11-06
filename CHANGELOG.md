@@ -1,20 +1,41 @@
 # Changelog
 
-## [1.3.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4a1) (2025-04-10)
+## [1.3.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.7a1) (2025-11-06)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.3a1...1.3.4a1)
-
-**Merged pull requests:**
-
-- fix: solver plugin session support [\#165](https://github.com/OpenVoiceOS/ovos-bus-client/pull/165) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.3.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.3a1) (2025-04-10)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.2...1.3.3a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a2...1.3.7a1)
 
 **Merged pull requests:**
 
-- Feat/solver plugin [\#163](https://github.com/OpenVoiceOS/ovos-bus-client/pull/163) ([JarbasAl](https://github.com/JarbasAl))
+- fix: Update requirements.txt [\#175](https://github.com/OpenVoiceOS/ovos-bus-client/pull/175) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a2) (2025-11-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a1...1.3.6a2)
+
+**Implemented enhancements:**
+
+- EventScheduler full CRUD [\#80](https://github.com/OpenVoiceOS/ovos-bus-client/issues/80)
+
+**Merged pull requests:**
+
+- Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
+- feat\(EventScheduler\): list\_events API [\#172](https://github.com/OpenVoiceOS/ovos-bus-client/pull/172) ([mikejgray](https://github.com/mikejgray))
+
+## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.5a1...1.3.6a1)
+
+**Merged pull requests:**
+
+- fix: make orjson optional [\#169](https://github.com/OpenVoiceOS/ovos-bus-client/pull/169) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.5a1) (2025-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4...1.3.5a1)
+
+**Merged pull requests:**
+
+- Update ovos-config requirement from \<2.0.0,\>=0.0.12 to \>=0.0.12,\<3.0.0 [\#167](https://github.com/OpenVoiceOS/ovos-bus-client/pull/167) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 
 

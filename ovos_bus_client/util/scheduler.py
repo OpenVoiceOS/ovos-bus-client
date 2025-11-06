@@ -20,7 +20,6 @@ criteria is met.
 """
 import datetime
 import json
-import os
 import shutil
 import time
 from os.path import isfile, join, expanduser
@@ -70,7 +69,7 @@ class EventScheduler(Thread):
 
         self.events = {}
         self.event_lock = Lock()
-        
+
         # to check if its our first connection to the internet via clock_skew
         self._last_sync = time.time()
         self._dropped_events = 0
@@ -96,6 +95,7 @@ class EventScheduler(Thread):
         self.bus.on('mycroft.scheduler.remove_event', self.remove_event_handler)
         self.bus.on('mycroft.scheduler.update_event', self.update_event_handler)
         self.bus.on('mycroft.scheduler.get_event', self.get_event_handler)
+        self.bus.on('mycroft.scheduler.list_events', self.list_events_handler)
         self.bus.on('system.clock.synced', self.handle_system_clock_sync)  # emitted by raspOVOS
 
         self._running = Event()
@@ -308,6 +308,14 @@ class EventScheduler(Thread):
         data = message.data.get('data')
         self.update_event(event, data)
 
+    def list_events_handler(self, message: Message):
+        """
+        Messagebus interface to the list_events method.
+        """
+        with self.event_lock:
+            events_snapshot = dict(self.events)
+        self.bus.emit(message.response(data={"scheduled_events": events_snapshot}))
+
     def get_event_handler(self, message: Message):
         """
         Messagebus interface to get_event.
@@ -354,9 +362,12 @@ class EventScheduler(Thread):
         try:
             self._stopping.set()
             # Remove listeners
-            self.bus.remove_all_listeners('mycroft.scheduler.schedule_event')
+            self.bus.remove_all_listeners('mycroft.scheduler.get_event')
+            self.bus.remove_all_listeners('mycroft.scheduler.list_events')
             self.bus.remove_all_listeners('mycroft.scheduler.remove_event')
+            self.bus.remove_all_listeners('mycroft.scheduler.schedule_event')
             self.bus.remove_all_listeners('mycroft.scheduler.update_event')
+            self.bus.remove_all_listeners('system.clock.synced')
             # Wait for thread to finish
             self.join(30)
             # Prune event list in preparation for saving
