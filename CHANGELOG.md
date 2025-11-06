@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.7a1) (2025-11-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a2...1.3.7a1)
+
+**Merged pull requests:**
+
+- fix: Update requirements.txt [\#175](https://github.com/OpenVoiceOS/ovos-bus-client/pull/175) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.3.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a2) (2025-11-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a1...1.3.6a2)
