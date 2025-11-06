@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a2) (2025-11-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a1...1.3.6a2)
+
+**Implemented enhancements:**
+
+- EventScheduler full CRUD [\#80](https://github.com/OpenVoiceOS/ovos-bus-client/issues/80)
+
+**Merged pull requests:**
+
+- Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
+- feat\(EventScheduler\): list\_events API [\#172](https://github.com/OpenVoiceOS/ovos-bus-client/pull/172) ([mikejgray](https://github.com/mikejgray))
+
 ## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.5a1...1.3.6a1)
