@@ -48,7 +48,7 @@ HM_PLUGIN_ENTRY_POINT = 'hivemind-ovos-agent-plugin=ovos_bus_client.hpm:OVOSProt
 PLUGIN_ENTRY_POINT = 'ovos-solver-bus-plugin=ovos_bus_client.opm:OVOSMessagebusSolver'
 
 setup(
-    name='ovos-bus-client',
+    name='ovos_bus_client',
     version=get_version(),
     packages=['ovos_bus_client',
               'ovos_bus_client.client',
