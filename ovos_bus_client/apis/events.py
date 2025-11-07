@@ -75,22 +75,22 @@ class EventSchedulerInterface:
                         repeat_interval: Optional[Union[float, int]] = None,
                         context: Optional[dict] = None):
         """
-                        Schedule a handler to run at a specific time (or after a delay) and optionally repeat, then announce the event on the message bus.
-                        
-                        Schedule the provided handler to be invoked at `when` (a timezone-aware datetime or a seconds offset from now) and register the event with the internal EventContainer. If `repeat_interval` is provided the event will be treated as repeating. After registration an event message is emitted to 'mycroft.scheduler.schedule_event' containing the event metadata.
-                        
-                        Parameters:
-                            handler (Callable[..., None]): Function to call when the event fires.
-                            when (datetime | int | float): Absolute time (datetime) or seconds from now (int/float) for the first invocation.
-                            data (Optional[dict]): Payload passed to the handler when the event fires.
-                            name (Optional[str]): Friendly event name; if falsy a default is derived from the skill id and handler name.
-                            repeat_interval (Optional[float | int]): Interval in seconds between repeats; omit or None for a single-shot event.
-                            context (Optional[dict]): Message context to send with the scheduler bus message; skill_id will be ensured in the context.
-                        
-                        Raises:
-                            ValueError: If `when` is a negative numeric offset.
-                            TypeError: If `when` is not a datetime, int, or float.
-                        """
+        Schedule a handler to run at a specific time (or after a delay) and optionally repeat, then announce the event on the message bus.
+        
+        Schedule the provided handler to be invoked at `when` (a timezone-aware datetime or a seconds offset from now) and register the event with the internal EventContainer. If `repeat_interval` is provided the event will be treated as repeating. After registration an event message is emitted to 'mycroft.scheduler.schedule_event' containing the event metadata.
+        
+        Parameters:
+            handler (Callable[..., None]): Function to call when the event fires.
+            when (datetime | int | float): Absolute time (datetime) or seconds from now (int/float) for the first invocation.
+            data (Optional[dict]): Payload passed to the handler when the event fires.
+            name (Optional[str]): Friendly event name; if falsy a default is derived from the skill id and handler name.
+            repeat_interval (Optional[float | int]): Interval in seconds between repeats; omit or None for a single-shot event.
+            context (Optional[dict]): Message context to send with the scheduler bus message; skill_id will be ensured in the context.
+        
+        Raises:
+            ValueError: If `when` is a negative numeric offset.
+            TypeError: If `when` is not a datetime, int, or float.
+        """
         if isinstance(when, (int, float)):
             if when < 0:
                 raise ValueError(f"Expected datetime or positive int/float. "
@@ -140,15 +140,15 @@ class EventSchedulerInterface:
                        name: Optional[str] = None,
                        context: Optional[dict] = None):
         """
-                       Schedule a one-time event to invoke the given handler at a specified time or after a delay.
-                       
-                       Parameters:
-                           handler (Callable[..., None]): Function to call when the event fires; it will receive the event data.
-                           when (datetime | int | float): Absolute time (timezone-aware datetime) or a number of seconds from now.
-                           data (dict, optional): Payload passed to the handler when invoked. Defaults to empty dict if None.
-                           name (str, optional): Friendly event name; if omitted a name derived from the skill ID and handler will be used.
-                           context (dict, optional): Message context to associate with the scheduled event; skill identity will be ensured.
-                       """
+        Schedule a one-time event to invoke the given handler at a specified time or after a delay.
+       
+        Parameters:
+            handler (Callable[..., None]): Function to call when the event fires; it will receive the event data.
+            when (datetime | int | float): Absolute time (timezone-aware datetime) or a number of seconds from now.
+            data (dict, optional): Payload passed to the handler when invoked. Defaults to empty dict if None.
+            name (str, optional): Friendly event name; if omitted a name derived from the skill ID and handler will be used.
+            context (dict, optional): Message context to associate with the scheduled event; skill identity will be ensured.
+        """
         self._schedule_event(handler, when, data, name, context=context)
 
     def schedule_repeating_event(self,
@@ -159,16 +159,16 @@ class EventSchedulerInterface:
                                  name: Optional[str] = None,
                                  context: Optional[dict] = None):
         """
-                                 Schedule a repeating event that invokes `handler` at a start time and then repeatedly at a fixed interval.
-                                 
-                                 Parameters:
-                                 	handler (Callable[..., None]): Function to call for each occurrence.
-                                 	when (datetime | int | float | None): Absolute start time (timezone-aware or naive — default tz applied), or a number of seconds from now. If `None`, the first call is scheduled interval seconds from now.
-                                 	interval (float | int): Seconds between consecutive calls.
-                                 	data (dict, optional): Payload passed to the handler when the event fires.
-                                 	name (str, optional): Friendly event name; defaults to `<skill_id><handler.__name__>`. Name must be unique per skill; if an event with the same name is already scheduled, this call is ignored.
-                                 	context (dict, optional): Message/context dictionary forwarded with the scheduled event.
-                                 """
+        Schedule a repeating event that invokes `handler` at a start time and then repeatedly at a fixed interval.
+         
+        Parameters:
+           handler (Callable[..., None]): Function to call for each occurrence.
+           when (datetime | int | float | None): Absolute start time (timezone-aware or naive — default tz applied), or a number of seconds from now. If `None`, the first call is scheduled interval seconds from now.
+           interval (float | int): Seconds between consecutive calls.
+           data (dict, optional): Payload passed to the handler when the event fires.
+           name (str, optional): Friendly event name; defaults to `<skill_id><handler.__name__>`. Name must be unique per skill; if an event with the same name is already scheduled, this call is ignored.
+           context (dict, optional): Message/context dictionary forwarded with the scheduled event.
+        """
         # Ensure name is defined to avoid re-scheduling
         name = name or self.skill_id + handler.__name__
 
