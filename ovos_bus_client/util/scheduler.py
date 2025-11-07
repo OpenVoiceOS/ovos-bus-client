@@ -30,7 +30,7 @@ from typing import Optional
 from ovos_config.config import Configuration
 from ovos_config.locations import get_xdg_data_save_path, get_xdg_config_save_path
 from ovos_utils.log import LOG
-
+from ovos_utils.time import now_local
 from ovos_bus_client.message import Message
 
 
@@ -71,12 +71,10 @@ class EventScheduler(Thread):
         self.event_lock = Lock()
 
         # to check if its our first connection to the internet via clock_skew
-        self._last_sync = time.time()
+        self._last_sync: datetime.datetime = now_local()
         self._dropped_events = 0
-        self._past_date = datetime.datetime(day=1, month=12, year=2024)
-        # Convert Unix timestamp to human-readable datetime
-        pretty_last_sync = datetime.datetime.fromtimestamp(self._last_sync).strftime("%Y-%m-%d %H:%M:%S")
-        LOG.debug(f"Boot time clock: {pretty_last_sync}")
+        self._past_date = datetime.datetime(day=1, month=12, year=2024, tzinfo=self._last_sync.tzinfo)
+        LOG.debug(f"Boot time clock: {self._last_sync}")
 
         self.bus = bus
 
@@ -91,11 +89,11 @@ class EventScheduler(Thread):
         if self.schedule_file:
             self.load()
 
-        self.bus.on('mycroft.scheduler.schedule_event', self.schedule_event_handler)
-        self.bus.on('mycroft.scheduler.remove_event', self.remove_event_handler)
-        self.bus.on('mycroft.scheduler.update_event', self.update_event_handler)
-        self.bus.on('mycroft.scheduler.get_event', self.get_event_handler)
-        self.bus.on('mycroft.scheduler.list_events', self.list_events_handler)
+        self.bus.on('mycroft.scheduler.schedule_event', self.handle_schedule_event)
+        self.bus.on('mycroft.scheduler.remove_event', self.handle_remove_event)
+        self.bus.on('mycroft.scheduler.update_event', self.handle_update_event)
+        self.bus.on('mycroft.scheduler.get_event', self.handle_get_event)
+        self.bus.on('mycroft.scheduler.list_events', self.handle_list_events)
         self.bus.on('system.clock.synced', self.handle_system_clock_sync)  # emitted by raspOVOS
 
         self._running = Event()
@@ -205,7 +203,7 @@ class EventScheduler(Thread):
                                       context to send when the
                                       handler is called
         """
-        if datetime.datetime.fromtimestamp(self._last_sync) < self._past_date:
+        if self._last_sync < self._past_date:
             # this works around problems in raspOVOS images and other
             # systems without RTC that didnt sync clock with the internet yet
             # eg. issue demonstration without this:
@@ -232,7 +230,7 @@ class EventScheduler(Thread):
                     LOG.warning(f"Added event is scheduled in the past and "
                                 f"will be called immediately: {event}")
 
-    def schedule_event_handler(self, message: Message):
+    def handle_schedule_event(self, message: Message):
         """
         Messagebus interface to the schedule_event method.
         Required data in the message envelope is
@@ -268,15 +266,12 @@ class EventScheduler(Thread):
 
     def handle_system_clock_sync(self, message: Message):
         # clock sync, are we in the past?
-        if datetime.datetime.fromtimestamp(self._last_sync) < self._past_date:
+        if self._last_sync < self._past_date:
             LOG.warning(f"Clock was in the past!!! {self._dropped_events} scheduled events have been dropped")
+        self._last_sync = now_local()
+        LOG.info(f"clock sync: {self._last_sync}")
 
-        self._last_sync = time.time()
-        # Convert Unix timestamp to human-readable datetime
-        pretty_last_sync = datetime.datetime.fromtimestamp(self._last_sync).strftime("%Y-%m-%d %H:%M:%S")
-        LOG.info(f"clock sync: {pretty_last_sync}")
-
-    def remove_event_handler(self, message: Message):
+    def handle_remove_event(self, message: Message):
         """
         Messagebus interface to the remove_event method.
         """
@@ -300,7 +295,7 @@ class EventScheduler(Thread):
                 event_time, repeat, _, context = self.events[event][0]
                 self.events[event][0] = (event_time, repeat, data, context)
 
-    def update_event_handler(self, message: Message):
+    def handle_update_event(self, message: Message):
         """
         Messagebus interface to the update_event method.
         """
@@ -308,7 +303,7 @@ class EventScheduler(Thread):
         data = message.data.get('data')
         self.update_event(event, data)
 
-    def list_events_handler(self, message: Message):
+    def handle_list_events(self, message: Message):
         """
         Messagebus interface to the list_events method.
         """
@@ -316,7 +311,7 @@ class EventScheduler(Thread):
             events_snapshot = dict(self.events)
         self.bus.emit(message.response(data={"scheduled_events": events_snapshot}))
 
-    def get_event_handler(self, message: Message):
+    def handle_get_event(self, message: Message):
         """
         Messagebus interface to get_event.
 

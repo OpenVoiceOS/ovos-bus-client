@@ -126,7 +126,7 @@ class TestEventScheduler(unittest.TestCase):
         mock_message.context = {"source": "test"}
 
         # Call the handler
-        es.list_events_handler(mock_message)
+        es.handle_list_events(mock_message)
 
         # Verify message.reply was called with correct msg_type and data
         mock_message.reply.assert_called_once()
