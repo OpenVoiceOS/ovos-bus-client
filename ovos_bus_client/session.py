@@ -280,28 +280,28 @@ class Session:
                  blacklisted_intents: Optional[List[str]] = None,
                  blacklisted_skills: Optional[List[str]] = None):
         """
-                 Initialize a Session representing a user's interaction state.
-                 
-                 Parameters:
-                 	session_id (str): Optional UUID for the session; a new UUID is generated if omitted.
-                 	expiration_seconds (int): Time-to-live in seconds for the session; -1 means never expire. Defaults from configuration if None.
-                 	active_skills (List[List[Union[str, float]]]): List of [skill_id, last_touch_timestamp] entries tracking active skills in most-recent-first order.
-                 	utterance_states (Dict): Mapping of skill_id to UtteranceState indicating which skills expect responses.
-                 	lang (str): Locale/language tag for the session; normalized to a standard form if provided.
-                 	context (IntentContextManager): Conversational context manager for the session; a new manager is created if omitted.
-                 	site_id (str): Identifier for the site/location associated with the session.
-                 	pipeline (List[str]): Ordered list of intent parsing pipeline names; defaults are loaded from configuration if omitted.
-                 	stt_prefs (Dict): Deprecated speech-to-text preferences (accepted for compatibility and ignored).
-                 	tts_prefs (Dict): Deprecated text-to-speech preferences (accepted for compatibility and ignored).
-                 	location_prefs (Dict): Location and timezone preferences for the session; defaults from configuration if omitted.
-                 	system_unit (str): Measurement system ("metric" or "imperial"); default from configuration if omitted.
-                 	time_format (str): Time display format preference; default from configuration if omitted.
-                 	date_format (str): Date display format preference; default from configuration if omitted.
-                 	is_speaking (bool): Whether the session is currently producing audio output.
-                 	is_recording (bool): Whether the session is currently recording audio input.
-                 	blacklisted_intents (Optional[List[str]]): Optional list of intent names to block for this session; defaults from configuration if omitted.
-                 	blacklisted_skills (Optional[List[str]]): Optional list of skill IDs to block for this session; defaults from configuration if omitted.
-                 """
+        Initialize a Session representing a user's interaction state.
+        
+        Parameters:
+           session_id (str): Optional UUID for the session; a new UUID is generated if omitted.
+           expiration_seconds (int): Time-to-live in seconds for the session; -1 means never expire. Defaults from configuration if None.
+           active_skills (List[List[Union[str, float]]]): List of [skill_id, last_touch_timestamp] entries tracking active skills in most-recent-first order.
+           utterance_states (Dict): Mapping of skill_id to UtteranceState indicating which skills expect responses.
+           lang (str): Locale/language tag for the session; normalized to a standard form if provided.
+           context (IntentContextManager): Conversational context manager for the session; a new manager is created if omitted.
+           site_id (str): Identifier for the site/location associated with the session.
+           pipeline (List[str]): Ordered list of intent parsing pipeline names; defaults are loaded from configuration if omitted.
+           stt_prefs (Dict): Deprecated speech-to-text preferences (accepted for compatibility and ignored).
+           tts_prefs (Dict): Deprecated text-to-speech preferences (accepted for compatibility and ignored).
+           location_prefs (Dict): Location and timezone preferences for the session; defaults from configuration if omitted.
+           system_unit (str): Measurement system ("metric" or "imperial"); default from configuration if omitted.
+           time_format (str): Time display format preference; default from configuration if omitted.
+           date_format (str): Date display format preference; default from configuration if omitted.
+           is_speaking (bool): Whether the session is currently producing audio output.
+           is_recording (bool): Whether the session is currently recording audio input.
+           blacklisted_intents (Optional[List[str]]): Optional list of intent names to block for this session; defaults from configuration if omitted.
+           blacklisted_skills (Optional[List[str]]): Optional list of skill IDs to block for this session; defaults from configuration if omitted.
+        """
         if tts_prefs:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         if stt_prefs:
