@@ -200,18 +200,18 @@ class EventScheduler(Thread):
                        data: Optional[dict] = None,
                        context: Optional[dict] = None):
         """
-                       Schedule a named event to be emitted at a specific epoch time, optionally repeating.
-                       
-                       Parameters:
-                           event (str): Event name/key to schedule.
-                           sched_time (float): Unix epoch time (seconds) when the event should be triggered.
-                           repeat (Optional[float]): If provided, interval in seconds for repeating the event.
-                           data (Optional[dict]): Payload to include with the emitted message.
-                           context (Optional[dict]): Message context to send when the event is emitted.
-                       
-                       Behavior:
-                           If the scheduler's stored clock indicates the system time is in the past, the event is not scheduled and an internal dropped-event counter is incremented. If a repeating event with the same name is already scheduled, the new repeating schedule is discarded. If sched_time is already past, the event is accepted but a warning is logged and the event will be triggered immediately.
-                       """
+        Schedule a named event to be emitted at a specific epoch time, optionally repeating.
+        
+        Parameters:
+            event (str): Event name/key to schedule.
+            sched_time (float): Unix epoch time (seconds) when the event should be triggered.
+            repeat (Optional[float]): If provided, interval in seconds for repeating the event.
+            data (Optional[dict]): Payload to include with the emitted message.
+            context (Optional[dict]): Message context to send when the event is emitted.
+        
+        Behavior:
+            If the scheduler's stored clock indicates the system time is in the past, the event is not scheduled and an internal dropped-event counter is incremented. If a repeating event with the same name is already scheduled, the new repeating schedule is discarded. If sched_time is already past, the event is accepted but a warning is logged and the event will be triggered immediately.
+        """
         if self._last_sync < self._past_date:
             # this works around problems in raspOVOS images and other
             # systems without RTC that didnt sync clock with the internet yet
