@@ -65,6 +65,14 @@ class EventScheduler(Thread):
     """
 
     def __init__(self, bus, schedule_file: str = 'schedule.json', autostart: bool = True):
+        """
+        Initialize the EventScheduler, load any existing schedule, register messagebus handlers, and optionally start the scheduler thread.
+        
+        Parameters:
+            bus: MessageBus client used to emit and receive scheduler-related messages.
+            schedule_file (str): Filename for persisting scheduled events; an existing legacy file in the old data directory will be migrated to the current config path.
+            autostart (bool): If True, start the scheduler thread immediately; if False, initialize internal running/stopping state without starting the thread.
+        """
         super().__init__()
 
         self.events = {}
@@ -192,17 +200,18 @@ class EventScheduler(Thread):
                        data: Optional[dict] = None,
                        context: Optional[dict] = None):
         """
-        Add event to pending event schedule.
-
-        Arguments:
-            event (str): Handler for the event
-            sched_time (float): epoch time of event
-            repeat ([type], optional): Defaults to None. [description]
-            data ([type], optional): Defaults to None. [description]
-            context (dict, optional): context (dict, optional): message
-                                      context to send when the
-                                      handler is called
-        """
+                       Schedule a named event to be emitted at a specific epoch time, optionally repeating.
+                       
+                       Parameters:
+                           event (str): Event name/key to schedule.
+                           sched_time (float): Unix epoch time (seconds) when the event should be triggered.
+                           repeat (Optional[float]): If provided, interval in seconds for repeating the event.
+                           data (Optional[dict]): Payload to include with the emitted message.
+                           context (Optional[dict]): Message context to send when the event is emitted.
+                       
+                       Behavior:
+                           If the scheduler's stored clock indicates the system time is in the past, the event is not scheduled and an internal dropped-event counter is incremented. If a repeating event with the same name is already scheduled, the new repeating schedule is discarded. If sched_time is already past, the event is accepted but a warning is logged and the event will be triggered immediately.
+                       """
         if self._last_sync < self._past_date:
             # this works around problems in raspOVOS images and other
             # systems without RTC that didnt sync clock with the internet yet
@@ -232,14 +241,15 @@ class EventScheduler(Thread):
 
     def handle_schedule_event(self, message: Message):
         """
-        Messagebus interface to the schedule_event method.
-        Required data in the message envelope is
-            event: event to emit
-            time:  time to emit the event
-
-        Optional data is
-            repeat: repeat interval
-            data:   data to send along with the event
+        Handle an incoming schedule request message and forward it to schedule_event.
+        
+        Expects message.data to contain:
+            event: (str) name of the event to schedule (required)
+            time: (float) scheduled time as a Unix timestamp or timezone-aware timestamp (required)
+            repeat: (float) repeat interval in seconds (optional)
+            data: (dict) payload to attach to the scheduled event (optional)
+        
+        If both `event` and `time` are present this forwards the values (plus `repeat`, `data`, and message.context) to schedule_event; otherwise logs an error indicating the missing field.
         """
         event = message.data.get('event')
         sched_time = message.data.get('time')
@@ -266,6 +276,14 @@ class EventScheduler(Thread):
 
     def handle_system_clock_sync(self, message: Message):
         # clock sync, are we in the past?
+        """
+        Handle a system clock synchronization notification and update the scheduler's last-sync timestamp.
+        
+        If the scheduler previously believed the clock to be in the past, a warning is logged indicating how many scheduled events were dropped. Updates self._last_sync to the current local time and logs the new sync time.
+        
+        Parameters:
+            message (Message): Incoming bus message that triggered the clock synchronization.
+        """
         if self._last_sync < self._past_date:
             LOG.warning(f"Clock was in the past!!! {self._dropped_events} scheduled events have been dropped")
         self._last_sync = now_local()
@@ -273,21 +291,25 @@ class EventScheduler(Thread):
 
     def handle_remove_event(self, message: Message):
         """
-        Messagebus interface to the remove_event method.
+        Handle an incoming message that requests removal of a scheduled event.
+        
+        Extracts the 'event' field from message.data and removes the named scheduled event if present.
+        
+        Parameters:
+            message (Message): Messagebus message expected to contain an 'event' key in its data.
         """
         event = message.data.get('event')
         self.remove_event(event)
 
     def update_event(self, event: str, data: dict):
         """
-        Change an existing event's data.
-
-        This will only update the first call if multiple calls are registered
-        to the same event identifier.
-
-        Arguments:
-            event (str): event identifier
-            data (dict): new data
+        Update the data payload for the first scheduled occurrence of a named event.
+        
+        Only the first scheduled entry for the given event identifier is modified when multiple entries exist.
+        
+        Parameters:
+            event (str): Event identifier whose first scheduled entry will be updated.
+            data (dict): New data payload to replace the existing entry's data.
         """
         with self.event_lock:
             # if there is an active event with this name
@@ -297,7 +319,9 @@ class EventScheduler(Thread):
 
     def handle_update_event(self, message: Message):
         """
-        Messagebus interface to the update_event method.
+        Handle a bus message that updates the payload for a scheduled event.
+        
+        Extracts the 'event' and 'data' fields from message.data and updates the stored data for the first scheduled occurrence of that event if it exists.
         """
         event = message.data.get('event')
         data = message.data.get('data')
@@ -305,7 +329,12 @@ class EventScheduler(Thread):
 
     def handle_list_events(self, message: Message):
         """
-        Messagebus interface to the list_events method.
+        Emit a snapshot of all scheduled events in response to the incoming message.
+        
+        The snapshot is sent in the response data under the "scheduled_events" key.
+        
+        Parameters:
+            message (Message): Incoming message whose response will receive the scheduled events snapshot.
         """
         with self.event_lock:
             events_snapshot = dict(self.events)
@@ -313,9 +342,9 @@ class EventScheduler(Thread):
 
     def handle_get_event(self, message: Message):
         """
-        Messagebus interface to get_event.
-
-        Emits another event sending event status.
+        Emit the current scheduled entries for the named event as a reply on the message bus.
+        
+        If the incoming message contains a "name" field, looks up the schedule for that event and emits a reply message to the emitter `mycroft.event_status.callback.{name}` with the event's data (or `None` if the event is not scheduled).
         """
         event_name = message.data.get("name")
         event = None

@@ -13,39 +13,57 @@ class EventSchedulerInterface:
     """Interface for accessing the event scheduler over the message bus."""
 
     def __init__(self, bus=None, skill_id=None):
+        """
+        Initialize the scheduler interface with an optional message bus and skill identifier.
+        
+        Parameters:
+        	bus: Message bus client used to send and receive scheduler messages; may be None.
+        	skill_id (str): Identifier for the skill. Defaults to the class name lowercased.
+        
+        """
         self.skill_id = skill_id or self.__class__.__name__.lower()
         self.bus = bus
         self.events = EventContainer(bus)
         self.scheduled_repeats = []
 
     def set_bus(self, bus):
-        """Attach the messagebus of the parent skill
-
-        Args:
-            bus (MessageBusClient): websocket connection to the messagebus
+        """
+        Attach the message bus client to this interface and propagate it to the internal EventContainer.
+        
+        Also sets the interface's `bus` attribute to the provided client.
         """
         self.bus = bus
         self.events.set_bus(bus)
 
     def set_id(self, skill_id: str):
         """
-        Attach the skill_id of the parent skill
-
-        Args:
-            skill_id (str): skill_id of the parent skill
+        Set the interface's skill identifier used as the event name prefix.
+        
+        Parameters:
+            skill_id (str): Identifier for the parent skill to use when namespacing scheduled events.
         """
         self.skill_id = skill_id
 
     def _get_source_message(self):
+        """
+        Retrieve the current source Message and ensure its context contains this interface's skill_id.
+        
+        Returns:
+            Message: The source Message from the current context, or a new empty Message if none was found. The returned message's `context['skill_id']` is set to this interface's skill_id.
+        """
         message = dig_for_message() or Message("")
         message.context['skill_id'] = self.skill_id
         return message
 
     def _create_unique_name(self, name: str) -> str:
         """
-        Return a name unique to this skill using the format [skill_id]:[name].
-        @param name: Name to use internally
-        @return name unique to this skill
+        Build a skill-scoped unique name by prefixing the provided name with the skill ID and a colon.
+        
+        Parameters:
+            name (str): Friendly event name; if falsy (e.g., empty or None), an empty suffix is used after the colon.
+        
+        Returns:
+            str: The unique name in the format "<skill_id>:<name>" (or "<skill_id>:" when `name` is falsy).
         """
         # TODO: Is a null name valid or should it raise an exception?
         return self.skill_id + ':' + (name or '')
@@ -57,17 +75,22 @@ class EventSchedulerInterface:
                         repeat_interval: Optional[Union[float, int]] = None,
                         context: Optional[dict] = None):
         """
-        Underlying method for schedule_event and schedule_repeating_event.
-        Takes scheduling information and sends it off on the message bus.
-        @param handler: method to be called at the scheduled time(s)
-        @param when: time (tzaware or default to system tz) or delta seconds to
-            first call the handler
-        @param data: Message data to send to `handler
-        @param name: Event name, must be unique in the context of this object
-        @param repeat_interval:  time in seconds between calls
-        @param context: Message context to send to `handler`
-
-        """
+                        Schedule a handler to run at a specific time (or after a delay) and optionally repeat, then announce the event on the message bus.
+                        
+                        Schedule the provided handler to be invoked at `when` (a timezone-aware datetime or a seconds offset from now) and register the event with the internal EventContainer. If `repeat_interval` is provided the event will be treated as repeating. After registration an event message is emitted to 'mycroft.scheduler.schedule_event' containing the event metadata.
+                        
+                        Parameters:
+                            handler (Callable[..., None]): Function to call when the event fires.
+                            when (datetime | int | float): Absolute time (datetime) or seconds from now (int/float) for the first invocation.
+                            data (Optional[dict]): Payload passed to the handler when the event fires.
+                            name (Optional[str]): Friendly event name; if falsy a default is derived from the skill id and handler name.
+                            repeat_interval (Optional[float | int]): Interval in seconds between repeats; omit or None for a single-shot event.
+                            context (Optional[dict]): Message context to send with the scheduler bus message; skill_id will be ensured in the context.
+                        
+                        Raises:
+                            ValueError: If `when` is a negative numeric offset.
+                            TypeError: If `when` is not a datetime, int, or float.
+                        """
         if isinstance(when, (int, float)):
             if when < 0:
                 raise ValueError(f"Expected datetime or positive int/float. "
@@ -89,6 +112,12 @@ class EventSchedulerInterface:
         data = data or {}
 
         def on_error(e):
+            """
+            Log an exception raised during execution of a scheduled event.
+            
+            Parameters:
+                e (Exception): The exception that was raised.
+            """
             LOG.exception(f'An error occurred executing the scheduled event: '
                           f'{e}')
 
@@ -111,14 +140,15 @@ class EventSchedulerInterface:
                        name: Optional[str] = None,
                        context: Optional[dict] = None):
         """
-        Schedule a single-shot event.
-        @param handler: method to be called at the scheduled time(s)
-        @param when: time (tzaware or default to system tz) or delta seconds
-            to first call the handler
-        @param data: Message data to send to `handler
-        @param name: Event name, must be unique in the context of this object
-        @param context: Message context to send to `handler`
-        """
+                       Schedule a one-time event to invoke the given handler at a specified time or after a delay.
+                       
+                       Parameters:
+                           handler (Callable[..., None]): Function to call when the event fires; it will receive the event data.
+                           when (datetime | int | float): Absolute time (timezone-aware datetime) or a number of seconds from now.
+                           data (dict, optional): Payload passed to the handler when invoked. Defaults to empty dict if None.
+                           name (str, optional): Friendly event name; if omitted a name derived from the skill ID and handler will be used.
+                           context (dict, optional): Message context to associate with the scheduled event; skill identity will be ensured.
+                       """
         self._schedule_event(handler, when, data, name, context=context)
 
     def schedule_repeating_event(self,
@@ -129,15 +159,16 @@ class EventSchedulerInterface:
                                  name: Optional[str] = None,
                                  context: Optional[dict] = None):
         """
-        Schedule a repeating event.
-        @param handler: method to be called at the scheduled time(s)
-        @param when: time (tzaware or default to system tz) or delta seconds to
-            first call the handler. If None, first call is in `repeat_interval`
-        @param data: Message data to send to `handler
-        @param name: Event name, must be unique in the context of this object
-        @param interval:  time in seconds between calls
-        @param context: Message context to send to `handler`
-        """
+                                 Schedule a repeating event that invokes `handler` at a start time and then repeatedly at a fixed interval.
+                                 
+                                 Parameters:
+                                 	handler (Callable[..., None]): Function to call for each occurrence.
+                                 	when (datetime | int | float | None): Absolute start time (timezone-aware or naive — default tz applied), or a number of seconds from now. If `None`, the first call is scheduled interval seconds from now.
+                                 	interval (float | int): Seconds between consecutive calls.
+                                 	data (dict, optional): Payload passed to the handler when the event fires.
+                                 	name (str, optional): Friendly event name; defaults to `<skill_id><handler.__name__>`. Name must be unique per skill; if an event with the same name is already scheduled, this call is ignored.
+                                 	context (dict, optional): Message/context dictionary forwarded with the scheduled event.
+                                 """
         # Ensure name is defined to avoid re-scheduling
         name = name or self.skill_id + handler.__name__
 
@@ -154,11 +185,11 @@ class EventSchedulerInterface:
 
     def update_scheduled_event(self, name: str, data: Optional[dict] = None):
         """
-        Change data of event.
-
-        Args:
-            name (str): reference name of event (from original scheduling)
-            data (dict): new data to update event with
+        Update the payload data for a scheduled event identified by `name`.
+        
+        Parameters:
+            name (str): Friendly reference name of the scheduled event to update.
+            data (dict, optional): New event data to replace the existing payload; defaults to an empty dict.
         """
         data = {
             'event': self._create_unique_name(name),
@@ -169,10 +200,10 @@ class EventSchedulerInterface:
 
     def cancel_scheduled_event(self, name: str):
         """
-        Cancel a pending event. The event will no longer be scheduled.
-
-        Args:
-            name (str): reference name of event (from original scheduling)
+        Cancel a scheduled event identified by its friendly name.
+        
+        Parameters:
+            name (str): Friendly reference name used when the event was scheduled.
         """
         unique_name = self._create_unique_name(name)
         data = {'event': unique_name}
@@ -184,16 +215,16 @@ class EventSchedulerInterface:
 
     def get_scheduled_event_status(self, name: str) -> int:
         """
-        Get scheduled event data and return the amount of time left
-
-        Args:
-            name (str): reference name of event (from original scheduling)
-
+        Get remaining seconds until a scheduled event triggers.
+        
+        Parameters:
+            name (str): Friendly reference name used when the event was scheduled.
+        
         Returns:
-            int: the time left in seconds
-
+            int: Remaining time in seconds until the scheduled event; may be negative if the event time is already past.
+        
         Raises:
-            Exception: Raised if event is not found
+            Exception: If no status response is received (messagebus timeout).
         """
         event_name = self._create_unique_name(name)
         data = {'name': event_name}
@@ -214,7 +245,9 @@ class EventSchedulerInterface:
 
     def cancel_all_repeating_events(self):
         """
-        Cancel any repeating events started by the skill.
+        Cancel all repeating events that were scheduled by this skill.
+        
+        Iterates over the internally tracked repeating event names and cancels each one.
         """
         # NOTE: Gotta make a copy of the list due to the removes that happen
         #       in cancel_scheduled_event().
@@ -223,7 +256,9 @@ class EventSchedulerInterface:
 
     def shutdown(self):
         """
-        Shutdown the interface unregistering any event handlers.
+        Shut down the scheduler by cancelling all repeating events and clearing registered events.
+        
+        This stops any tracked repeating schedules and removes all event handlers from the internal EventContainer.
         """
         self.cancel_all_repeating_events()
         self.events.clear()
