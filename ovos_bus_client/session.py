@@ -331,6 +331,13 @@ class Session:
         self.location_preferences = location_prefs or Configuration().get("location", {})
 
     @property
+    def timezone(self) -> Optional[str]:
+        """
+        Get the timezone code, such as 'America/Los_Angeles'
+        """
+        return self.location_preferences.get('timezone', {}).get('code')
+
+    @property
     def active(self) -> bool:
         """
         Return true if any skills attached to this session are active.
