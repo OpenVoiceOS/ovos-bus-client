@@ -1,41 +1,12 @@
 # Changelog
 
-## [1.3.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.7a1) (2025-11-06)
+## [1.3.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a1) (2025-11-09)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a2...1.3.7a1)
-
-**Merged pull requests:**
-
-- fix: Update requirements.txt [\#175](https://github.com/OpenVoiceOS/ovos-bus-client/pull/175) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.3.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a2) (2025-11-06)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a1...1.3.6a2)
-
-**Implemented enhancements:**
-
-- EventScheduler full CRUD [\#80](https://github.com/OpenVoiceOS/ovos-bus-client/issues/80)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.7...1.3.8a1)
 
 **Merged pull requests:**
 
-- Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
-- feat\(EventScheduler\): list\_events API [\#172](https://github.com/OpenVoiceOS/ovos-bus-client/pull/172) ([mikejgray](https://github.com/mikejgray))
-
-## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.5a1...1.3.6a1)
-
-**Merged pull requests:**
-
-- fix: make orjson optional [\#169](https://github.com/OpenVoiceOS/ovos-bus-client/pull/169) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.3.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.5a1) (2025-06-16)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4...1.3.5a1)
-
-**Merged pull requests:**
-
-- Update ovos-config requirement from \<2.0.0,\>=0.0.12 to \>=0.0.12,\<3.0.0 [\#167](https://github.com/OpenVoiceOS/ovos-bus-client/pull/167) ([dependabot[bot]](https://github.com/apps/dependabot))
+- refactor: migrate bus api client to ovos-bus-client package [\#177](https://github.com/OpenVoiceOS/ovos-bus-client/pull/177) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
