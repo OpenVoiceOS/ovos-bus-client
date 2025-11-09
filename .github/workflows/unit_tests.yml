@@ -32,7 +32,7 @@ jobs:
   unit_tests:
     strategy:
       matrix:
-        python-version: [3.9, "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -62,10 +62,3 @@ jobs:
         run: |
           pip install -U "pyee==8.1.0"
           pytest --cov=ovos_bus_client --cov-report=xml --cov-append test/unittests
-      - name: Upload coverage
-        if: "${{ matrix.python-version == '3.9' }}"
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{secrets.CODECOV_TOKEN}}
-          files: coverage.xml
-          verbose: true
