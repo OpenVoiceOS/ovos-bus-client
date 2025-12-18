@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.8a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a2) (2025-12-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a1...1.3.8a2)
+
+**Merged pull requests:**
+
+- chore: Configure Renovate [\#180](https://github.com/OpenVoiceOS/ovos-bus-client/pull/180) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [1.3.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a1) (2025-11-09)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.7...1.3.8a1)
