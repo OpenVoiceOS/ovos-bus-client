@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.8a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a5) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a4...1.3.8a5)
+
+**Merged pull requests:**
+
+- chore\(deps\): update dependency python to 3.14 [\#181](https://github.com/OpenVoiceOS/ovos-bus-client/pull/181) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [1.3.8a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a4) (2025-12-19)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a3...1.3.8a4)
