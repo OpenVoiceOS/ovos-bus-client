@@ -281,13 +281,28 @@ class Session:
                  blacklisted_skills: Optional[List[str]] = None,
                  persona_id: Optional[str] = None):
         """
-        Construct a session identifier
-        @param session_id: string UUID for the session
-        @param expiration_seconds: TTL for session (-1 for no expiration)
-        @param active_skills: List of list skill_id, last reference
-        @param utterance_states: dict of skill_id to UtteranceState
-        @param lang: language associated with this Session
-        @param context: IntentContextManager for this Session
+        Create a new Session with identifiers, preferences, state flags, and conversational context.
+         
+        Parameters:
+            session_id (str): Session identifier; a new UUID is generated if not provided.
+            expiration_seconds (int): Time-to-live in seconds for the session; use -1 for no expiration.
+            active_skills (List[List[Union[str, float]]]): Ordered list of active skills as [skill_id, last_touch_timestamp].
+            utterance_states (Dict): Mapping of skill_id to its UtteranceState.
+            lang (str): Language tag for the session (standardized internally) — defaults to system default.
+            context (IntentContextManager): Conversational context manager for the session.
+            site_id (str): Identifier for the site/location associated with the session.
+            pipeline (List[str]): Ordered intent processing pipeline identifiers.
+            stt_prefs (Dict): Deprecated; provided value will be ignored.
+            tts_prefs (Dict): Deprecated; provided value will be ignored.
+            location_prefs (Dict): Location preferences or metadata for the session.
+            system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
+            time_format (str): Time format preference identifier.
+            date_format (str): Date format preference identifier.
+            is_speaking (bool): Initial speaking state flag.
+            is_recording (bool): Initial recording state flag.
+            blacklisted_intents (Optional[List[str]]): Intents to ignore for this session.
+            blacklisted_skills (Optional[List[str]]): Skills to ignore for this session.
+            persona_id (Optional[str]): Optional persona identifier associated with this session.
         """
         if tts_prefs:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
@@ -335,7 +350,10 @@ class Session:
     @property
     def timezone(self) -> Optional[str]:
         """
-        Get the timezone code, such as 'America/Los_Angeles'
+        Return the session's configured timezone code.
+        
+        Returns:
+            timezone_code (Optional[str]): Timezone identifier like 'America/Los_Angeles' if set in location preferences, `None` otherwise.
         """
         return self.location_preferences.get('timezone', {}).get('code')
 
@@ -422,7 +440,26 @@ class Session:
 
     def serialize(self) -> dict:
         """
-        Get a json-serializable dict representation of this session
+        Produce a dictionary representation of the session suitable for JSON serialization.
+        
+        Returns:
+            dict: A JSON-serializable mapping containing session state with keys:
+                - "active_skills": list of active skills and their timestamps
+                - "utterance_states": mapping of skill_id to utterance state
+                - "session_id": session identifier
+                - "persona_id": associated persona identifier or None
+                - "lang": language code for the session
+                - "context": serialized intent context manager state
+                - "site_id": site identifier
+                - "pipeline": intent processing pipeline identifier
+                - "location": location preference data
+                - "system_unit": measurement system preference
+                - "time_format": preferred time format
+                - "date_format": preferred date format
+                - "is_speaking": boolean indicating if audio output is active
+                - "is_recording": boolean indicating if recording is active
+                - "blacklisted_skills": list of skill IDs that are blacklisted
+                - "blacklisted_intents": list of intent names that are blacklisted
         """
         # safe for json dumping
         return {
@@ -455,9 +492,13 @@ class Session:
     @staticmethod
     def deserialize(data: Dict):
         """
-        Build a Session object from dict data
-        @param data: dict serialized Session object
-        @return: Session representation of data
+        Construct a Session object from a serialized session dictionary.
+        
+        Parameters:
+            data (dict): Serialized session data as produced by Session.serialize().
+        
+        Returns:
+            Session: A Session instance reconstructed from the provided data.
         """
         uid = data.get("session_id")
         pid = data.get("persona_id")
