@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a2) (2026-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0a1...1.4.0a2)
+
 ## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a1) (2026-01-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a5...1.4.0a1)
