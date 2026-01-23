@@ -1,41 +1,52 @@
 # Changelog
 
-## [1.3.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.7a1) (2025-11-06)
+## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a1) (2026-01-23)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a2...1.3.7a1)
-
-**Merged pull requests:**
-
-- fix: Update requirements.txt [\#175](https://github.com/OpenVoiceOS/ovos-bus-client/pull/175) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.3.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a2) (2025-11-06)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a1...1.3.6a2)
-
-**Implemented enhancements:**
-
-- EventScheduler full CRUD [\#80](https://github.com/OpenVoiceOS/ovos-bus-client/issues/80)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a5...1.4.0a1)
 
 **Merged pull requests:**
 
-- Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
-- feat\(EventScheduler\): list\_events API [\#172](https://github.com/OpenVoiceOS/ovos-bus-client/pull/172) ([mikejgray](https://github.com/mikejgray))
+- feat: persona\_id [\#192](https://github.com/OpenVoiceOS/ovos-bus-client/pull/192) ([JarbasAl](https://github.com/JarbasAl))
 
-## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
+## [1.3.8a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a5) (2025-12-19)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.5a1...1.3.6a1)
-
-**Merged pull requests:**
-
-- fix: make orjson optional [\#169](https://github.com/OpenVoiceOS/ovos-bus-client/pull/169) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.3.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.5a1) (2025-06-16)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4...1.3.5a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a4...1.3.8a5)
 
 **Merged pull requests:**
 
-- Update ovos-config requirement from \<2.0.0,\>=0.0.12 to \>=0.0.12,\<3.0.0 [\#167](https://github.com/OpenVoiceOS/ovos-bus-client/pull/167) ([dependabot[bot]](https://github.com/apps/dependabot))
+- chore\(deps\): update dependency python to 3.14 [\#181](https://github.com/OpenVoiceOS/ovos-bus-client/pull/181) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a4) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a3...1.3.8a4)
+
+**Merged pull requests:**
+
+- chore\(deps\): update actions/setup-python action to v6 [\#187](https://github.com/OpenVoiceOS/ovos-bus-client/pull/187) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a3) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a2...1.3.8a3)
+
+**Merged pull requests:**
+
+- chore\(deps\): update actions/checkout action to v6 [\#185](https://github.com/OpenVoiceOS/ovos-bus-client/pull/185) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a2) (2025-12-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a1...1.3.8a2)
+
+**Merged pull requests:**
+
+- chore: Configure Renovate [\#180](https://github.com/OpenVoiceOS/ovos-bus-client/pull/180) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a1) (2025-11-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.7...1.3.8a1)
+
+**Merged pull requests:**
+
+- refactor: migrate bus api client to ovos-bus-client package [\#177](https://github.com/OpenVoiceOS/ovos-bus-client/pull/177) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
