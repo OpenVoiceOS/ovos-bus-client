@@ -278,7 +278,8 @@ class Session:
                  is_speaking: bool = False,
                  is_recording: bool = False,
                  blacklisted_intents: Optional[List[str]] = None,
-                 blacklisted_skills: Optional[List[str]] = None):
+                 blacklisted_skills: Optional[List[str]] = None,
+                 persona_id: Optional[str] = None):
         """
         Construct a session identifier
         @param session_id: string UUID for the session
@@ -329,6 +330,7 @@ class Session:
         self.context = context or IntentContextManager()
 
         self.location_preferences = location_prefs or Configuration().get("location", {})
+        self.persona_id = persona_id
 
     @property
     def timezone(self) -> Optional[str]:
@@ -427,6 +429,7 @@ class Session:
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
+            "persona_id": self.persona_id,
             "lang": self.lang,
             "context": self.context.serialize(),
             "site_id": self.site_id,
@@ -457,6 +460,7 @@ class Session:
         @return: Session representation of data
         """
         uid = data.get("session_id")
+        pid = data.get("persona_id")
         active = data.get("active_skills") or []
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
@@ -478,6 +482,7 @@ class Session:
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id,
+                       persona_id=pid,
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,
