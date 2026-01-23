@@ -281,29 +281,29 @@ class Session:
                  blacklisted_skills: Optional[List[str]] = None,
                  persona_id: Optional[str] = None):
         """
-                 Create a new Session with identifiers, preferences, state flags, and conversational context.
-                 
-                 Parameters:
-                     session_id (str): Session identifier; a new UUID is generated if not provided.
-                     expiration_seconds (int): Time-to-live in seconds for the session; use -1 for no expiration.
-                     active_skills (List[List[Union[str, float]]]): Ordered list of active skills as [skill_id, last_touch_timestamp].
-                     utterance_states (Dict): Mapping of skill_id to its UtteranceState.
-                     lang (str): Language tag for the session (standardized internally) — defaults to system default.
-                     context (IntentContextManager): Conversational context manager for the session.
-                     site_id (str): Identifier for the site/location associated with the session.
-                     pipeline (List[str]): Ordered intent processing pipeline identifiers.
-                     stt_prefs (Dict): Deprecated; provided value will be ignored.
-                     tts_prefs (Dict): Deprecated; provided value will be ignored.
-                     location_prefs (Dict): Location preferences or metadata for the session.
-                     system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
-                     time_format (str): Time format preference identifier.
-                     date_format (str): Date format preference identifier.
-                     is_speaking (bool): Initial speaking state flag.
-                     is_recording (bool): Initial recording state flag.
-                     blacklisted_intents (Optional[List[str]]): Intents to ignore for this session.
-                     blacklisted_skills (Optional[List[str]]): Skills to ignore for this session.
-                     persona_id (Optional[str]): Optional persona identifier associated with this session.
-                 """
+        Create a new Session with identifiers, preferences, state flags, and conversational context.
+         
+        Parameters:
+            session_id (str): Session identifier; a new UUID is generated if not provided.
+            expiration_seconds (int): Time-to-live in seconds for the session; use -1 for no expiration.
+            active_skills (List[List[Union[str, float]]]): Ordered list of active skills as [skill_id, last_touch_timestamp].
+            utterance_states (Dict): Mapping of skill_id to its UtteranceState.
+            lang (str): Language tag for the session (standardized internally) — defaults to system default.
+            context (IntentContextManager): Conversational context manager for the session.
+            site_id (str): Identifier for the site/location associated with the session.
+            pipeline (List[str]): Ordered intent processing pipeline identifiers.
+            stt_prefs (Dict): Deprecated; provided value will be ignored.
+            tts_prefs (Dict): Deprecated; provided value will be ignored.
+            location_prefs (Dict): Location preferences or metadata for the session.
+            system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
+            time_format (str): Time format preference identifier.
+            date_format (str): Date format preference identifier.
+            is_speaking (bool): Initial speaking state flag.
+            is_recording (bool): Initial recording state flag.
+            blacklisted_intents (Optional[List[str]]): Intents to ignore for this session.
+            blacklisted_skills (Optional[List[str]]): Skills to ignore for this session.
+            persona_id (Optional[str]): Optional persona identifier associated with this session.
+        """
         if tts_prefs:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         if stt_prefs:
