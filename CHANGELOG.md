@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a1) (2026-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a5...1.4.0a1)
+
+**Merged pull requests:**
+
+- feat: persona\_id [\#192](https://github.com/OpenVoiceOS/ovos-bus-client/pull/192) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.3.8a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a5) (2025-12-19)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a4...1.3.8a5)
