@@ -116,6 +116,8 @@ class MessageBusClient:
             LOG.warning('Connection Reset. Did the Messagebus Service stop?')
         else:
             LOG.exception('=== %s ===', repr(error))
+            if not isinstance(error, BaseException):
+                error = RuntimeError(repr(error))
             try:
                 self.emitter.emit('error', error)
             except Exception as e:

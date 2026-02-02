@@ -115,8 +115,10 @@ class GUIInterface:
         output_path = f"{GUI_CACHE_PATH}/{self.skill_id}"
         if os.path.exists(output_path):
             LOG.info(f"Removing existing {self.skill_id} cached GUI resources before updating")
-            shutil.rmtree(output_path)
-
+            try:
+                shutil.rmtree(output_path)
+            except Exception as e:
+                LOG.error(f"Failed to remove existing cache: ({e})")
         for framework, bpath in self.ui_directories.items():
             if framework == "all":
                 # mostly applies to image files
