@@ -119,7 +119,7 @@ class MessageBusClient:
             if not isinstance(error, BaseException):
                 error = RuntimeError(repr(error))
             try:
-                self.emitter.emit('error',  error)
+                self.emitter.emit('error', error)
             except Exception as e:
                 LOG.exception(f'Failed to emit error event: {e}')
 
