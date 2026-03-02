@@ -1,56 +1,16 @@
 # Changelog
 
-## [1.4.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a2) (2026-01-23)
+## [1.4.0a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a4) (2026-03-02)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0a1...1.4.0a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0...1.4.0a4)
 
-## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a1) (2026-01-23)
+**Closed issues:**
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a5...1.4.0a1)
-
-**Merged pull requests:**
-
-- feat: persona\_id [\#192](https://github.com/OpenVoiceOS/ovos-bus-client/pull/192) ([JarbasAl](https://github.com/JarbasAl))
-
-## [1.3.8a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a5) (2025-12-19)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a4...1.3.8a5)
+- Decimal points handled incorrectly in Piper/phoonnx [\#198](https://github.com/OpenVoiceOS/ovos-bus-client/issues/198)
 
 **Merged pull requests:**
 
-- chore\(deps\): update dependency python to 3.14 [\#181](https://github.com/OpenVoiceOS/ovos-bus-client/pull/181) ([renovate[bot]](https://github.com/apps/renovate))
-
-## [1.3.8a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a4) (2025-12-19)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a3...1.3.8a4)
-
-**Merged pull requests:**
-
-- chore\(deps\): update actions/setup-python action to v6 [\#187](https://github.com/OpenVoiceOS/ovos-bus-client/pull/187) ([renovate[bot]](https://github.com/apps/renovate))
-
-## [1.3.8a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a3) (2025-12-19)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a2...1.3.8a3)
-
-**Merged pull requests:**
-
-- chore\(deps\): update actions/checkout action to v6 [\#185](https://github.com/OpenVoiceOS/ovos-bus-client/pull/185) ([renovate[bot]](https://github.com/apps/renovate))
-
-## [1.3.8a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a2) (2025-12-18)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a1...1.3.8a2)
-
-**Merged pull requests:**
-
-- chore: Configure Renovate [\#180](https://github.com/OpenVoiceOS/ovos-bus-client/pull/180) ([renovate[bot]](https://github.com/apps/renovate))
-
-## [1.3.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a1) (2025-11-09)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.7...1.3.8a1)
-
-**Merged pull requests:**
-
-- refactor: migrate bus api client to ovos-bus-client package [\#177](https://github.com/OpenVoiceOS/ovos-bus-client/pull/177) ([JarbasAl](https://github.com/JarbasAl))
+- fix: better error handling [\#196](https://github.com/OpenVoiceOS/ovos-bus-client/pull/196) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
