@@ -1,36 +1,48 @@
 name: Run Build Tests
 on:
   push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - dev
+    paths-ignore:
+      - 'ovos_bus_client/version.py'
+      - 'test/**'
+      - '.github/**'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'CHANGELOG.md'
+      - 'MANIFEST.in'
+      - 'README.md'
   workflow_dispatch:
 
 jobs:
   build_tests:
+    strategy:
+      max-parallel: 2
+      matrix:
+        python-version: ["3.10", "3.11" ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: ${{ matrix.python-version }}
       - name: Install Build Tools
         run: |
           python -m pip install build wheel
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt install python3-dev swig libssl-dev libfann-dev portaudio19-dev libpulse-dev
+          sudo apt install python3-dev
       - name: Build Source Packages
         run: |
           python setup.py sdist
       - name: Build Distribution Packages
         run: |
           python setup.py bdist_wheel
-      - name: Install tflite_runtime workaround tflit bug
+      - name: Install package
         run: |
-          pip3 install numpy
-          pip3 install --extra-index-url https://google-coral.github.io/py-repo/ tflite_runtime
-      - name: Install core repo
-        run: |
-          pip install .[audio-backend,mark1,stt,tts,skills_minimal,skills,gui,bus,all]
+          pip install .
