@@ -26,7 +26,8 @@ ovos_bus_client/
 │   └── events.py        # EventSchedulerInterface
 ├── util/
 │   └── scheduler.py     # legacy scheduler utilities
-└── version.py           # VERSION_* constants, parsed by setup.py
+└── version.py           # VERSION_* constants + __version__ string
+pyproject.toml           # PEP 621 metadata + dynamic version
 test/
 └── unittests/           # pytest tests
 docs/                    # this folder
@@ -35,10 +36,12 @@ docs/                    # this folder
 ## Running tests
 
 ```bash
-pip install -e .
-pip install -r test/requirements.txt   # or .[test] if you prefer the extra
+pip install -e .[test]
 pytest test/unittests -v
 ```
+
+Test dependencies live in `pyproject.toml` under `[project.optional-dependencies].test`.
+Runtime dependencies live in `[project].dependencies`. Both are PEP 621.
 
 CI runs the same command across Python 3.10 – 3.14 via the
 `OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev` reusable
@@ -61,8 +64,13 @@ registered here — they moved to their own packages in 2.0. See
 
 ## Versioning
 
-`ovos_bus_client/version.py` carries the four `VERSION_*` constants. The
-publish workflows in `.github/workflows/` bump them automatically:
+`ovos_bus_client/version.py` carries the four `VERSION_*` constants and
+exposes `__version__` (a single string assembled from them).
+`pyproject.toml` reads `__version__` via
+`[tool.setuptools.dynamic] version = { attr = "ovos_bus_client.version.__version__" }`,
+so bumping the constants is the only place that needs editing for a release.
+
+The publish workflows in `.github/workflows/` bump them automatically:
 
 - `release_workflow.yml` (alpha): bumps `VERSION_ALPHA` on every merge to
   `dev`, publishes to PyPI, and proposes a stable-release PR `dev → master`.
