@@ -40,7 +40,9 @@ You have two ways to start the WebSocket loop.
 | `bus.run_in_thread()` | No | Programs that do their own work on the main thread (most). |
 | `bus.run_forever()` | Yes | Daemons whose only job is to react to bus events. |
 
-Both return only when the connection ends.
+`run_in_thread()` spawns a background thread for the WebSocket loop and
+returns to the caller immediately. `run_forever()` runs the loop on the
+**calling** thread and only returns once the connection ends.
 
 `bus.connected_event` is a `threading.Event` that is set when the WebSocket
 handshake completes (`client.py:90`) and cleared on disconnect

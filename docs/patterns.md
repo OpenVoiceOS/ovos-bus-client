@@ -80,7 +80,7 @@ You have a multi-user deployment (HiveMind, chat agents, multiple sites). You
 need every emitted message to belong to one user's session.
 
 ```python
-from ovos_bus_client.session import SessionManager
+from ovos_bus_client.session import Session, SessionManager
 
 def handle_external_request(external_session_id, utterance):
     sess = SessionManager.sessions.get(external_session_id) \

@@ -135,7 +135,10 @@ present, it is used to derive `context` for the outgoing message — most
 importantly the `session`, so the resulting media playback / GUI update is
 attached to the right user/device.
 
-Always pass `source_message` when you can — typically `self.bus._msg` inside a
-handler, or the `message` argument from an intent function. Skipping it means
-the outgoing message has no session, which can cause OCP and the GUI to act
-on the wrong device in a multi-user deployment.
+Always pass `source_message` when you can — typically the `message` argument
+your handler received (or the `message` argument from an intent function).
+When no `message` is in scope, call `dig_for_message()`
+(`ovos_bus_client/message.py:258`) to walk back through the call stack and
+find one. Skipping `source_message` means the outgoing message has no
+session, which can cause OCP and the GUI to act on the wrong device in a
+multi-user deployment.

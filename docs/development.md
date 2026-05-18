@@ -4,7 +4,7 @@ Working on `ovos-bus-client` itself, or hacking on a fork.
 
 ## Repository layout
 
-```
+```text
 ovos_bus_client/
 ├── __init__.py          # public re-exports: MessageBusClient, Message, Session, ...
 ├── client/
