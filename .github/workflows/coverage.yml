@@ -12,5 +12,5 @@ jobs:
       python_version: '3.11'
       coverage_source: 'ovos_bus_client'
       test_path: 'test/unittests'
-      install_extras: 'test'
+      install_extras: '-e .[test]'
       min_coverage: 0
