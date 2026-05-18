@@ -2,19 +2,24 @@
 
 A Python client for the OVOS messagebus. Connect to OVOS, emit messages, and react to system events.
 
+The OVOS messagebus is the **nervous system** of an OVOS install. Every component — STT, intent parsing, skills, TTS, audio, GUI — talks over it. This package is the Python client.
+
+> ⚠️ **The bus is private.** It has **no authentication** — every connected client can issue any natural-language command, speak through the speakers, take over any subsystem, and read every other client's traffic. **Keep it bound to `127.0.0.1`** (the default), never expose it on a network interface, and never put it behind a reverse proxy. For remote access, use [HiveMind](https://github.com/JarbasHiveMind), which adds encryption, identity, and policy enforcement on top.
+
 ## Install
 
 ```bash
 pip install ovos-bus-client
 ```
 
-## Quick Start
+## Quick start
 
 ```python
 from ovos_bus_client import MessageBusClient, Message
 
 client = MessageBusClient()
 client.run_in_thread()
+client.connected_event.wait()
 
 client.emit(Message('speak', data={'utterance': 'Hello World'}))
 ```
@@ -22,7 +27,7 @@ client.emit(Message('speak', data={'utterance': 'Hello World'}))
 Listening for messages:
 
 ```python
-from ovos_bus_client import MessageBusClient, Message
+from ovos_bus_client import MessageBusClient
 
 client = MessageBusClient()
 
@@ -33,24 +38,24 @@ client.on('speak', on_speak)
 client.run_forever()
 ```
 
-## CLI Tools
-
-Installed alongside the package:
+## CLI tools
 
 | Command | Description |
 |---|---|
-| `ovos-speak <text>` | Ask OVOS to speak a phrase |
-| `ovos-say-to <text>` | Send a utterance to the intent pipeline |
+| `ovos-speak <text> [lang]` | Ask OVOS to speak a phrase |
+| `ovos-say-to <text> [lang]` | Inject an utterance into the intent pipeline |
 | `ovos-listen` | Trigger the wake-word / listen cycle |
-| `ovos-simple-cli` | Interactive text CLI for OVOS |
+| `ovos-simple-cli [lang]` | Interactive text REPL for OVOS |
 
 ## Configuration
 
-`MessageBusClient` reads `~/.config/mycroft/mycroft.conf` by default. Override at construction:
+`MessageBusClient` reads the `websocket` block of your OVOS config (loaded by `ovos-config`) — defaults to `ws://127.0.0.1:8181/core`. Override at construction:
 
 ```python
-MessageBusClient(host='192.168.1.200', port=8181)
+MessageBusClient(host='127.0.0.1', port=8181)
 ```
+
+Do **not** change `host` to anything routable. See the security callout above.
 
 ## Migrating from 1.x
 
@@ -65,10 +70,23 @@ The HiveMind agent entry point (`hivemind.agent.protocol`) and the solver entry 
 
 ## Documentation
 
-- [Architecture](docs/index.md)
-- [Session / SessionManager](docs/session.md)
-- [Migration from 1.x](docs/migration.md)
+Full developer docs live in [`docs/`](docs/):
+
+- [Getting started](docs/getting_started.md) — install to first message
+- [Core concepts](docs/concepts.md) — bus model and the security boundary
+- [Messages](docs/messages.md) — `Message`, `GUIMessage`, reply helpers
+- [The client](docs/client.md) — `MessageBusClient` API in depth
+- [Configuration](docs/configuration.md) — host, port, route, ssl
+- [Sessions](docs/session.md) — `Session`, `SessionManager`, `IntentContextManager`
+- [Waiters and collectors](docs/waiter_and_collector.md) — request/response and multi-reply patterns
+- [High-level APIs](docs/apis.md) — `GUIInterface`, `OCPInterface`, `EnclosureAPI`, scheduler
+- [CLI tools](docs/scripts.md) — `ovos-speak`, `ovos-listen`, `ovos-say-to`, `ovos-simple-cli`
+- [Common patterns](docs/patterns.md) — recipes for everyday use
+- [Testing](docs/testing.md) — `FakeBus`, isolating tests
+- [Migration from 1.x](docs/migration.md) — what moved out in 2.0
+- [Development](docs/development.md) — repo layout, releases
+- [Glossary](docs/glossary.md) — terms
 
 ## License
 
-Apache 2.0
+Apache 2.0. See [LICENSE.md](LICENSE.md).
