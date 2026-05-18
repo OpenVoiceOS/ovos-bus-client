@@ -44,11 +44,6 @@ def get_version():
 with open(os.path.join(BASEDIR, "README.md"), "r") as f:
     long_description = f.read()
 
-# The HiveMind agent protocol entry point now lives in the standalone
-# `hivemind-ovos-agent-plugin` package. ovos_bus_client.hpm remains as a
-# deprecation shim only and is no longer registered here.
-PLUGIN_ENTRY_POINT = 'ovos-solver-bus-plugin=ovos_bus_client.opm:OVOSMessagebusSolver'
-
 setup(
     name='ovos_bus_client',
     version=get_version(),
@@ -76,7 +71,6 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     entry_points={
-        'neon.plugin.solver': PLUGIN_ENTRY_POINT,
         'console_scripts': [
             'ovos-listen=ovos_bus_client.scripts:ovos_listen',
             'ovos-speak=ovos_bus_client.scripts:ovos_speak',
