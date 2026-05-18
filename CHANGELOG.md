@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.0a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.0.0a3) (2026-05-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a2...2.0.0a3)
+
+**Merged pull requests:**
+
+- test: comprehensive test coverage \(19% → 93% real / 67% pytest-cov\) [\#211](https://github.com/OpenVoiceOS/ovos-bus-client/pull/211) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.0.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.0.0a2) (2026-05-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a1...2.0.0a2)
