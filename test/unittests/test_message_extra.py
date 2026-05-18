@@ -182,6 +182,18 @@ class TestGUIMessage(TestCase):
         self.assertEqual(restored.data["values"], {"temp": 22})
 
 
+try:
+    import pycryptodomex  # noqa: F401
+    _HAS_CRYPTO = True
+except ImportError:  # pragma: no cover
+    try:
+        import Cryptodome  # noqa: F401
+        _HAS_CRYPTO = True
+    except ImportError:
+        _HAS_CRYPTO = False
+
+
+@unittest.skipUnless(_HAS_CRYPTO, "pycryptodomex not installed; encryption helpers unavailable")
 class TestEncryptionHelpers(TestCase):
     def test_encrypt_decrypt_roundtrip(self):
         key = "0123456789abcdef"  # 16-char
