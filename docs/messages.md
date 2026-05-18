@@ -2,6 +2,13 @@
 
 Reference for the `Message` class and its helpers.
 
+> **Looking for the catalogue of valid message types?** That lives in
+> [**ovos-pydantic-models**](https://github.com/OpenVoiceOS/ovos-pydantic-models)
+> (full index: <https://openvoiceos.github.io/ovos-pydantic-models/>). It is
+> the authoritative, machine-readable specification of the OVOS MessageBus
+> protocol, with a Pydantic v2 model per message type. This document covers
+> the **transport** — how `Message` objects work — not the vocabulary.
+
 ## `Message` — `ovos_bus_client/message.py:32`
 
 The fundamental unit of communication on the bus.
@@ -105,12 +112,34 @@ shape but it serialises arguments directly at the top level rather than under
 plugins that need to encrypt the JSON payload on the wire (HiveMind being the
 primary consumer). They are not used inside the OVOS bus loop itself.
 
+## Validating against the protocol spec
+
+For type-safety, integration tests, or generated documentation, validate
+your messages against `ovos-pydantic-models`:
+
+```python
+from ovos_pydantic_models import SpeakMessage
+from ovos_bus_client import Message
+
+raw = Message("speak", {"utterance": "hi", "lang": "en-us"}).as_dict()
+# rename the wire field for Pydantic, which uses message_type
+raw["message_type"] = raw.pop("type")
+SpeakMessage.model_validate(raw)   # raises ValidationError if malformed
+```
+
+The dependency is optional — `ovos-bus-client` itself ships plain
+`Message` dicts. Add `ovos-pydantic-models` to your test extras when you
+want a schema gate at the boundary of your component.
+
 ## Conventions for new message types
 
 When you invent a message type:
 
 - Pick a stable prefix and stick to it (your skill_id, your component name).
-- Document the `data` schema in your own README.
+- Document the `data` schema in your own README, and consider contributing
+  a Pydantic model for it to
+  [ovos-pydantic-models](https://github.com/OpenVoiceOS/ovos-pydantic-models)
+  so the wider ecosystem can validate it.
 - If you expect a reply, follow the `.response` suffix convention so callers
   can use `wait_for_response` without specifying `reply_type`.
 - If multiple handlers might answer, follow the `.handling` suffix convention

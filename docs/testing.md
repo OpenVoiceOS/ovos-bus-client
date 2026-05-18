@@ -98,6 +98,23 @@ def reset_session_manager():
 
 Drop this fixture in `conftest.py` once and never think about it again.
 
+## Schema-validating at boundaries
+
+For tests that exercise contract behaviour — your component emits a message
+of type X with the right shape — validate against
+[`ovos-pydantic-models`](https://github.com/OpenVoiceOS/ovos-pydantic-models):
+
+```python
+from ovos_pydantic_models import SpeakMessage
+
+emitted = bus.emitted_msgs[-1].as_dict()
+emitted["message_type"] = emitted.pop("type")
+SpeakMessage.model_validate(emitted)   # raises if shape regresses
+```
+
+Keeps the schema contract enforceable in CI without requiring runtime
+validation everywhere.
+
 ## Asserting message context
 
 Most bugs hide in `context`, not `data`. Assert against the serialised session

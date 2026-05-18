@@ -87,6 +87,11 @@ Full developer docs live in [`docs/`](docs/):
 - [Development](docs/development.md) — repo layout, releases
 - [Glossary](docs/glossary.md) — terms
 
+## Related
+
+- [**ovos-pydantic-models**](https://github.com/OpenVoiceOS/ovos-pydantic-models) — authoritative Pydantic v2 index of every OVOS bus message type. Opt-in validation layer for typing, docs generation, and integration tests. Browsable docs: <https://openvoiceos.github.io/ovos-pydantic-models/>.
+- [**HiveMind**](https://github.com/JarbasHiveMind) — external-access layer in front of the bus; the right tool for remote clients.
+
 ## License
 
 Apache 2.0. See [LICENSE.md](LICENSE.md).

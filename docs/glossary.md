@@ -8,6 +8,7 @@ Terms you will encounter reading OVOS code and these docs.
 | **`MessageBusClient`** | Python WebSocket client for the bus. The class this package exists to ship. |
 | **`FakeBus`** | In-memory `MessageBusClient` lookalike shipped in `ovos-utils`. Use it for tests. |
 | **`Message`** | A bus message: `(msg_type, data, context)`. JSON-serialisable. |
+| **`ovos-pydantic-models`** | Authoritative Pydantic v2 index of every known OVOS bus message type. Not a runtime dependency of `ovos-bus-client`; opt-in for validation. [Repo](https://github.com/OpenVoiceOS/ovos-pydantic-models) · [Docs](https://openvoiceos.github.io/ovos-pydantic-models/). |
 | **`msg_type`** | The event name. Dot- or colon-delimited by convention. |
 | **`data`** | Payload of a message. Producer-defined schema. |
 | **`context`** | Routing/metadata: session, source, destination, etc. Carries the session. |

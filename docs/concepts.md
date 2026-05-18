@@ -94,7 +94,25 @@ On the wire the message is JSON:
 
 ## Message types are by convention, not declaration
 
-There is no central registry of message types. Conventions you will see:
+The bus itself enforces no schema. But the OVOS project ships a machine-readable
+index of every known message type, with Pydantic v2 models for each, in
+[**ovos-pydantic-models**](https://github.com/OpenVoiceOS/ovos-pydantic-models)
+(browsable docs: <https://openvoiceos.github.io/ovos-pydantic-models/>). When
+you're looking up a message type, that's the authoritative reference.
+
+```python
+from ovos_pydantic_models import SpeakMessage, SpeakData
+
+msg = SpeakMessage(data=SpeakData(utterance="hi", lang="en-us"))
+# Pydantic-validated; can be .model_dump() onto the bus.
+```
+
+`ovos-bus-client` itself does **not** depend on `ovos-pydantic-models` — the
+bus uses plain dicts on the wire, by design. The Pydantic models are an
+optional validation layer that consumers can opt into for type safety,
+documentation generation, or integration testing.
+
+Conventions you will see (validated by the Pydantic models when they apply):
 
 - `mycroft.<component>.<verb>` — internal OVOS events
   (`mycroft.mic.listen`, `mycroft.audio.service.play`).
