@@ -13,4 +13,9 @@ jobs:
       coverage_source: 'ovos_bus_client'
       test_path: 'test/unittests'
       install_extras: '-e .[test]'
-      min_coverage: 0
+      # Floor matches what pytest --cov reports in CI. Real coverage measured
+      # via `coverage run -m pytest && coverage report` is ~93%; pytest-cov
+      # under-reports module-import lines because the cov plugin starts after
+      # production modules are already imported. Floor is set conservatively
+      # to track CI's reported number, not the real one.
+      min_coverage: 65
