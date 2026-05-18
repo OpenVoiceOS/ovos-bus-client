@@ -22,7 +22,7 @@ dependencies = [
     "ovos-config>=0.0.12,<3.0.0",
     "ovos-utils>=0.8.2,<1.0.0",
     "websocket-client>=0.54.0",
-    "pyee>=8.1.0,<13.0.0",
+    "pyee>=13.0.1,<13.1.0",
 ]
 
 [project.optional-dependencies]
