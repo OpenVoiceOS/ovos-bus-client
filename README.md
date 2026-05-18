@@ -1,92 +1,74 @@
 # OpenVoiceOS Bus Client
 
-This module is a simple interface for the OVOS messagebus and can be used to connect to OVOS, send messages and react to messages sent by the OpenVoiceOS system.
+A Python client for the OVOS messagebus. Connect to OVOS, emit messages, and react to system events.
 
----
+## Install
 
-## 🤖 Persona Integration
-
-The project also includes the `ovos-solver-bus-plugin`, a plugin for interacting with `ovos-core` wherever a solver can be used.
-
-example `persona.json`
-```json
-{
-  "name": "Open Voice OS",
-  "solvers": [
-    "ovos-solver-bus-plugin",
-    "ovos-solver-failure-plugin"
-  ],
-  "ovos-solver-bus-plugin": {
-    "autoconnect": true,
-    "host": "192.168.1.200",
-    "port": 8181
-  }
-}
+```bash
+pip install ovos-bus-client
 ```
 
-### Use Cases:
-- Expose `ovos-core` to any OpenAI-compatible project via [ovos-persona-server](https://github.com/OpenVoiceOS/ovos-persona-server)
-    - Chat with OVOS via the Open Web UI
-    - Expose OVOS as an agent for Home Assistant
-- Integrate OpenVoiceOS into a [Mixture Of Solvers (MOS)](https://github.com/TigreGotico/ovos-MoS)
-
----
-
-## 📡 HiveMind Integration
-
-This project includes native integration with [HiveMind Plugin Manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager), enabling seamless interoperability within the HiveMind ecosystem.
-
-`hivemind-ovos-agent-plugin` is a hivemind **Agent Protocol** responsible for handling HiveMessages and translating them to the OpenVoiceOS messagebus
-
----
-
-## 🐍 Python Usage
-
-### MycroftBusClient()
-
-The `MycroftBusClient()` object can be setup to connect to any host and port as well as any endpont on that host. this makes it quite versitile and will work on the main bus as well as on a gui bus. If no arguments are provided it will try to connect to a local instance of OVOS on the default endpoint and port.
-
-> NOTE: we kept the original pre-fork class name for compatibility reasons
-
-### Message()
-
-The `Message` object is a representation of the messagebus message, this will always contain a message type but can also contain data and context. Data is usually real information while the context typically contain information on where the message originated or who the intended recipient is.
-
-```python
-Message('MESSAGE_TYPE', data={'meaning': 42}, context={'origin': 'A.Dent'})
-```
-
-### Examples
-
-Below are some a couple of simple cases for sending a message on the bus as well as reacting to messages on the bus
-
-#### Sending a message on the bus.
+## Quick Start
 
 ```python
 from ovos_bus_client import MessageBusClient, Message
 
-print('Setting up client to connect to a local OVOS instance')
 client = MessageBusClient()
 client.run_in_thread()
 
-print('Sending speak message...')
 client.emit(Message('speak', data={'utterance': 'Hello World'}))
 ```
 
-#### Catching a message on the messagebus
+Listening for messages:
 
 ```python
 from ovos_bus_client import MessageBusClient, Message
 
-print('Setting up client to connect to a local OVOS instance')
 client = MessageBusClient()
 
-def print_utterance(message):
-    print('OVOS said "{}"'.format(message.data.get('utterance')))
+def on_speak(message):
+    print('OVOS said:', message.data.get('utterance'))
 
-
-print('Registering handler for speak message...')
-client.on('speak', print_utterance)
-
+client.on('speak', on_speak)
 client.run_forever()
 ```
+
+## CLI Tools
+
+Installed alongside the package:
+
+| Command | Description |
+|---|---|
+| `ovos-speak <text>` | Ask OVOS to speak a phrase |
+| `ovos-say-to <text>` | Send a utterance to the intent pipeline |
+| `ovos-listen` | Trigger the wake-word / listen cycle |
+| `ovos-simple-cli` | Interactive text CLI for OVOS |
+
+## Configuration
+
+`MessageBusClient` reads `~/.config/mycroft/mycroft.conf` by default. Override at construction:
+
+```python
+MessageBusClient(host='192.168.1.200', port=8181)
+```
+
+## Migrating from 1.x
+
+Two modules were removed in 2.0.0. Install their replacement packages if you used them:
+
+| Removed | Replacement | Install |
+|---|---|---|
+| `ovos_bus_client.hpm.OVOSProtocol` | `hivemind-ovos-agent-plugin` | `pip install hivemind-ovos-agent-plugin` |
+| `ovos_bus_client.opm.OVOSMessagebusSolver` | `ovos-messagebus-chat-plugin` | `pip install ovos-messagebus-chat-plugin` |
+
+The HiveMind agent entry point (`hivemind.agent.protocol`) and the solver entry point (`neon.plugin.solver`) are no longer registered by this package. See [docs/migration.md](docs/migration.md) for details.
+
+## Documentation
+
+- [Architecture](docs/index.md)
+- [Session / SessionManager](docs/session.md)
+- [Migration from 1.x](docs/migration.md)
+
+## License
+
+Apache 2.0
