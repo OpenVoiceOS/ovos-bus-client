@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.0a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.0.0a4) (2026-05-22)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a3...2.0.0a4)
+
+**Merged pull requests:**
+
+- refactor: migrate language matching to ovos-spec-tools [\#213](https://github.com/OpenVoiceOS/ovos-bus-client/pull/213) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.0.0a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.0.0a3) (2026-05-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a2...2.0.0a3)
