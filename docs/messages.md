@@ -35,8 +35,10 @@ Both `data` and `context` default to `{}` if omitted.
 
 `serialize()` and `deserialize()` are pure JSON — they neither encrypt nor
 decrypt. Any envelope encryption is a separate, deprecated layer applied at the
-transport edge by `MessageBusClient`. `MessageBusClient.emit` calls
-`serialize()` for you; you rarely call it directly.
+transport edge by [`MessageBusClient`](client.md) — see
+[The client → Deprecated transport-edge encryption](client.md#deprecated-transport-edge-encryption).
+[`MessageBusClient.emit`](client.md#emitting) calls `serialize()` for you; you
+rarely call it directly.
 
 ### Reply helpers
 

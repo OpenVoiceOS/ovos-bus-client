@@ -197,6 +197,9 @@ must route traffic through `MessageBusClient`.
 | `websocket.secret_key` | `str` | *(absent)* | AES-GCM key. Empty string or missing both disable encryption. |
 | `websocket.allow_unencrypted` | `bool` | `True` when no key; `False` when a key is set | Allow plaintext frames through when a key is configured. |
 
+See [Configuration → Deprecated: `websocket.secret_key` and `websocket.allow_unencrypted`](configuration.md#deprecated-websocketsecret_key-and-websocketallow_unencrypted)
+for the same keys in context of the wider config block.
+
 ## Subclassing
 
 The standard customisation point is the constructor's callback overrides plus
