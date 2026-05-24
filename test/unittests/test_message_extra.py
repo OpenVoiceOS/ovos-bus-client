@@ -64,9 +64,11 @@ class TestReply(TestCase):
         swap only consults ``context.source`` / ``context.destination``."""
         orig = Message("a", {}, {"source": "S"})
         reply = orig.reply("a.response", data={"destination": "X"})
-        # source was "S", destination was absent — the §5.2 swap copies
-        # source into destination and leaves source unchanged.
+        # source was "S", destination was absent — the §5.2 swap sets
+        # destination←source and leaves source unchanged (§5.2: only the
+        # dst→src direction fires when the original destination is absent).
         self.assertEqual(reply.context["destination"], "S")
+        self.assertEqual(reply.context["source"], "S")
         # data['destination'] sits in the payload, untouched.
         self.assertEqual(reply.data, {"destination": "X"})
 
