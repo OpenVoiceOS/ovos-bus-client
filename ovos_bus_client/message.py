@@ -109,12 +109,18 @@ Message.publish = _publish
 
 
 def encrypt_as_dict(key: str, data: str, nonce=None) -> dict:
-    """AES-encrypt ``data`` under ``key``, returning the
-    ``{ciphertext, tag, nonce}`` dict the websocket transport uses.
-
-    Kept at module level for downstream consumers that imported it
-    directly. No longer wired into :meth:`Message.serialize` —
-    encryption is the transport's concern.
+    """
+    AES-encrypt data under key and produce the websocket-transport mapping.
+    
+    Kept at module level for consumers that import this helper directly; encryption is intentionally handled at the transport layer and is no longer integrated into Message.serialize/deserialize.
+    
+    Parameters:
+        key (str): Encryption key passed to the underlying encrypt routine.
+        data (str): Plaintext to encrypt.
+        nonce (optional): Nonce value forwarded to the underlying encrypt routine; if omitted the encrypt implementation will generate one.
+    
+    Returns:
+        dict: Mapping with hex-encoded fields "ciphertext", "tag", and "nonce" suitable for websocket transport.
     """
     ciphertext, tag, nonce = encrypt(key, data, nonce=nonce)
     return {"ciphertext": hexlify(ciphertext).decode('utf-8'),
@@ -123,9 +129,21 @@ def encrypt_as_dict(key: str, data: str, nonce=None) -> dict:
 
 
 def decrypt_from_dict(key: str, data: dict) -> str:
-    """Reverse of :func:`encrypt_as_dict`. Accepts the legacy "web
-    crypto" form too (no separate ``tag``, GCM tag concatenated to the
-    ciphertext)."""
+    """
+    Decrypt a websocket-transport formatted dict into a plaintext string.
+    
+    Accepts a dict produced by encrypt_as_dict: hex-encoded "ciphertext" and "nonce", and an optional hex-encoded "tag". If "tag" is missing, treats the last 16 bytes of the decoded ciphertext as the GCM tag (legacy web-crypto format) before decrypting.
+    
+    Parameters:
+        key (str): Key used for decryption.
+        data (dict): Mapping with keys:
+            - "ciphertext" (str): Hex string of the ciphertext (possibly with tag appended).
+            - "nonce" (str): Hex string of the nonce.
+            - "tag" (str, optional): Hex string of the authentication tag; if absent, tag is taken from the end of the ciphertext.
+    
+    Returns:
+        str: Decrypted plaintext.
+    """
     ciphertext = unhexlify(data["ciphertext"])
     if data.get("tag") is None:  # web crypto
         ciphertext, tag = ciphertext[:-16], ciphertext[-16:]
@@ -136,14 +154,16 @@ def decrypt_from_dict(key: str, data: dict) -> str:
 
 
 def dig_for_message(max_records: int = 10) -> Optional[Message]:
-    """Walk the call stack looking for a :class:`Message` argument.
-
-    Used inside handlers that don't receive the triggering message
-    explicitly but still want to read its context — typically for
-    :attr:`session` / :attr:`lang` propagation.
-
-    Returns the first ``Message`` found in any positional argument of
-    the surrounding frames, or ``None``.
+    """
+    Search the call stack for the first Message instance passed as a positional argument.
+    
+    Useful for handlers that do not receive the triggering Message directly but need to access its context (for example, to propagate session or language).
+    
+    Parameters:
+        max_records (int): Maximum number of stack frames to inspect (most-recent first).
+    
+    Returns:
+        Message | None: The first Message found among positional arguments in inspected frames, or `None` if none is found.
     """
     stack = inspect.stack()[1:]  # first frame is this function call
     stack = stack if len(stack) <= max_records else stack[:max_records]
@@ -166,6 +186,16 @@ class CollectionMessage(Message):
     """
 
     def __init__(self, msg_type, handler_id, query_id, data=None, context=None):
+        """
+        Initialize a CollectionMessage carrying collect-handler identifiers and the standard message payload.
+        
+        Parameters:
+            msg_type (str): Message type/topic.
+            handler_id (str): Identifier of the collect handler servicing this query.
+            query_id (str): Identifier of the query being collected.
+            data (dict, optional): Message payload data. Defaults to None.
+            context (dict, optional): Message routing/context metadata. Defaults to None.
+        """
         super().__init__(msg_type, data, context)
         self.handler_id = handler_id
         self.query_id = query_id
@@ -173,18 +203,36 @@ class CollectionMessage(Message):
     @classmethod
     def from_message(cls, message: Message, handler_id: str,
                      query_id: str) -> "CollectionMessage":
-        """Wrap an existing :class:`Message` into a
-        :class:`CollectionMessage` with the same ``msg_type`` / ``data``
-        / ``context`` plus the collect-protocol ``handler_id`` and
-        ``query_id``."""
+        """
+        Create a CollectionMessage from an existing Message, preserving its type, data, and context while attaching collect-protocol identifiers.
+        
+        Parameters:
+            message (Message): Source message whose msg_type, data, and context will be copied.
+            handler_id (str): Identifier of the collect handler to attach.
+            query_id (str): Identifier of the collect query to attach.
+         
+        Returns:
+            CollectionMessage: A new CollectionMessage with the same msg_type, data, and context as `message` and the provided `handler_id` and `query_id`.
+        """
         return cls(message.msg_type, handler_id, query_id,
                    message.data, message.context)
 
     def success(self, data=None, context=None) -> Message:
-        """Emit a ``<msg_type>.response`` carrying
-        ``{query, handler, succeeded: True}`` (plus any provided ``data``).
-        Routing keys are swapped per OVOS-MSG-1 §5.2 via
-        :meth:`Message.reply`."""
+        """
+        Create a response message for the collect query indicating success.
+        
+        The returned message has type "<original msg_type>.response" and includes the provided data merged with the keys:
+        - "query": the originating query id,
+        - "handler": the handler id,
+        - "succeeded": True.
+        
+        Parameters:
+            data (dict, optional): Additional payload to include in the response; merged into the message data.
+            context (dict, optional): Context to use for the response; if omitted, the message's own context is used.
+        
+        Returns:
+            Message: A message whose data contains the merged payload and the success metadata described above.
+        """
         data = data or {}
         data['query'] = self.query_id
         data['handler'] = self.handler_id
@@ -193,8 +241,14 @@ class CollectionMessage(Message):
                           data, context or self.context)
 
     def failure(self) -> Message:
-        """Emit a ``<msg_type>.response`` carrying
-        ``{query, handler, succeeded: False}``."""
+        """
+        Create a response Message indicating the query handling failed.
+        
+        Returns:
+            Message: A response Message with msg_type "<original>.response", data containing
+            `query` (this message's query_id), `handler` (this message's handler_id), and
+            `succeeded` set to `False`; the response uses this message's context.
+        """
         data = {
             'query': self.query_id,
             'handler': self.handler_id,
@@ -203,8 +257,15 @@ class CollectionMessage(Message):
         return self.reply(self.msg_type + '.response', data, self.context)
 
     def extend(self, timeout) -> Message:
-        """Emit a ``<msg_type>.handling`` extension carrying
-        ``{query, handler, timeout}``."""
+        """
+        Send a handling-extension message for this collection query.
+        
+        Parameters:
+            timeout (int|float): The requested additional handling time (units as used by the protocol).
+        
+        Returns:
+            Message: A reply Message with type "<msg_type>.handling" whose data contains the keys `query`, `handler`, and `timeout`.
+        """
         data = {
             'query': self.query_id,
             'handler': self.handler_id,
@@ -220,10 +281,33 @@ class CollectionMessage(Message):
     # legacy behaviour where reply() returned a Message, not a
     # CollectionMessage.
     def forward(self, msg_type, data=None):  # type: ignore[override]
+        """
+        Create a new Message with the given type and payload using a deep copy of this message's context.
+        
+        Parameters:
+            msg_type (str): The routing/topic string for the new message.
+            data (dict, optional): Payload for the new message; defaults to an empty dict.
+        
+        Returns:
+            Message: A new Message constructed with `msg_type`, `data` (or `{}`), and a deep-copied context from this message.
+        """
         from copy import deepcopy
         return Message(msg_type, data or {}, deepcopy(self.context))
 
     def reply(self, msg_type, data=None, context=None):  # type: ignore[override]
+        """
+        Create a reply Message with the context merged and OVOS-MSG-1 routing fields swapped.
+        
+        Merges a deep copy of this message's context with the optional `context` overlay, then applies routing swap semantics: if `destination` exists, sets `source` to the first element of `destination` when it's a list (or to `destination` directly); if `source` exists, sets `destination` to `source`. Constructs and returns a plain `Message` with the provided `msg_type`, `data` (or an empty dict), and the modified context.
+        
+        Parameters:
+            msg_type (str): The message type/topic for the reply.
+            data (dict|None): Payload for the reply; an empty dict is used when omitted.
+            context (dict|None): Optional context entries to overlay onto a deep copy of this message's context.
+        
+        Returns:
+            Message: A new Message with `msg_type`, the supplied `data` (or `{}`), and the merged context where `source` and `destination` have been swapped for routing.
+        """
         from copy import deepcopy
         new_context = deepcopy(self.context)
         if context:
@@ -238,6 +322,16 @@ class CollectionMessage(Message):
         return Message(msg_type, data or {}, new_context)
 
     def response(self, data=None, context=None):  # type: ignore[override]
+        """
+        Create a response Message whose message type is this message's type with ".response" appended.
+        
+        Parameters:
+        	data (dict, optional): Payload to include in the response. If omitted, an empty dict is used.
+        	context (dict, optional): Context values to merge with this message's context; provided keys overlay the existing context.
+        
+        Returns:
+        	Message: A Message with msg_type equal to this message's msg_type + ".response" and a context derived from this message merged with `context` if provided.
+        """
         return self.reply(self.msg_type + ".response", data, context)
 
 
@@ -255,19 +349,42 @@ class GUIMessage(Message):
     """
 
     def __init__(self, msg_type, **kwargs):
+        """
+        Create a GUIMessage with the provided message type and use keyword arguments as the message payload.
+        
+        The keyword arguments are stored as the message's data mapping (equivalent to passing a dict via the `data` parameter to the base Message).
+        """
         super().__init__(msg_type, data=kwargs)
 
     def serialize(self) -> str:
-        """Flatten ``data`` into the top-level object — the GUI wire
-        format. Nested objects with a ``.serialize()`` method are
-        converted via :meth:`Message._to_jsonable` first."""
+        """
+        Serialize the message into the GUI wire-format with message fields flattened to the top level.
+        
+        Nested objects that implement a `.serialize()`-compatible representation are converted via Message._to_jsonable before flattening.
+        
+        Returns:
+            JSON string where `type` is the message type and the message `data` fields are top-level keys.
+        """
         data = Message._to_jsonable(self.data)
         return json_dumps({"type": self.msg_type, **data})
 
     @classmethod
     def deserialize(cls, value) -> "GUIMessage":
-        """Inverse of :meth:`serialize` — takes a flat JSON object with
-        ``type`` at top-level, returns a :class:`GUIMessage`."""
+        """
+        Deserialize a GUI wire-format message into a GUIMessage instance.
+        
+        Parameters:
+            value (bytes|bytearray|str|Mapping): Message payload in one of:
+                - bytes/bytearray: UTF-8 encoded JSON
+                - str: JSON text
+                - Mapping: a mapping-like object (will be converted to dict)
+        
+        Returns:
+            GUIMessage: a new instance created from the top-level `type` value and remaining fields.
+        
+        Raises:
+            MalformedMessage: if the input does not contain a top-level `type` key.
+        """
         if isinstance(value, (bytes, bytearray)):
             value = value.decode("utf-8")
         if isinstance(value, str):
@@ -284,12 +401,43 @@ class GUIMessage(Message):
     # they drop back to plain Message rather than trying to construct
     # a GUIMessage with positional args that won't fit.
     def forward(self, msg_type, data=None):  # type: ignore[override]
+        """
+        Create a new Message with the given type and payload using a deep copy of this message's context.
+        
+        Parameters:
+            msg_type (str): The routing/topic string for the new message.
+            data (dict, optional): Payload for the new message; defaults to an empty dict.
+        
+        Returns:
+            Message: A new Message constructed with `msg_type`, `data` (or `{}`), and a deep-copied context from this message.
+        """
         from copy import deepcopy
         return Message(msg_type, data or {}, deepcopy(self.context))
 
     def reply(self, msg_type, data=None, context=None):  # type: ignore[override]
+        """
+        Create a reply that applies the OVOS routing source/destination swap.
+        
+        Parameters:
+            msg_type (str): Topic/type for the reply message.
+            data (dict, optional): Payload for the reply; defaults to an empty dict when absent.
+            context (dict, optional): Context to overlay onto the message's context before replying.
+        
+        Returns:
+            Message: A plain Message whose routing has had source and destination swapped and whose context includes any provided overlays.
+        """
         return CollectionMessage.reply(  # reuse the swap logic
             self, msg_type, data, context)  # type: ignore[arg-type]
 
     def response(self, data=None, context=None):  # type: ignore[override]
+        """
+        Create a response Message whose message type is this message's type with ".response" appended.
+        
+        Parameters:
+        	data (dict, optional): Payload to include in the response. If omitted, an empty dict is used.
+        	context (dict, optional): Context values to merge with this message's context; provided keys overlay the existing context.
+        
+        Returns:
+        	Message: A Message with msg_type equal to this message's msg_type + ".response" and a context derived from this message merged with `context` if provided.
+        """
         return self.reply(self.msg_type + ".response", data, context)
