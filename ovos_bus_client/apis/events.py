@@ -37,7 +37,7 @@ class EventSchedulerInterface:
         self.skill_id = skill_id
 
     def _get_source_message(self):
-        message = dig_for_message() or Message("ovos.context.unknown")
+        message = dig_for_message() or Message("")
         message.context['skill_id'] = self.skill_id
         return message
 

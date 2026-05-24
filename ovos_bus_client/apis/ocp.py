@@ -68,7 +68,7 @@ def _ensure_message_kwarg():
                         kwargs["source_message"] = source_message
                     else:
                         LOG.warning("source message could not be determined, message.context has been lost!")
-                        kwargs["source_message"] = Message("ovos.context.unknown")
+                        kwargs["source_message"] = Message("")
             return func(*args, **kwargs)
 
         return call_function

@@ -26,7 +26,7 @@ class EnclosureAPI:
 
     def _get_source_message(self):
         return dig_for_message() or \
-            Message("ovos.context.unknown",
+            Message("",
                     context={"destination": ["enclosure"],
                              "skill_id": self.skill_id})
 
