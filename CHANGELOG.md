@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.1a1) (2026-05-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.0a1...2.1.1a1)
+
+**Merged pull requests:**
+
+- fix: restore legacy AES encryption at the websocket transport edge [\#218](https://github.com/OpenVoiceOS/ovos-bus-client/pull/218) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.0a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a4...2.1.0a1)
