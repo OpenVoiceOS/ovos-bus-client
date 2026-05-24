@@ -204,16 +204,16 @@ class CollectionMessage(Message):
     def from_message(cls, message: Message, handler_id: str,
                      query_id: str) -> "CollectionMessage":
         """
-                     Create a CollectionMessage from an existing Message, preserving its type, data, and context while attaching collect-protocol identifiers.
-                     
-                     Parameters:
-                         message (Message): Source message whose msg_type, data, and context will be copied.
-                         handler_id (str): Identifier of the collect handler to attach.
-                         query_id (str): Identifier of the collect query to attach.
-                     
-                     Returns:
-                         CollectionMessage: A new CollectionMessage with the same msg_type, data, and context as `message` and the provided `handler_id` and `query_id`.
-                     """
+        Create a CollectionMessage from an existing Message, preserving its type, data, and context while attaching collect-protocol identifiers.
+        
+        Parameters:
+            message (Message): Source message whose msg_type, data, and context will be copied.
+            handler_id (str): Identifier of the collect handler to attach.
+            query_id (str): Identifier of the collect query to attach.
+         
+        Returns:
+            CollectionMessage: A new CollectionMessage with the same msg_type, data, and context as `message` and the provided `handler_id` and `query_id`.
+        """
         return cls(message.msg_type, handler_id, query_id,
                    message.data, message.context)
 
