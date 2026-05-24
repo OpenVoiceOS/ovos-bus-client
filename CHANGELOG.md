@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.0a1) (2026-05-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a4...2.1.0a1)
+
+**Merged pull requests:**
+
+- feat: Message subclasses ovos\_spec\_tools.Message — no API break [\#215](https://github.com/OpenVoiceOS/ovos-bus-client/pull/215) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.0.0a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.0.0a4) (2026-05-22)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.0.0a3...2.0.0a4)
