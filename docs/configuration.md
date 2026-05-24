@@ -98,6 +98,26 @@ robust against missing config, either:
 - Construct `MessageBusClient(host="127.0.0.1", port=8181, route="/core",
   ssl=False)` explicitly so the loader is never consulted.
 
+## Deprecated: `websocket.secret_key` and `websocket.allow_unencrypted`
+
+These two keys activate a legacy AES-GCM envelope encryption scheme applied at
+the WebSocket transport edge. The scheme is **deprecated** — a
+`DeprecationWarning` fires every time encryption or decryption engages, and the
+wrapper will be removed in a future major release.
+
+| Key | Type | Behaviour |
+|---|---|---|
+| `websocket.secret_key` | `str` | AES-GCM key. An empty string and an absent key are both treated as falsy — encryption is disabled in either case. |
+| `websocket.allow_unencrypted` | `bool` | When a key is set, controls whether plaintext inbound frames are accepted (`True`) or rejected with `RuntimeError` (`False`). Defaults to `False` when a key is configured, `True` when no key is configured. |
+
+To opt out, remove `secret_key` from the `websocket` block (or set it to an
+empty string). For remote-access security, use
+[HiveMind](https://github.com/JarbasHiveMind), which provides proper
+authentication and encryption at a higher layer.
+
+See [The client → Deprecated transport-edge encryption](client.md#deprecated-transport-edge-encryption)
+for implementation details.
+
 ## Environment variables
 
 `ovos-bus-client` does not read environment variables directly. `ovos-config`

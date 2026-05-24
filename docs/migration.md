@@ -53,3 +53,18 @@ The replacement implements the modern `ChatEngine` interface (`opm.agents.chat`)
 | `neon.plugin.solver` | `opm.agents.chat` |
 
 No old entry point is preserved. Update any persona or pipeline configuration that referenced `ovos-solver-bus-plugin` under the solver group to use the chat-engine group instead.
+
+---
+
+### Encryption: moved from `Message` to the transport edge
+
+`Message.serialize` and `Message.deserialize` produce and consume pure JSON —
+they have never encrypted or decrypted the envelope. The legacy AES-GCM wrapper
+(controlled by `websocket.secret_key`) was always a transport-level concern; it
+is now explicitly placed at the transport edge inside `MessageBusClient` and
+`GUIWebsocketClient` via `_maybe_encrypt` / `_maybe_decrypt`
+(`ovos_bus_client/client/client.py:52,67`).
+
+The scheme is deprecated. If your deployment set `websocket.secret_key`, you
+will see `DeprecationWarning` on every encrypted send or receive. Remove the
+key to suppress the warning. For remote-access security, use HiveMind instead.

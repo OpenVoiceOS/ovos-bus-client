@@ -33,8 +33,10 @@ Both `data` and `context` default to `{}` if omitted.
 | `m.as_dict()` | `dict` | Plain dict form (`message.py:90`) |
 | `Message.deserialize(str)` | `Message` | Parse JSON text back into a `Message` (`message.py:127`) |
 
-`MessageBusClient.emit` calls `serialize()` for you; you rarely call it
-directly.
+`serialize()` and `deserialize()` are pure JSON — they neither encrypt nor
+decrypt. Any envelope encryption is a separate, deprecated layer applied at the
+transport edge by `MessageBusClient`. `MessageBusClient.emit` calls
+`serialize()` for you; you rarely call it directly.
 
 ### Reply helpers
 
@@ -108,9 +110,14 @@ shape but it serialises arguments directly at the top level rather than under
 ## Encryption helpers
 
 `encrypt_as_dict(key, data, nonce=None)` and `decrypt_from_dict(key, data)` —
-`message.py:241,248` — wrap an AES-GCM symmetric cipher for use by transport
-plugins that need to encrypt the JSON payload on the wire (HiveMind being the
-primary consumer). They are not used inside the OVOS bus loop itself.
+`ovos_bus_client/message.py:128,148` — wrap an AES-GCM symmetric cipher. They
+are exported from `ovos_bus_client.message` for any direct importer (e.g.
+HiveMind), but **are not called by `Message.serialize` or
+`Message.deserialize`**, which produce and consume plain JSON.
+
+The OVOS core bus loop wires these helpers at the **transport edge** inside
+`MessageBusClient`, not inside `Message`. See
+[The client → Deprecated transport encryption](client.md#deprecated-transport-edge-encryption).
 
 ## Validating against the protocol spec
 
