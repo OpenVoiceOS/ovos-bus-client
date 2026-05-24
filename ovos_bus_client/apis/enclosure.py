@@ -25,15 +25,25 @@ class EnclosureAPI:
         self.skill_id = skill_id
 
     def _get_source_message(self):
+        """
+        Return a Message to use as the source for enclosure commands, reusing an existing inbound message when available.
+        
+        Returns:
+            Message: A message targeted to the enclosure — either an existing inbound message or a new Message with context {"destination": ["enclosure"], "skill_id": self.skill_id}.
+        """
         return dig_for_message() or \
             Message("",
                     context={"destination": ["enclosure"],
                              "skill_id": self.skill_id})
 
     def register(self, skill_id=""):
-        """Registers a skill as active. Used for speak() and speak_dialog()
-        to 'patch' a previous implementation. Somewhat hacky.
-        DEPRECATED - unused
+        """
+        Mark a skill as the active enclosure skill by emitting an `enclosure.active_skill` message.
+        
+        Parameters:
+            skill_id (str): Optional skill identifier to register; if omitted, `self.skill_id` is used.
+        
+        Deprecated: This method is unused and retained for compatibility.
         """
         source_message = self._get_source_message()
         skill_id = skill_id or self.skill_id
