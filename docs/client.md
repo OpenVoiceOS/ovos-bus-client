@@ -99,8 +99,9 @@ when you want to log or intercept every single message.
 bus.emit(Message("speak", {"utterance": "hi"}))
 ```
 
-`emit` serialises the message, waits up to 10 seconds for the socket to be
-up, then `socket.send`s the JSON (`client.py:166-197`).
+`emit` serialises the message (pure JSON), optionally wraps it in the
+deprecated AES envelope (see below), waits up to 10 seconds for the socket to
+be up, then `socket.send`s the result (`ovos_bus_client/client/client.py:261`).
 
 There is no `emit`-with-return; if you want a reply, use one of the helpers
 below.
@@ -149,6 +150,58 @@ A specialised `MessageBusClient` that talks to the **GUI** bus rather than the
 core bus. It deals in `GUIMessage` objects rather than `Message`, and the
 default port is different (typically 18181). Used by `GUIInterface` —
 applications generally do not instantiate it directly.
+
+## Deprecated transport-edge encryption
+
+[OVOS-MSG-1](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md)
+is transport-agnostic
+([§1 Scope](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md#1-scope)
+explicitly excludes encryption from the spec): the message envelope does not
+define encryption. `ovos-bus-client` bolts a legacy AES-GCM wrapper on top at
+the transport edge, controlled by `websocket.secret_key` in your OVOS config.
+
+**This scheme is deprecated.** Its matching key-setup half was never formally
+implemented. A `DeprecationWarning` fires every time it engages. Remove
+`websocket.secret_key` from your config to suppress the warning and opt out.
+
+### How it works
+
+Two module-level helpers in `ovos_bus_client/client/client.py` do the work:
+
+| Helper | Direction | Source |
+|---|---|---|
+| `_maybe_encrypt(serialized: str) -> str` | outbound (post-serialize, pre-send) | `client.py:52` |
+| `_maybe_decrypt(raw) -> str` | inbound (post-receive, pre-deserialize) | `client.py:67` |
+
+Both are no-ops when `websocket.secret_key` is absent or empty. When a
+non-empty key is present, `_maybe_encrypt` wraps the JSON string in an AES-GCM
+envelope and `_maybe_decrypt` unwraps it.
+
+`_maybe_decrypt` also reads `websocket.allow_unencrypted` (defaults to `True`
+when no key is set, `False` when a key is set). If `allow_unencrypted` is
+`False` and an incoming frame is not encrypted, a `RuntimeError` is raised.
+
+### Where it is wired
+
+| Call path | Hook point |
+|---|---|
+| `MessageBusClient.emit` | `_maybe_encrypt` called post-`serialize()`, pre-`socket.send` (`client.py:261`) |
+| `MessageBusClient.on_message` | `_maybe_decrypt` called post-receive, pre-`Message.deserialize` (`client.py:223`) |
+| `GUIWebsocketClient.emit` | same `_maybe_encrypt` hook (`client.py:480,482`) |
+| `GUIWebsocketClient.on_message` | same `_maybe_decrypt` hook (`client.py:505`) |
+
+`send_func.py` does **not** apply encryption; deployments that need the scheme
+must route traffic through `MessageBusClient`.
+
+### Config keys (deprecated)
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `websocket.secret_key` | `str` | *(absent)* | AES-GCM key. Empty string or missing both disable encryption. |
+| `websocket.allow_unencrypted` | `bool` | `True` when no key; `False` when a key is set | Allow plaintext frames through when a key is configured. |
+
+See [Configuration → Deprecated: `websocket.secret_key` and `websocket.allow_unencrypted`](configuration.md#deprecated-websocketsecret_key-and-websocketallow_unencrypted)
+for the same keys in context of the wider config block.
 
 ## Subclassing
 

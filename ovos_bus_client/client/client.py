@@ -21,8 +21,78 @@ from websocket import (WebSocketApp,
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
-from ovos_bus_client.message import Message, CollectionMessage, GUIMessage
+from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
+                                     encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session
+
+# --- Layer-2 encryption at the transport edge (deprecated) -----------------
+#
+# OVOS-MSG-1 is transport-agnostic (§7 non-goals): the on-the-wire envelope
+# does not define encryption. The client below bolts an AES (GCM) wrapper
+# on top of the spec at its send/receive edges, controlled by the
+# ``websocket.secret_key`` config. Its matching key-setup half was never
+# formally implemented, so the scheme is **deprecated** — a
+# :class:`DeprecationWarning` fires whenever it engages.
+
+import json as _json
+import warnings as _warnings
+
+
+def _encryption_keys():
+    """Return ``(secret_key, allow_unencrypted)`` from current config."""
+    from ovos_config.config import Configuration
+    cfg = Configuration().get("websocket", {})
+    secret = cfg.get("secret_key")
+    # Empty/missing secret are equivalent — both disable the scheme;
+    # honour the same default for ``allow_unencrypted`` in either case.
+    allow_clear = cfg.get("allow_unencrypted", not secret)
+    return secret, allow_clear
+
+
+def _maybe_encrypt(serialized: str) -> str:
+    """Wrap ``serialized`` in the legacy AES envelope when
+    ``websocket.secret_key`` is configured; otherwise pass through."""
+    secret, _ = _encryption_keys()
+    if not secret:
+        return serialized
+    _warnings.warn(
+        "Layer-2 envelope encryption on the websocket transport is "
+        "deprecated; its key-setup half was never formally implemented "
+        "and the wrapper will be removed in a future major. Suppress by "
+        "unsetting `websocket.secret_key`.",
+        DeprecationWarning, stacklevel=3)
+    return json_dumps(encrypt_as_dict(secret, serialized))
+
+
+def _maybe_decrypt(raw):
+    """Unwrap the legacy AES envelope on inbound frames when
+    ``websocket.secret_key`` is configured. Returns a plain JSON string
+    suitable for :meth:`Message.deserialize`. Honours
+    ``websocket.allow_unencrypted``."""
+    secret, allow_clear = _encryption_keys()
+    if not secret:
+        return raw
+    if isinstance(raw, (bytes, bytearray)):
+        raw = raw.decode("utf-8")
+    try:
+        obj = _json.loads(raw) if isinstance(raw, str) else raw
+    except _json.JSONDecodeError:
+        if allow_clear:
+            return raw
+        raise
+    if isinstance(obj, dict) and "ciphertext" in obj:
+        _warnings.warn(
+            "Layer-2 envelope decryption on the websocket transport is "
+            "deprecated; its key-setup half was never formally "
+            "implemented and the wrapper will be removed in a future "
+            "major.",
+            DeprecationWarning, stacklevel=3)
+        return decrypt_from_dict(secret, obj)
+    if not allow_clear:
+        raise RuntimeError(
+            "received an unencrypted Message but "
+            "`websocket.allow_unencrypted` is False")
+    return raw
 
 
 class MessageBusClient:
@@ -150,7 +220,7 @@ class MessageBusClient:
             message = args[0]
         else:
             message = args[1]
-        parsed_message = Message.deserialize(message)
+        parsed_message = Message.deserialize(_maybe_decrypt(message))
         sess = Session.from_message(parsed_message)
         if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
@@ -188,6 +258,7 @@ class MessageBusClient:
             msg = message.serialize()
         else:
             msg = json_dumps(message.__dict__)
+        msg = _maybe_encrypt(msg)
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
@@ -406,9 +477,9 @@ class GUIWebsocketClient(MessageBusClient):
 
         try:
             if hasattr(message, 'serialize'):
-                self.client.send(message.serialize())
+                self.client.send(_maybe_encrypt(message.serialize()))
             else:
-                self.client.send(json_dumps(message.__dict__))
+                self.client.send(_maybe_encrypt(json_dumps(message.__dict__)))
         except WebSocketConnectionClosedException:
             LOG.warning('Could not send %s message because connection '
                         'has been closed', message.msg_type)
@@ -431,5 +502,5 @@ class GUIWebsocketClient(MessageBusClient):
 
         self.emitter.emit('message', message)
 
-        parsed_message = GUIMessage.deserialize(message)
+        parsed_message = GUIMessage.deserialize(_maybe_decrypt(message))
         self.emitter.emit(parsed_message.msg_type, parsed_message)
