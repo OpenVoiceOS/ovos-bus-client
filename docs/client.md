@@ -153,7 +153,10 @@ applications generally do not instantiate it directly.
 
 ## Deprecated transport-edge encryption
 
-OVOS-MSG-1 is transport-agnostic (§7 non-goals): the message envelope does not
+[OVOS-MSG-1](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md)
+is transport-agnostic
+([§1 Scope](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md#1-scope)
+explicitly excludes encryption from the spec): the message envelope does not
 define encryption. `ovos-bus-client` bolts a legacy AES-GCM wrapper on top at
 the transport edge, controlled by `websocket.secret_key` in your OVOS config.
 

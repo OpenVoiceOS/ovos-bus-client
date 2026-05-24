@@ -62,8 +62,11 @@ No old entry point is preserved. Update any persona or pipeline configuration th
 and consume pure JSON — they have never encrypted or decrypted the envelope.
 The legacy AES-GCM wrapper (controlled by
 [`websocket.secret_key`](configuration.md#deprecated-websocketsecret_key-and-websocketallow_unencrypted))
-was always a transport-level concern; it is now explicitly placed at the
-transport edge inside [`MessageBusClient` and `GUIWebsocketClient`](client.md)
+was always a transport-level concern
+([OVOS-MSG-1 §1 Scope](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md#1-scope)
+explicitly excludes encryption from the message-object spec); it is now
+explicitly placed at the transport edge inside
+[`MessageBusClient` and `GUIWebsocketClient`](client.md)
 via `_maybe_encrypt` / `_maybe_decrypt`
 (`ovos_bus_client/client/client.py:52,67`). See
 [The client → Deprecated transport-edge encryption](client.md#deprecated-transport-edge-encryption)

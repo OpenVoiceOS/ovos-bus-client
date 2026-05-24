@@ -1,6 +1,11 @@
 # Messages
 
-Reference for the `Message` class and its helpers.
+Reference for the `Message` class and its helpers. The envelope shape, routing
+keys, session carrier and derivations are normatively defined by
+[**OVOS-MSG-1**](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md);
+the implementation here is a re-export of
+[`ovos_spec_tools.message.Message`](https://github.com/OpenVoiceOS/ovos-spec-tools)
+with `publish` attached for back-compat.
 
 > **Looking for the catalogue of valid message types?** That lives in
 > [**ovos-pydantic-models**](https://github.com/OpenVoiceOS/ovos-pydantic-models)
