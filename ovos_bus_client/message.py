@@ -24,9 +24,9 @@ import warnings
 from binascii import hexlify, unhexlify
 from typing import Any, Dict, Optional
 
+import ovos_spec_tools.message as _spec_msg
 from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
-    MalformedMessage,
     Message,
 )
 from ovos_utils import json_dumps
@@ -34,6 +34,45 @@ from ovos_utils.log import deprecated
 from ovos_utils.security import encrypt, decrypt
 
 from ovos_bus_client.version import VERSION_MAJOR
+
+# Back-compat: spec-tools <=0.5.0a1 ships MalformedMessage(ValueError)
+# only. The bus-client has always raised AssertionError for malformed
+# construction (bare ``assert`` checks), so legacy ``except
+# AssertionError`` handlers must continue to catch MalformedMessage.
+# Re-declare the class here as a proper multi-base subclass so that
+# ``isinstance(e, AssertionError)`` and ``except AssertionError`` both
+# match regardless of which spec-tools version is installed.
+_SpecMalformedMessage = _spec_msg.MalformedMessage
+
+
+class MalformedMessage(_SpecMalformedMessage, AssertionError):
+    """Malformed OVOS-MSG-1 payload.
+
+    Multi-inherits :class:`ValueError` (via the spec-tools base) and
+    :class:`AssertionError` so legacy ``except AssertionError`` handlers
+    around Message construction continue to catch validation failures.
+    """
+
+
+# Ensure the ovos_spec_tools module also uses our back-compat subclass
+# so that any MalformedMessage raised *inside* Message.__init__ /
+# Message.deserialize is an instance of our class, not just the
+# spec-tools one (important when spec-tools raises directly).
+_spec_msg.MalformedMessage = MalformedMessage
+Message.MalformedMessage = MalformedMessage  # type: ignore[attr-defined]
+
+# Back-compat: the old ovos_bus_client.Message had ``as_dict`` as a
+# property. spec-tools 0.5.0a1 removed it. Restore it on the class so
+# any consumer that did ``msg.as_dict`` continues to work.
+if not hasattr(Message, "as_dict"):
+    import json as _json
+
+    def _as_dict(self):
+        """JSON-decoded view of :meth:`serialize` — ``{"type": …, "data": …, "context": …}``."""
+        return _json.loads(self.serialize())
+
+    Message.as_dict = property(_as_dict)  # type: ignore[attr-defined]
+    del _as_dict, _json
 
 # OVOS-MSG-1 defines forward / reply / response as the three normative
 # derivations (§5). ``publish`` is a bus-client tradition outside the
@@ -89,7 +128,9 @@ def _publish(self, msg_type: str, data: Dict[str, Any],
     new_context = dict(self.context)
     new_context.update(context)
     new_context.pop("target", None)
-    return self.__class__(msg_type, data, new_context)
+    # Always return a plain Message — CollectionMessage and GUIMessage
+    # have incompatible constructors so self.__class__(...) would raise.
+    return Message(msg_type, data, new_context)
 
 
 # Attach the legacy publish() to the spec-tools Message. This makes the
@@ -266,7 +307,9 @@ class GUIMessage(Message):
             obj = json.loads(value)
         else:
             obj = dict(value)
-        msg_type = obj.pop("type")
+        msg_type = obj.pop("type", None)
+        if msg_type is None:
+            raise MalformedMessage("GUIMessage requires a 'type' key (§2.1)")
         return cls(msg_type, **obj)
 
     # GUIMessage.__init__ takes **kwargs, not the standard

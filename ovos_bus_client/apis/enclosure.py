@@ -26,8 +26,9 @@ class EnclosureAPI:
 
     def _get_source_message(self):
         return dig_for_message() or \
-            Message("", context={"destination": ["enclosure"],
-                                 "skill_id": self.skill_id})
+            Message("ovos.context.unknown",
+                    context={"destination": ["enclosure"],
+                             "skill_id": self.skill_id})
 
     def register(self, skill_id=""):
         """Registers a skill as active. Used for speak() and speak_dialog()
