@@ -43,7 +43,9 @@ def _encryption_keys():
     from ovos_config.config import Configuration
     cfg = Configuration().get("websocket", {})
     secret = cfg.get("secret_key")
-    allow_clear = cfg.get("allow_unencrypted", secret is None)
+    # Empty/missing secret are equivalent — both disable the scheme;
+    # honour the same default for ``allow_unencrypted`` in either case.
+    allow_clear = cfg.get("allow_unencrypted", not secret)
     return secret, allow_clear
 
 
@@ -68,7 +70,7 @@ def _maybe_decrypt(raw):
     suitable for :meth:`Message.deserialize`. Honours
     ``websocket.allow_unencrypted``."""
     secret, allow_clear = _encryption_keys()
-    if secret is None:
+    if not secret:
         return raw
     if isinstance(raw, (bytes, bytearray)):
         raw = raw.decode("utf-8")

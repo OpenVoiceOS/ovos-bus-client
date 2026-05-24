@@ -6,23 +6,25 @@
 
 The OVOS-MSG-1 envelope lives in :mod:`ovos_spec_tools.message`; this
 module re-exports it directly — no subclass, no wrapping — and attaches
-the legacy bus-client conveniences downstream still uses
-(:meth:`Message.publish`, plus encryption-aware ``serialize`` /
-``deserialize``) to the class at import time. Everything else
-(:class:`CollectionMessage`, :class:`GUIMessage`,
-:func:`dig_for_message`, the encryption helpers) stays in this module
-on top of the same class.
+exactly one legacy bus-client convenience (:meth:`Message.publish`) to
+the class at import time. ``Message.serialize`` / ``Message.deserialize``
+are inherited unchanged from the spec implementation: they produce and
+consume plain JSON, with no transport-layer concerns mixed in.
+Everything else (:class:`CollectionMessage`, :class:`GUIMessage`,
+:func:`dig_for_message`, the encryption helpers below) stays in this
+module on top of the same class.
 
+OVOS-MSG-1 is transport-agnostic and says nothing about encryption (§7).
 An optional **layer-2 encryption scheme** ships with this package, but it
 lives at the **transport edge** (:class:`ovos_bus_client.client.MessageBusClient`
-``emit`` / ``on_message``), not on the :class:`Message` class itself.
-OVOS-MSG-1 is transport-agnostic and says nothing about encryption (§7);
-bolting AES (GCM) onto the JSON envelope is purely additive on top of the
-spec, and the matching key-setup / key-exchange side was never formally
-implemented — so the scheme is **deprecated** and the websocket client
-emits a ``DeprecationWarning`` whenever it fires. The
-:func:`encrypt_as_dict` / :func:`decrypt_from_dict` helpers stay at module
-level for any consumer that imported them directly.
+``emit`` / ``on_message`` — see ``_maybe_encrypt`` / ``_maybe_decrypt``
+there), not on :class:`Message`. Bolting AES (GCM) onto the JSON
+envelope is purely additive on top of the spec, and the matching
+key-setup / key-exchange side was never formally implemented — so the
+scheme is **deprecated** and the websocket client emits a
+``DeprecationWarning`` whenever it fires. The :func:`encrypt_as_dict` /
+:func:`decrypt_from_dict` helpers stay at module level for any consumer
+that imported them directly.
 """
 import inspect
 import json
