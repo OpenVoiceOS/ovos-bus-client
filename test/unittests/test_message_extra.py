@@ -55,12 +55,20 @@ class TestReply(TestCase):
         self.assertEqual(reply.context["source"], "D")
         self.assertEqual(reply.context["destination"], "S")
 
-    def test_reply_destination_from_data(self):
+    def test_reply_does_not_promote_data_destination_to_context(self):
+        """The historical bus-client ``Message.reply`` quirk of
+        promoting ``data['destination']`` into the new context's
+        ``destination`` before the §5.2 swap was always a bug — ``data``
+        is the topic's payload and ``context`` owns routing per
+        OVOS-MSG-1. The quirk is gone with the spec-tools envelope; the
+        swap only consults ``context.source`` / ``context.destination``."""
         orig = Message("a", {}, {"source": "S"})
         reply = orig.reply("a.response", data={"destination": "X"})
+        # source was "S", destination was absent — the §5.2 swap copies
+        # source into destination and leaves source unchanged.
         self.assertEqual(reply.context["destination"], "S")
-        # source becomes original destination = "X"
-        self.assertEqual(reply.context["source"], "X")
+        # data['destination'] sits in the payload, untouched.
+        self.assertEqual(reply.data, {"destination": "X"})
 
     def test_reply_merges_extra_context(self):
         orig = Message("a", {}, {"k1": "v1"})
@@ -223,6 +231,11 @@ class TestEncryptionHelpers(TestCase):
 
 
 class TestMessageConstructorValidation(TestCase):
+    """Malformed-input rejection. The bus-client subclass inherits
+    OVOS-MSG-1's :class:`MalformedMessage` from spec-tools, which
+    multi-inherits ``AssertionError`` so legacy ``except
+    AssertionError`` handlers continue to catch the same conditions."""
+
     def test_non_dict_data_raises(self):
         with self.assertRaises(AssertionError):
             Message("t", data=["not", "a", "dict"])

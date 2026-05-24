@@ -39,20 +39,25 @@ class TestJsonDump(TestCase):
         self.assertEqual(decoded["context"]["session"]["session_id"], "sid")
 
 
-class TestJsonLoad(TestCase):
-    def test_load_accepts_string(self):
-        s = '{"type": "t", "data": {}, "context": {}}'
-        out = Message._json_load(s)
-        self.assertEqual(out["type"], "t")
+class TestDeserializePayloadTypes(TestCase):
+    """The legacy private ``Message._json_load`` is gone with the
+    spec-tools subclass. The public :meth:`Message.deserialize` covers
+    the same payload shapes (``str``, ``dict``, ``bytes``) and rejects
+    malformed JSON or a non-object root — the rejection still raises
+    a class that catches as ``AssertionError`` for back-compat."""
 
-    def test_load_accepts_dict(self):
+    def test_accepts_string_payload(self):
+        m = Message.deserialize('{"type": "t", "data": {}, "context": {}}')
+        self.assertEqual(m.msg_type, "t")
+
+    def test_accepts_dict_payload(self):
         d = {"type": "t", "data": {}, "context": {}}
-        out = Message._json_load(d)
-        self.assertEqual(out, d)
+        m = Message.deserialize(d)
+        self.assertEqual(m.msg_type, "t")
 
-    def test_load_raises_on_non_dict(self):
+    def test_rejects_non_object_root(self):
         with self.assertRaises(AssertionError):
-            Message._json_load('[1, 2, 3]')
+            Message.deserialize('[1, 2, 3]')
 
 
 class TestDeserialize(TestCase):
