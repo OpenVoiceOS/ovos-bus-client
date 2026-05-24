@@ -20,6 +20,7 @@ module level for any consumer that imported them directly.
 """
 import inspect
 import json
+import warnings
 from binascii import hexlify, unhexlify
 from typing import Any, Dict, Optional
 
@@ -29,7 +30,16 @@ from ovos_spec_tools.message import (
     Message,
 )
 from ovos_utils import json_dumps
+from ovos_utils.log import deprecated
 from ovos_utils.security import encrypt, decrypt
+
+from ovos_bus_client.version import VERSION_MAJOR
+
+# OVOS-MSG-1 defines forward / reply / response as the three normative
+# derivations (§5). ``publish`` is a bus-client tradition outside the
+# spec; it survives as an attached method for one more major release so
+# downstream consumers can migrate.
+_PUBLISH_REMOVAL_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 
 
 __all__ = [
@@ -44,6 +54,11 @@ __all__ = [
 ]
 
 
+@deprecated(
+    "Message.publish is deprecated; use Message.forward (relay under a "
+    "new topic, preserves context) or Message.reply (§5.2 swap) — both "
+    "are OVOS-MSG-1 normative",
+    _PUBLISH_REMOVAL_VERSION)
 def _publish(self, msg_type: str, data: Dict[str, Any],
              context: Optional[Dict[str, Any]] = None) -> Message:
     """Relay a Message under a new topic without the §5.2 swap.
@@ -55,7 +70,21 @@ def _publish(self, msg_type: str, data: Dict[str, Any],
     Attached to :class:`ovos_spec_tools.Message` at import time so this
     bus-client method appears on the class downstream code already
     imports — no subclass, no isinstance surprises.
+
+    .. deprecated::
+        Not part of OVOS-MSG-1 (the spec defines ``forward`` /
+        ``reply`` / ``response`` as the only normative derivations).
+        Slated for removal in the next major; use :meth:`forward`
+        when you do not want the routing-key swap, or :meth:`reply`
+        when you do.
     """
+    # stacklevel=3: warn() -> body -> @deprecated wrapper -> caller
+    warnings.warn(
+        "Message.publish is deprecated; use Message.forward (no §5.2 "
+        "swap) or Message.reply (with swap) instead — both are "
+        "OVOS-MSG-1 normative derivations. ``publish`` will be removed "
+        f"in ovos-bus-client {_PUBLISH_REMOVAL_VERSION}.",
+        DeprecationWarning, stacklevel=3)
     context = context or {}
     new_context = dict(self.context)
     new_context.update(context)

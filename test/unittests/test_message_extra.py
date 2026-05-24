@@ -87,6 +87,22 @@ class TestResponse(TestCase):
 
 
 class TestPublish(TestCase):
+    def test_publish_emits_deprecation_warning(self):
+        """``publish`` is not part of OVOS-MSG-1 and is scheduled for
+        removal — every call must fire a DeprecationWarning so callers
+        see the migration notice."""
+        import warnings
+        orig = Message("a", {}, {"source": "S"})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            orig.publish("b", {"d": 1})
+        deps = [w for w in caught
+                if issubclass(w.category, DeprecationWarning)
+                and "publish" in str(w.message)]
+        self.assertTrue(deps,
+                        "Message.publish() did not emit a "
+                        "DeprecationWarning")
+
     def test_publish_keeps_context(self):
         orig = Message("a", {}, {"k": "v"})
         pub = orig.publish("b", {"d": 1})
