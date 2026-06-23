@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.2a1) (2026-06-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.1a1...2.1.2a1)
+
+**Merged pull requests:**
+
+- fix: ignore non-exception websocket on\_error callbacks \(\#223\) [\#224](https://github.com/OpenVoiceOS/ovos-bus-client/pull/224) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.1.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.1a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.0a1...2.1.1a1)
