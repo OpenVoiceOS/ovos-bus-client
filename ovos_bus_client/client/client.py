@@ -178,6 +178,16 @@ class MessageBusClient:
             error = args[0]
         else:
             error = args[1]
+        # websocket-client may invoke on_error with a non-exception object
+        # (e.g. a websocket._abnf.ABNF control frame) that is not a connection
+        # error. Wrapping it in a RuntimeError and re-emitting used to trigger a
+        # spurious close()+reconnect cycle that could stall an in-progress
+        # handshake. A non-exception callback is not a fatal error: log and
+        # return without tearing the connection down.
+        if not isinstance(error, BaseException):
+            LOG.debug("ignoring non-exception websocket error callback: %r",
+                      error)
+            return
         if isinstance(error, WebSocketConnectionClosedException):
             LOG.warning('Could not send message because connection has closed')
         elif isinstance(error, ConnectionRefusedError):
@@ -186,8 +196,6 @@ class MessageBusClient:
             LOG.warning('Connection Reset. Did the Messagebus Service stop?')
         else:
             LOG.exception('=== %s ===', repr(error))
-            if not isinstance(error, BaseException):
-                error = RuntimeError(repr(error))
             try:
                 self.emitter.emit('error', error)
             except Exception as e:
