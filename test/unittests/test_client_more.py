@@ -63,6 +63,26 @@ class TestOnError(TestCase):
         # websocket-client sometimes passes (ws, error); the code reads args[1]
         bus.on_error(MagicMock(), RuntimeError("from-two-args"))
 
+    @patch("ovos_bus_client.client.client.time.sleep", MagicMock())
+    def test_non_exception_is_ignored(self):
+        # regression for #223: websocket-client may invoke on_error with a
+        # non-exception object (e.g. a websocket._abnf.ABNF control frame).
+        # It must NOT raise, must NOT emit an 'error' event, and must NOT
+        # trigger a reconnect (no close, no 'reconnecting' event).
+        bus = _mocked_client()
+        bus.client.keep_running = True  # would close() if reconnect ran
+        bus.create_client = MagicMock(return_value=MagicMock())
+        bus.run_forever = MagicMock(side_effect=WebSocketException())
+        errors = []
+        reconnecting = []
+        bus.emitter.on("error", lambda e: errors.append(e))
+        bus.emitter.on("reconnecting", lambda *a: reconnecting.append(True))
+        for non_exc in (b"\x88\x02\x03\xe8", object(), "not-an-error", 42):
+            bus.on_error(non_exc)  # must not raise
+        self.assertEqual(errors, [])
+        self.assertEqual(reconnecting, [])
+        bus.client.close.assert_not_called()
+
 
 class TestOnDefaultSessionUpdate(TestCase):
     def test_replaces_default_session(self):
