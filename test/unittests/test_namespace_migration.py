@@ -39,13 +39,13 @@ def _sent_types(c):
 
 class TestDefaultsOn(unittest.TestCase):
     def test_both_flags_default_on(self):
-        with patch.dict("os.environ", {}, clear=False):
-            for k in ("OVOS_BUS_MODERNIZE", "OVOS_BUS_EMIT_LEGACY"):
-                patch.dict("os.environ", {}, clear=False)
-            # no env, no config -> default True
-            with patch("ovos_config.Configuration", return_value={}):
-                self.assertTrue(_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True))
-                self.assertTrue(_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
+        # no env var and empty config -> the default (True) is returned
+        env = {k: v for k, v in __import__("os").environ.items()
+               if k not in ("OVOS_BUS_MODERNIZE", "OVOS_BUS_EMIT_LEGACY")}
+        with patch.dict("os.environ", env, clear=True), \
+                patch("ovos_config.Configuration", return_value={}):
+            self.assertTrue(_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True))
+            self.assertTrue(_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
 
     def test_env_can_disable(self):
         with patch.dict("os.environ", {"OVOS_BUS_EMIT_LEGACY": "false"}):
@@ -131,6 +131,34 @@ class TestHandlerDedup(unittest.TestCase):
         self.assertNotIn(handler, c._dedup_registrations)
 
 
+class TestContextInFingerprint(unittest.TestCase):
+    def test_same_payload_different_session_not_collapsed(self):
+        # two distinct events, same data, different session context, on the
+        # counterpart topics -> must BOTH fire (not treated as a mirror pair)
+        c = _client()
+        handler = MagicMock()
+        c.on("speak", handler)
+        c.on("ovos.utterance.speak", handler)
+        w_legacy, w_spec = [w for _, w in c._dedup_registrations[handler]]
+        data = {"utterance": "hi"}
+        w_legacy(Message("speak", data, context={"session": {"session_id": "A"}}))
+        w_spec(Message("ovos.utterance.speak", data,
+                       context={"session": {"session_id": "B"}}))
+        self.assertEqual(handler.call_count, 2)
+
+    def test_mirror_same_context_collapsed(self):
+        c = _client()
+        handler = MagicMock()
+        c.on("speak", handler)
+        c.on("ovos.utterance.speak", handler)
+        w_legacy, w_spec = [w for _, w in c._dedup_registrations[handler]]
+        ctx = {"session": {"session_id": "A"}}
+        data = {"utterance": "hi"}
+        w_legacy(Message("speak", data, context=dict(ctx)))
+        w_spec(Message("ovos.utterance.speak", data, context=dict(ctx)))
+        handler.assert_called_once()
+
+
 class TestRemove(unittest.TestCase):
     def test_remove_cleans_dedup_state(self):
         c = _client()
@@ -143,6 +171,20 @@ class TestRemove(unittest.TestCase):
         self.assertNotIn(handler, c._dedup_registrations)
         self.assertNotIn(handler, c._handler_dedup)
         self.assertEqual(c._remove_normal.call_count, 2)
+
+    def test_remove_resolves_on_collect_wrapper(self):
+        # an on_collect-style wrapper on a migrated topic must be removed at the
+        # dedup layer too (registration is keyed by the collector wrapper)
+        c = _client()
+        c._remove_normal = MagicMock()
+        public = MagicMock()
+        collector = MagicMock()        # the wrapper on_collect() would build
+        c.wrapped_funcs[public] = collector
+        c.on("ovos.utterance.speak", collector)   # registers dedup wrapper
+        c.remove("ovos.utterance.speak", public)  # remove by the PUBLIC func
+        self.assertNotIn(collector, c._dedup_registrations)
+        self.assertNotIn(public, c.wrapped_funcs)
+        self.assertEqual(c._remove_normal.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -469,8 +469,13 @@ class MessageBusClient:
         def wrapper(message=None):
             try:
                 mtype = message.msg_type
-                # canonicalize the payload to a stable string for comparison
-                payload = _json.dumps(message.data, sort_keys=True, default=str)
+                # Fingerprint BOTH data and context: emit() builds the mirror with
+                # Message.forward(), which deep-copies the context unchanged, so a
+                # true mirror has an identical fingerprint. Two distinct events
+                # that happen to share data but differ in context (e.g. different
+                # sessions) keep distinct fingerprints and are NOT collapsed.
+                fingerprint = _json.dumps([message.data, message.context],
+                                          sort_keys=True, default=str)
             except Exception:
                 # never let dedup bookkeeping break delivery
                 return func(message)
@@ -481,15 +486,15 @@ class MessageBusClient:
                         if now - ts >= self._migration_window]:
                 seen.pop(key, None)
 
-            prev = seen.get(payload)
-            # same payload seen recently, on the OTHER namespace's topic => mirror
+            prev = seen.get(fingerprint)
+            # same fingerprint seen recently, on the OTHER namespace's topic => mirror
             is_mirror = (prev is not None
                          and prev[0] != mtype
                          and migration_counterpart(prev[0]) == mtype)
             if is_mirror:
                 return  # already handled via the counterpart topic; drop this one
 
-            seen[payload] = (mtype, now)
+            seen[fingerprint] = (mtype, now)
             return func(message)
 
         return wrapper
@@ -510,14 +515,21 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        if func in self._dedup_registrations:
-            regs = self._dedup_registrations[func]
+        # on_collect() registers a collector wrapper (tracked in wrapped_funcs);
+        # resolve it so a migrated on_collect() subscription is also torn down at
+        # the dedup layer (whose registration is keyed by the collector wrapper,
+        # not the public func).
+        target = self.wrapped_funcs.get(func, func)
+        if target in self._dedup_registrations:
+            regs = self._dedup_registrations[target]
             for ev, wrapped in [r for r in regs if r[0] == event_name]:
                 self._remove_normal(ev, wrapped)
                 regs.remove((ev, wrapped))
             if not regs:
-                self._dedup_registrations.pop(func, None)
-                self._handler_dedup.pop(func, None)
+                self._dedup_registrations.pop(target, None)
+                self._handler_dedup.pop(target, None)
+                if target is not func:
+                    self.wrapped_funcs.pop(func, None)
         elif func in self.wrapped_funcs:
             self._remove_wrapped(event_name, func)
         else:
