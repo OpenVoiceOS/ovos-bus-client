@@ -72,11 +72,12 @@ class TestEmit(TestCase):
         self.client.connected_event.set()
 
     def test_emit_sends_serialized_message(self):
-        self.client.emit(Message("speak", {"utterance": "hi"}))
+        # a non-migrated topic, so namespace translation does not add a second send
+        self.client.emit(Message("test.message", {"utterance": "hi"}))
         self.assertTrue(self.client.client.send.called)
         payload = self.client.client.send.call_args[0][0]
         decoded = json.loads(payload)
-        self.assertEqual(decoded["type"], "speak")
+        self.assertEqual(decoded["type"], "test.message")
         self.assertEqual(decoded["data"]["utterance"], "hi")
 
 

@@ -24,7 +24,8 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session
-from ovos_spec_tools.messages import MIGRATION_MAP, migration_counterpart
+from ovos_spec_tools.messages import (MIGRATION_MAP, SPEC_TO_LEGACY,
+                                       migration_counterpart)
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -40,20 +41,20 @@ import warnings as _warnings
 from os import environ
 
 
-def _namespace_migration_enabled() -> bool:
-    """Whether transparent legacy<->ovos.* namespace migration is on (opt-in).
+def _bus_flag(env_var: str, config_key: str, default: bool = False) -> bool:
+    """Read a boolean bus flag from an env var, else the websocket config.
 
-    Enabled by the ``OVOS_BUS_NAMESPACE_MIGRATION`` env var, else by the
-    ``namespace_migration`` config key; default off.
+    The env var wins when set; otherwise ``websocket.<config_key>`` is read,
+    falling back to ``default``.
     """
-    val = environ.get("OVOS_BUS_NAMESPACE_MIGRATION")
+    val = environ.get(env_var)
     if val is not None:
         return val.strip().lower() in ("1", "true", "yes", "on")
     try:
         from ovos_config import Configuration
-        return bool(Configuration().get("namespace_migration", False))
+        return bool(Configuration().get("websocket", {}).get(config_key, default))
     except Exception:
-        return False
+        return default
 
 
 def _encryption_keys():
@@ -142,10 +143,17 @@ class MessageBusClient:
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
-        # opt-in transparent legacy<->ovos.* namespace migration (off by default)
-        self._namespace_migration = _namespace_migration_enabled()
+        # namespace translation on emit (orthogonal, both ON by default during
+        # the migration window so every migrated event travels on BOTH the
+        # legacy and the ovos.* topic — any repo can flip its emit OR its listen
+        # to ovos.* in any order, with no coordination):
+        #  emit_legacy: emitting an ovos.* spec topic also emits the legacy one.
+        #  modernize  : emitting a legacy topic also emits the ovos.* spec one.
+        self._emit_legacy = _bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True)
+        self._modernize = _bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True)
         self._migration_window = 1.0
-        self._migration_handlers = {}  # (event_name, func) -> (counterpart, wrapped)
+        self._handler_dedup = {}         # func -> {payload: (topic, timestamp)}
+        self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
         if session:
             SessionManager.update(session)
         else:
@@ -280,12 +288,14 @@ class MessageBusClient:
 
         self._send(message)
 
-        # transparent migration: also put the counterpart topic on the wire so
-        # nodes on either namespace receive the event (consumers dedupe).
-        if self._namespace_migration:
-            counterpart = migration_counterpart(message.msg_type)
-            if counterpart:
-                self._send(message.forward(counterpart, message.data))
+        # one-shot namespace translation on emit (never re-translates the mirror)
+        mtype = message.msg_type
+        if self._modernize and mtype in MIGRATION_MAP:
+            # legacy topic emitted -> also emit the ovos.* spec topic
+            self._send(message.forward(MIGRATION_MAP[mtype].value, message.data))
+        elif self._emit_legacy and mtype in SPEC_TO_LEGACY:
+            # ovos.* spec topic emitted -> also emit the legacy topic
+            self._send(message.forward(SPEC_TO_LEGACY[mtype], message.data))
 
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
@@ -416,41 +426,75 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        if self._namespace_migration:
-            counterpart = migration_counterpart(event_name)
-            if counterpart:
-                # listen on both namespaces; the wrapper dedupes so the dual
-                # wire copies invoke the callback once.
-                wrapped = self._migration_wrapper(func)
-                self.emitter.on(event_name, wrapped)
-                self.emitter.on(counterpart, wrapped)
-                self._migration_handlers[(event_name, func)] = (counterpart, wrapped)
-                return
+        # Topics that participate in the namespace migration are wrapped for
+        # de-duplication; everything else registers straight through.
+        if event_name in MIGRATION_MAP or event_name in SPEC_TO_LEGACY:
+            wrapped = self._dedup_wrap(func)
+            self.emitter.on(event_name, wrapped)
+            # remember the wrapper so remove() can unsubscribe and drop state
+            self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
+            return
         self.emitter.on(event_name, func)
 
-    def _migration_wrapper(self, func: Callable[[Message], Any]):
-        """Wrap a handler so duplicate legacy/ovos.* copies fire it once.
+    def _dedup_wrap(self, func: Callable[[Message], Any]):
+        """Wrap ``func`` so the legacy/``ovos.*`` mirror of one event is dropped.
 
-        Dedup key is the canonical (spec) topic plus the message payload, so the
-        two copies of one logical event collapse. State is per-registration.
+        Why this is needed
+        ------------------
+        With ``modernize`` / ``emit_legacy`` on, emitting one logical event puts
+        it on the bus on BOTH its legacy and its ``ovos.*`` topic (the original
+        and a "mirror" with identical ``data``). A handler subscribed to BOTH
+        topics — which is allowed, so a repo can migrate without coordinating —
+        would then run twice. This wrapper drops the mirror so it runs once.
+
+        What counts as a mirror (and what does not)
+        -------------------------------------------
+        A delivery is the mirror of a recent one only if it has the **same
+        payload** AND arrives on the **counterpart topic** (legacy<->ovos.*).
+        Crucially, two genuine events on the *same* topic with identical payload
+        (e.g. a skill saying "ok" twice) are NOT treated as duplicates — only a
+        cross-namespace counterpart is. There is no per-message id to rely on
+        (OVOS-MSG-1 §5.4 forbids one), so this content+counterpart+window
+        heuristic is the discriminator.
+
+        State
+        -----
+        ``seen`` maps ``payload -> (topic, timestamp)`` and is shared per handler
+        (``self._handler_dedup[func]``) so the handler's two registrations — its
+        legacy ``on()`` and its ``ovos.*`` ``on()`` — dedupe against each other.
+        Entries older than ``_migration_window`` seconds are pruned each call.
         """
-        seen = {}
+        seen = self._handler_dedup.setdefault(func, {})
 
         def wrapper(message=None):
-            key = None
             try:
                 mtype = message.msg_type
-                canonical = MIGRATION_MAP[mtype].value if mtype in MIGRATION_MAP else mtype
-                key = (canonical, _json.dumps(message.data, sort_keys=True, default=str))
+                # Fingerprint BOTH data and context: emit() builds the mirror with
+                # Message.forward(), which deep-copies the context unchanged, so a
+                # true mirror has an identical fingerprint. Two distinct events
+                # that happen to share data but differ in context (e.g. different
+                # sessions) keep distinct fingerprints and are NOT collapsed.
+                fingerprint = _json.dumps([message.data, message.context],
+                                          sort_keys=True, default=str)
             except Exception:
-                key = None
-            if key is not None:
-                now = time.monotonic()
-                for k in [k for k, t in seen.items() if now - t >= self._migration_window]:
-                    seen.pop(k, None)
-                if key in seen:
-                    return
-                seen[key] = now
+                # never let dedup bookkeeping break delivery
+                return func(message)
+
+            now = time.monotonic()
+            # drop expired entries so memory stays bounded and the window resets
+            for key in [k for k, (_, ts) in seen.items()
+                        if now - ts >= self._migration_window]:
+                seen.pop(key, None)
+
+            prev = seen.get(fingerprint)
+            # same fingerprint seen recently, on the OTHER namespace's topic => mirror
+            is_mirror = (prev is not None
+                         and prev[0] != mtype
+                         and migration_counterpart(prev[0]) == mtype)
+            if is_mirror:
+                return  # already handled via the counterpart topic; drop this one
+
+            seen[fingerprint] = (mtype, now)
             return func(message)
 
         return wrapper
@@ -471,11 +515,21 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        migration_key = (event_name, func)
-        if migration_key in self._migration_handlers:
-            counterpart, wrapped = self._migration_handlers.pop(migration_key)
-            self._remove_normal(event_name, wrapped)
-            self._remove_normal(counterpart, wrapped)
+        # on_collect() registers a collector wrapper (tracked in wrapped_funcs);
+        # resolve it so a migrated on_collect() subscription is also torn down at
+        # the dedup layer (whose registration is keyed by the collector wrapper,
+        # not the public func).
+        target = self.wrapped_funcs.get(func, func)
+        if target in self._dedup_registrations:
+            regs = self._dedup_registrations[target]
+            for ev, wrapped in [r for r in regs if r[0] == event_name]:
+                self._remove_normal(ev, wrapped)
+                regs.remove((ev, wrapped))
+            if not regs:
+                self._dedup_registrations.pop(target, None)
+                self._handler_dedup.pop(target, None)
+                if target is not func:
+                    self.wrapped_funcs.pop(func, None)
         elif func in self.wrapped_funcs:
             self._remove_wrapped(event_name, func)
         else:
