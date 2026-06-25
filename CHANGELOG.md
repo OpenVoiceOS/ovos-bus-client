@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.3.0a2) (2026-06-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.3.0a1...2.3.0a2)
+
+**Merged pull requests:**
+
+- refactor: share NamespaceTranslator with FakeBus \(drop inline migration logic\) [\#232](https://github.com/OpenVoiceOS/ovos-bus-client/pull/232) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.3.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.2.0a1...2.3.0a1)
