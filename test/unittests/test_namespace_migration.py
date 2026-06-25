@@ -1,11 +1,11 @@
-"""Tests for opt-in namespace translation on emit in MessageBusClient.
+"""Tests for namespace translation + handler dedup in MessageBusClient.
 
-Two orthogonal, emit-side flags (both default off):
+Two orthogonal emit-side flags, both ON by default during the migration window:
   modernize   : emitting a legacy topic also emits the ovos.* spec topic.
   emit_legacy : emitting an ovos.* spec topic also emits the legacy topic.
-
-There is no listener-side magic: on()/remove() are unchanged, and each listener
-subscribes to exactly one namespace.
+So every migrated event travels on BOTH namespaces. A handler registered on the
+legacy AND the spec topic is deduped (the mirror copy is dropped) so it fires
+once — without suppressing two genuine same-topic events.
 """
 import json
 import unittest
@@ -16,12 +16,15 @@ from ovos_bus_client.client.client import MessageBusClient, _bus_flag
 from ovos_bus_client.message import Message
 
 
-def _client(modernize=False, emit_legacy=False):
+def _client(modernize=True, emit_legacy=True):
     c = MessageBusClient.__new__(MessageBusClient)
     c.emitter = MagicMock()
     c.client = MagicMock()
     c._modernize = modernize
     c._emit_legacy = emit_legacy
+    c._migration_window = 1.0
+    c._handler_dedup = {}
+    c._dedup_registrations = {}
     c.wrapped_funcs = {}
     c.connected_event = Event()
     c.connected_event.set()
@@ -34,73 +37,112 @@ def _sent_types(c):
     return [json.loads(call.args[0])["type"] for call in c.client.send.call_args_list]
 
 
-class TestFlagReading(unittest.TestCase):
-    def test_env_enables(self):
-        with patch.dict("os.environ", {"OVOS_BUS_MODERNIZE": "true"}):
-            self.assertTrue(_bus_flag("OVOS_BUS_MODERNIZE", "modernize"))
+class TestDefaultsOn(unittest.TestCase):
+    def test_both_flags_default_on(self):
+        with patch.dict("os.environ", {}, clear=False):
+            for k in ("OVOS_BUS_MODERNIZE", "OVOS_BUS_EMIT_LEGACY"):
+                patch.dict("os.environ", {}, clear=False)
+            # no env, no config -> default True
+            with patch("ovos_config.Configuration", return_value={}):
+                self.assertTrue(_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True))
+                self.assertTrue(_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
 
-    def test_env_disables(self):
-        with patch.dict("os.environ", {"OVOS_BUS_EMIT_LEGACY": "0"}):
-            self.assertFalse(_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy"))
+    def test_env_can_disable(self):
+        with patch.dict("os.environ", {"OVOS_BUS_EMIT_LEGACY": "false"}):
+            self.assertFalse(_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
 
 
-class TestModernize(unittest.TestCase):
-    def test_legacy_emit_also_sends_spec(self):
-        c = _client(modernize=True)
+class TestEmitTranslation(unittest.TestCase):
+    def test_legacy_emit_adds_spec(self):
+        c = _client()
         c.emit(Message("speak", {"utterance": "hi"}))
         self.assertEqual(_sent_types(c), ["speak", "ovos.utterance.speak"])
 
-    def test_spec_emit_not_translated_to_legacy(self):
-        c = _client(modernize=True)  # modernize does NOT add legacy
-        c.emit(Message("ovos.utterance.speak", {"utterance": "hi"}))
-        self.assertEqual(_sent_types(c), ["ovos.utterance.speak"])
-
-
-class TestEmitLegacy(unittest.TestCase):
-    def test_spec_emit_also_sends_legacy(self):
-        c = _client(emit_legacy=True)
+    def test_spec_emit_adds_legacy(self):
+        c = _client()
         c.emit(Message("ovos.utterance.handle", {"utterances": ["hi"]}))
         self.assertEqual(_sent_types(c),
                          ["ovos.utterance.handle", "recognizer_loop:utterance"])
 
-    def test_legacy_emit_not_translated_to_spec(self):
-        c = _client(emit_legacy=True)  # emit_legacy does NOT add spec
-        c.emit(Message("recognizer_loop:utterance", {"utterances": ["hi"]}))
-        self.assertEqual(_sent_types(c), ["recognizer_loop:utterance"])
-
-
-class TestBothAndNeither(unittest.TestCase):
-    def test_both_off_sends_once(self):
+    def test_unmapped_never_translated(self):
         c = _client()
+        c.emit(Message("some.topic", {"x": 1}))
+        self.assertEqual(_sent_types(c), ["some.topic"])
+
+    def test_flags_off_send_once(self):
+        c = _client(modernize=False, emit_legacy=False)
         c.emit(Message("speak", {"utterance": "hi"}))
         self.assertEqual(_sent_types(c), ["speak"])
 
-    def test_unmapped_topic_never_translated(self):
-        c = _client(modernize=True, emit_legacy=True)
-        c.emit(Message("some.random.topic", {"x": 1}))
-        self.assertEqual(_sent_types(c), ["some.random.topic"])
 
-    def test_both_on_translate_each_direction_once(self):
-        c = _client(modernize=True, emit_legacy=True)
-        c.emit(Message("speak", {"utterance": "hi"}))          # legacy -> +spec
-        c.emit(Message("ovos.utterance.handle", {"u": 1}))     # spec   -> +legacy
-        self.assertEqual(_sent_types(c), [
-            "speak", "ovos.utterance.speak",
-            "ovos.utterance.handle", "recognizer_loop:utterance",
-        ])
+class TestHandlerDedup(unittest.TestCase):
+    def _wrappers(self, c, func):
+        return [w for _, w in c._dedup_registrations[func]]
 
-
-class TestNoListenerSideMagic(unittest.TestCase):
-    def test_on_is_plain_subscribe(self):
-        c = _client(modernize=True, emit_legacy=True)
+    def test_dual_registered_handler_fires_once_on_mirror_pair(self):
+        c = _client()
         handler = MagicMock()
         c.on("speak", handler)
-        c.emitter.on.assert_called_once_with("speak", handler)
+        c.on("ovos.utterance.speak", handler)
+        w_legacy, w_spec = self._wrappers(c, handler)
+        data = {"utterance": "hi", "lang": "en-us"}
+        w_legacy(Message("speak", data))               # original
+        w_spec(Message("ovos.utterance.speak", data))  # mirror -> dropped
+        handler.assert_called_once()
 
-    def test_no_migration_attributes(self):
+    def test_same_topic_repeats_not_suppressed(self):
         c = _client()
-        self.assertFalse(hasattr(c, "_migration_wrapper"))
-        self.assertFalse(hasattr(c, "_migration_handlers"))
+        handler = MagicMock()
+        c.on("speak", handler)
+        (w,) = self._wrappers(c, handler)
+        data = {"utterance": "ok"}
+        w(Message("speak", data))
+        w(Message("speak", data))  # genuine repeat on the SAME topic -> fires
+        self.assertEqual(handler.call_count, 2)
+
+    def test_single_namespace_handler_always_fires(self):
+        c = _client()
+        handler = MagicMock()
+        c.on("ovos.utterance.speak", handler)
+        (w,) = self._wrappers(c, handler)
+        w(Message("ovos.utterance.speak", {"utterance": "a"}))
+        w(Message("ovos.utterance.speak", {"utterance": "b"}))
+        self.assertEqual(handler.call_count, 2)
+
+    def test_dedup_expires_after_window(self):
+        c = _client()
+        handler = MagicMock()
+        c.on("speak", handler)
+        c.on("ovos.utterance.speak", handler)
+        w_legacy, w_spec = self._wrappers(c, handler)
+        data = {"utterance": "hi"}
+        with patch("ovos_bus_client.client.client.time.monotonic") as clk:
+            clk.return_value = 0.0
+            w_legacy(Message("speak", data))
+            clk.return_value = 2.0  # window elapsed -> mirror no longer collapsed
+            w_spec(Message("ovos.utterance.speak", data))
+        self.assertEqual(handler.call_count, 2)
+
+    def test_unmapped_topic_handler_not_wrapped(self):
+        c = _client()
+        handler = MagicMock()
+        c.on("some.topic", handler)
+        c.emitter.on.assert_called_once_with("some.topic", handler)
+        self.assertNotIn(handler, c._dedup_registrations)
+
+
+class TestRemove(unittest.TestCase):
+    def test_remove_cleans_dedup_state(self):
+        c = _client()
+        c._remove_normal = MagicMock()
+        handler = MagicMock()
+        c.on("speak", handler)
+        c.on("ovos.utterance.speak", handler)
+        c.remove("speak", handler)
+        c.remove("ovos.utterance.speak", handler)
+        self.assertNotIn(handler, c._dedup_registrations)
+        self.assertNotIn(handler, c._handler_dedup)
+        self.assertEqual(c._remove_normal.call_count, 2)
 
 
 if __name__ == "__main__":

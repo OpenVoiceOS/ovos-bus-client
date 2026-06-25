@@ -24,7 +24,8 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session
-from ovos_spec_tools.messages import MIGRATION_MAP, SPEC_TO_LEGACY
+from ovos_spec_tools.messages import (MIGRATION_MAP, SPEC_TO_LEGACY,
+                                       migration_counterpart)
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -40,20 +41,20 @@ import warnings as _warnings
 from os import environ
 
 
-def _bus_flag(env_var: str, config_key: str) -> bool:
+def _bus_flag(env_var: str, config_key: str, default: bool = False) -> bool:
     """Read a boolean bus flag from an env var, else the websocket config.
 
-    The env var wins when set; otherwise ``websocket.<config_key>`` is read;
-    default ``False``.
+    The env var wins when set; otherwise ``websocket.<config_key>`` is read,
+    falling back to ``default``.
     """
     val = environ.get(env_var)
     if val is not None:
         return val.strip().lower() in ("1", "true", "yes", "on")
     try:
         from ovos_config import Configuration
-        return bool(Configuration().get("websocket", {}).get(config_key, False))
+        return bool(Configuration().get("websocket", {}).get(config_key, default))
     except Exception:
-        return False
+        return default
 
 
 def _encryption_keys():
@@ -142,13 +143,17 @@ class MessageBusClient:
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
-        # opt-in namespace translation on emit (both off by default, orthogonal):
-        #  modernize  : also emit the ovos.* spec topic when a legacy topic is
-        #               emitted, so spec-native listeners receive it.
-        #  emit_legacy: also emit the legacy topic when an ovos.* spec topic is
-        #               emitted, so not-yet-migrated listeners receive it.
-        self._modernize = _bus_flag("OVOS_BUS_MODERNIZE", "modernize")
-        self._emit_legacy = _bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy")
+        # namespace translation on emit (orthogonal, both ON by default during
+        # the migration window so every migrated event travels on BOTH the
+        # legacy and the ovos.* topic — any repo can flip its emit OR its listen
+        # to ovos.* in any order, with no coordination):
+        #  emit_legacy: emitting an ovos.* spec topic also emits the legacy one.
+        #  modernize  : emitting a legacy topic also emits the ovos.* spec one.
+        self._emit_legacy = _bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True)
+        self._modernize = _bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True)
+        self._migration_window = 1.0
+        self._handler_dedup = {}         # func -> {payload: (topic, timestamp)}
+        self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
         if session:
             SessionManager.update(session)
         else:
@@ -421,7 +426,40 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
+        if event_name in MIGRATION_MAP or event_name in SPEC_TO_LEGACY:
+            # a migrated topic: wrap so that if this handler also ends up on the
+            # counterpart topic, the mirror copy is dropped (handle once).
+            wrapped = self._dedup_wrap(func)
+            self.emitter.on(event_name, wrapped)
+            self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
+            return
         self.emitter.on(event_name, func)
+
+    def _dedup_wrap(self, func: Callable[[Message], Any]):
+        """Wrap a handler so a payload arriving via the COUNTERPART topic within
+        the window is dropped — collapsing the legacy/ovos.* mirror pair without
+        suppressing two genuine same-topic events. State is shared per handler.
+        """
+        seen = self._handler_dedup.setdefault(func, {})
+
+        def wrapper(message=None):
+            try:
+                mtype = message.msg_type
+                payload = _json.dumps(message.data, sort_keys=True, default=str)
+            except Exception:
+                return func(message)
+            now = time.monotonic()
+            for k in [k for k, (_, ts) in seen.items()
+                      if now - ts >= self._migration_window]:
+                seen.pop(k, None)
+            prev = seen.get(payload)
+            if prev is not None and prev[0] != mtype \
+                    and migration_counterpart(prev[0]) == mtype:
+                return  # same payload via the counterpart topic = the mirror
+            seen[payload] = (mtype, now)
+            return func(message)
+
+        return wrapper
 
     def once(self, event_name: str, func: Callable[[Message], Any]):
         """Register callback with event emitter for a single call.
@@ -439,7 +477,15 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        if func in self.wrapped_funcs:
+        if func in self._dedup_registrations:
+            regs = self._dedup_registrations[func]
+            for ev, wrapped in [r for r in regs if r[0] == event_name]:
+                self._remove_normal(ev, wrapped)
+                regs.remove((ev, wrapped))
+            if not regs:
+                self._dedup_registrations.pop(func, None)
+                self._handler_dedup.pop(func, None)
+        elif func in self.wrapped_funcs:
             self._remove_wrapped(event_name, func)
         else:
             self._remove_normal(event_name, func)
