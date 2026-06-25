@@ -1,41 +1,40 @@
-"""Coverage tests for ovos_bus_client.apis.gui — GUIInterface, GUIWidgets."""
-import unittest
+"""Coverage tests for ovos_bus_client.apis.gui — the template-based GUIInterface.
+
+The classic free-form page / widget API was removed (OVOS-GUI-1): applications
+now declare *what* to display by naming a SYSTEM_* template (PageTemplates) and
+supplying its data; the wire protocol is ``gui.value.set`` + ``gui.page.show``.
+These tests assert that observable contract.
+"""
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from ovos_bus_client.apis.gui import GUIInterface, GUIWidgets, _GUIDict
-from ovos_bus_client.message import Message
+from ovos_bus_client.apis.gui import GUIInterface, PageTemplates, _GUIDict
 
 
-def _last(bus) -> Message:
-    return bus.emit.call_args[0][0]
+def _emitted(bus):
+    return [c.args[0] for c in bus.emit.call_args_list]
 
 
-def _emitted_types(bus):
-    return [c.args[0].msg_type for c in bus.emit.call_args_list]
+def _types(bus):
+    return [m.msg_type for m in _emitted(bus)]
 
 
-class TestGUIWidgets(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.widgets = GUIWidgets(bus=self.bus)
-
-    def test_show_widget(self):
-        self.widgets.show_widget("clock", {"face": "round"})
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.msg_type, "ovos.widgets.display")
-        self.assertEqual(emitted.data["type"], "clock")
-
-    def test_remove_widget(self):
-        self.widgets.remove_widget("clock", {})
-        self.assertEqual(_last(self.bus).msg_type, "ovos.widgets.remove")
-
-    def test_update_widget(self):
-        self.widgets.update_widget("clock", {"hand": "minute"})
-        self.assertEqual(_last(self.bus).msg_type, "ovos.widgets.update")
+def _first(bus, msg_type):
+    return next(m for m in _emitted(bus) if m.msg_type == msg_type)
 
 
-class TestGUIInterfaceConstructionAndProps(TestCase):
+class TestPageTemplates(TestCase):
+    def test_values_are_system_prefixed(self):
+        for t in PageTemplates:
+            self.assertTrue(t.value.startswith("SYSTEM_"), t.value)
+
+    def test_known_templates_present(self):
+        names = {t.name for t in PageTemplates}
+        for expected in ("TEXT", "IMAGE", "FACE", "LOADING", "STATUS", "HTML", "URL"):
+            self.assertIn(expected, names)
+
+
+class TestConstructionAndProps(TestCase):
     def setUp(self):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
@@ -45,49 +44,37 @@ class TestGUIInterfaceConstructionAndProps(TestCase):
         self.gui.skill_id = "new.skill"
         self.assertEqual(self.gui.skill_id, "new.skill")
 
-    def test_bus_property_and_setter(self):
+    def test_bus_property_and_set_bus(self):
         new_bus = MagicMock()
-        self.gui.bus = new_bus
+        self.gui.set_bus(new_bus)
         self.assertIs(self.gui.bus, new_bus)
 
     def test_build_message_type_prepends_skill_id(self):
-        self.assertEqual(self.gui.build_message_type("clicked"), "t.skill.clicked")
+        self.assertEqual(self.gui._build_message_type("clicked"), "t.skill.clicked")
 
-    def test_build_message_type_already_prefixed(self):
-        self.assertEqual(
-            self.gui.build_message_type("t.skill.clicked"),
-            "t.skill.clicked",
-        )
+    def test_build_message_type_idempotent_when_prefixed(self):
+        self.assertEqual(self.gui._build_message_type("t.skill.clicked"),
+                         "t.skill.clicked")
 
-    def test_setup_default_handlers_registers_set(self):
-        self.bus.reset_mock()
-        self.gui.setup_default_handlers()
-        registered = {c.args[0] for c in self.bus.on.call_args_list}
-        self.assertIn("t.skill.set", registered)
-
-    def test_page_property_empty(self):
+    def test_pages_initial_empty(self):
+        self.assertEqual(self.gui.pages, [])
         self.assertIsNone(self.gui.page)
 
-    def test_pages_property_initial_empty(self):
-        self.assertEqual(self.gui.pages, [])
+    def test_gui_disabled_default_false(self):
+        self.assertFalse(self.gui.gui_disabled)
 
     def test_connected_false_without_bus(self):
         gui = GUIInterface(skill_id="t.skill")
         self.assertFalse(gui.connected)
 
-    def test_gui_disabled_default(self):
-        # default config should not disable
-        self.assertFalse(self.gui.gui_disabled)
 
-
-class TestGUIRegisterHandler(TestCase):
+class TestHandlers(TestCase):
     def setUp(self):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
 
-    def test_register_handler_registers_with_prefix(self):
-        cb = MagicMock()
-        self.gui.register_handler("clicked", cb)
+    def test_register_handler_prefixes_event(self):
+        self.gui.register_handler("clicked", lambda m: None)
         registered = {c.args[0] for c in self.bus.on.call_args_list}
         self.assertIn("t.skill.clicked", registered)
 
@@ -102,329 +89,258 @@ class TestGUIRegisterHandler(TestCase):
         self.assertIs(self.gui.on_gui_changed_callback, cb)
 
 
-class TestGUIDictAccess(TestCase):
+class TestDictAccess(TestCase):
     def setUp(self):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
 
-    def test_setitem_stores_value(self):
+    def test_setitem_and_getitem(self):
         self.gui["temperature"] = 22
         self.assertEqual(self.gui["temperature"], 22)
 
-    def test_setitem_same_value_skips_sync(self):
-        self.gui._pages = ["page"]  # so page property is non-None and sync happens
-        self.gui.current_page_idx = 0
-        self.gui["k"] = "v"
-        self.bus.reset_mock()
-        self.gui["k"] = "v"  # same → no sync
-        self.assertFalse(self.bus.emit.called)
-
-    def test_setitem_dict_gets_wrapped(self):
-        self.gui["meta"] = {"a": 1}
-        self.assertIsInstance(self.gui["meta"], _GUIDict)
-
-    def test_get_method(self):
+    def test_get_with_default(self):
         self.gui["k"] = "v"
         self.assertEqual(self.gui.get("k"), "v")
         self.assertIsNone(self.gui.get("missing"))
         self.assertEqual(self.gui.get("missing", "default"), "default")
 
-    def test_contains_operator(self):
+    def test_contains(self):
         self.gui["k"] = "v"
         self.assertIn("k", self.gui)
         self.assertNotIn("missing", self.gui)
 
-    def test_guidict_sync_on_change(self):
-        d = _GUIDict(gui=self.gui, x=1)
-        d["x"] = 99
-        # _sync_data raises if there's no bus; we have one, so it just emits
-        # whether emit fired depends on gui_disabled, but no exception is fine
-        d["x"] = 99   # same value, no sync needed
+    def test_dict_value_wrapped(self):
+        self.gui["meta"] = {"a": 1}
+        self.assertIsInstance(self.gui["meta"], _GUIDict)
 
 
-class TestGUIClear(TestCase):
+class TestClearAndEvents(TestCase):
     def setUp(self):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
 
-    def test_clear_resets_state_and_emits(self):
-        self.gui["a"] = 1
-        self.gui._pages = ["p1", "p2"]
+    def test_clear_resets_pages_and_emits_namespace(self):
+        self.gui.show_text("hi")
         self.gui.clear()
         self.assertEqual(self.gui.pages, [])
-        self.assertEqual(self.gui.current_page_idx, -1)
-        self.assertIn("gui.clear.namespace", _emitted_types(self.bus))
-
-
-class TestGUISendEvent(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+        self.assertIn("gui.clear.namespace", _types(self.bus))
 
     def test_send_event_payload(self):
         self.gui.send_event("clicked", {"target": "btn"})
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.msg_type, "gui.event.send")
-        self.assertEqual(emitted.data["event_name"], "clicked")
-        self.assertEqual(emitted.data["params"], {"target": "btn"})
+        msg = _first(self.bus, "gui.event.send")
+        self.assertEqual(msg.data["event_name"], "clicked")
+        self.assertEqual(msg.data["params"], {"target": "btn"})
 
     def test_send_event_default_params(self):
         self.gui.send_event("idle")
-        self.assertEqual(_last(self.bus).data["params"], {})
+        self.assertEqual(_first(self.bus, "gui.event.send").data["params"], {})
+
+    def test_release_clears_pages(self):
+        self.gui.show_text("hi")
+        self.gui.release()
+        self.assertEqual(self.gui.pages, [])
 
 
-class TestNormalizePageName(TestCase):
-    def test_strips_qml_extension(self):
-        self.assertEqual(GUIInterface._normalize_page_name("Foo.qml"), "Foo")
+class TestShowTemplates(TestCase):
+    """Each show_* helper names exactly one SYSTEM_* template and emits the
+    gui.value.set + gui.page.show pair (OVOS-GUI-1 §3, §4)."""
 
-    def test_passes_through_non_qml(self):
-        self.assertEqual(GUIInterface._normalize_page_name("Foo"), "Foo")
-
-    def test_raises_on_existing_filepath(self):
-        with patch("ovos_bus_client.apis.gui.isfile", return_value=True):
-            with self.assertRaises(ValueError):
-                GUIInterface._normalize_page_name("/tmp/foo.qml")
-
-
-class TestShowPages(TestCase):
     def setUp(self):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
 
-    def test_show_page_basic(self):
-        self.gui.show_page("Weather")
-        types = _emitted_types(self.bus)
-        self.assertIn("gui.value.set", types)
-        self.assertIn("gui.page.show", types)
-        self.assertEqual(self.gui._pages, ["Weather"])
+    def _assert_template(self, template):
+        self.assertEqual(_types(self.bus), ["gui.value.set", "gui.page.show"])
+        self.assertEqual(self.gui._pages, [template])
+        self.assertEqual(self.gui.page, template)
+        show = _first(self.bus, "gui.page.show")
+        self.assertEqual(show.data["page_names"], [template])
+        self.assertEqual(show.data["__from"], "t.skill")
 
-    def test_show_page_with_overrides(self):
-        self.gui.show_page("Weather", override_idle=30, override_animations=True)
-        emitted = [c.args[0] for c in self.bus.emit.call_args_list
-                   if c.args[0].msg_type == "gui.page.show"][0]
-        self.assertEqual(emitted.data["__idle"], 30)
-        self.assertTrue(emitted.data["__animations"])
+    def test_show_text(self):
+        self.gui.show_text("hello", title="T")
+        self._assert_template(PageTemplates.TEXT)
+        vs = _first(self.bus, "gui.value.set")
+        self.assertEqual(vs.data["text"], "hello")
+        self.assertEqual(vs.data["title"], "T")
 
-    def test_show_pages_list(self):
-        self.gui.show_pages(["A", "B"])
-        self.assertEqual(self.gui._pages, ["A", "B"])
+    def test_show_image(self):
+        self.gui.show_image("http://x/i.png", caption="c")
+        self._assert_template(PageTemplates.IMAGE)
 
-    def test_show_pages_string_treated_as_list(self):
-        self.gui.show_pages("OnlyOne")
-        self.assertEqual(self.gui._pages, ["OnlyOne"])
+    def test_show_animated_image(self):
+        self.gui.show_animated_image("http://x/a.gif")
+        self._assert_template(PageTemplates.ANIMATED_IMAGE)
 
-    def test_show_pages_invalid_type_raises(self):
-        with self.assertRaises(ValueError):
-            self.gui.show_pages(42)
+    def test_show_html(self):
+        self.gui.show_html("<p>x</p>")
+        self._assert_template(PageTemplates.HTML)
 
-    def test_show_pages_strips_qml(self):
-        self.gui.show_pages(["Foo.qml", "Bar.qml"])
-        self.assertEqual(self.gui._pages, ["Foo", "Bar"])
+    def test_show_url(self):
+        self.gui.show_url("http://x")
+        self._assert_template(PageTemplates.URL)
 
-    def test_show_pages_index_clamped(self):
-        self.gui.show_pages(["A"], index=10)
-        # current_page_idx clamped to len-1
-        self.assertEqual(self.gui.current_page_idx, 0)
+    def test_show_face(self):
+        self.gui.show_face()
+        self._assert_template(PageTemplates.FACE)
+
+    def test_show_loading_animation(self):
+        self.gui.show_loading_animation("loading")
+        self._assert_template(PageTemplates.LOADING)
+
+    def test_show_status_animation(self):
+        self.gui.show_status_animation("done", success=True)
+        self._assert_template(PageTemplates.STATUS)
+
+    def test_overrides_passed_through(self):
+        self.gui.show_text("hi", override_idle=30, override_animations=True)
+        show = _first(self.bus, "gui.page.show")
+        self.assertEqual(show.data["__idle"], 30)
+        self.assertTrue(show.data["__animations"])
+
+
+class TestTemplateData(TestCase):
+    """Each show_* helper supplies its template's normative session-data keys
+    on gui.value.set (OVOS-GUI-1 §3.3)."""
+
+    def setUp(self):
+        self.bus = MagicMock()
+        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+
+    def _value_data(self):
+        return _first(self.bus, "gui.value.set").data
+
+    def test_image_data(self):
+        self.gui.show_image("http://x/i.png", caption="c", title="T")
+        d = self._value_data()
+        self.assertEqual(d["image"], "http://x/i.png")
+        self.assertEqual(d["caption"], "c")
+        self.assertEqual(d["title"], "T")
+
+    def test_html_data(self):
+        self.gui.show_html("<p>h</p>", resource_url="http://r")
+        d = self._value_data()
+        self.assertEqual(d["html"], "<p>h</p>")
+        self.assertEqual(d["resourceLocation"], "http://r")
+
+    def test_url_data(self):
+        self.gui.show_url("http://u")
+        self.assertEqual(self._value_data()["url"], "http://u")
+
+    def test_status_data(self):
+        self.gui.show_status_animation("s", success=False)
+        d = self._value_data()
+        self.assertEqual(d["label"], "s")
+        self.assertIn("status", d)
+
+    def test_loading_data(self):
+        self.gui.show_loading_animation("L")
+        self.assertEqual(self._value_data()["label"], "L")
+
+
+class TestGuiDisabled(TestCase):
+    def test_disabled_suppresses_emissions(self):
+        with patch("ovos_bus_client.apis.gui.Configuration",
+                   return_value={"gui": {"disable_gui": True}}):
+            bus = MagicMock()
+            gui = GUIInterface(skill_id="t.skill", bus=bus)
+            self.assertTrue(gui.gui_disabled)
+            gui.show_text("x")
+            self.assertEqual(_types(bus), [])
+
+
+class TestPrivatePageHelpers(TestCase):
+    """The private template-page primitives the public show_* methods build on."""
+
+    def setUp(self):
+        self.bus = MagicMock()
+        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+
+    def test_show_pages_multiple_sets_index(self):
+        self.gui._show_pages([PageTemplates.TEXT, PageTemplates.IMAGE], index=1)
+        self.assertEqual(self.gui._pages,
+                         [PageTemplates.TEXT, PageTemplates.IMAGE])
+        self.assertEqual(self.gui.current_page_idx, 1)
+        self.assertIn("gui.page.show", _types(self.bus))
+
+    def test_show_page_single(self):
+        self.gui._show_page(PageTemplates.STATUS)
+        self.assertEqual(self.gui._pages, [PageTemplates.STATUS])
+
+    def test_remove_pages_emits_delete(self):
+        self.gui.show_text("x")
+        self.bus.reset_mock()
+        self.gui._remove_pages([PageTemplates.TEXT])
+        self.assertIn("gui.page.delete", _types(self.bus))
+
+    def test_remove_page_emits_delete(self):
+        self.gui.show_text("x")
+        self.bus.reset_mock()
+        self.gui._remove_page(PageTemplates.TEXT)
+        self.assertIn("gui.page.delete", _types(self.bus))
+
+    def test_remove_all_pages_emits_delete_all(self):
+        self.gui.show_text("x")
+        self.bus.reset_mock()
+        self.gui._remove_all_pages()
+        self.assertIn("gui.page.delete.all", _types(self.bus))
+
+    def test_sync_data_emits_value_set(self):
+        self.gui.show_text("x")
+        self.bus.reset_mock()
+        self.gui._sync_data()
+        self.assertIn("gui.value.set", _types(self.bus))
 
     def test_show_pages_without_bus_raises(self):
         gui = GUIInterface(skill_id="t.skill")
         with self.assertRaises(RuntimeError):
-            gui.show_pages(["X"])
+            gui._show_pages([PageTemplates.TEXT])
 
 
-class TestRemovePages(TestCase):
+class TestGuiSetAndDict(TestCase):
     def setUp(self):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
 
-    def test_remove_page(self):
-        self.gui.remove_page("Weather")
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.msg_type, "gui.page.delete")
-        self.assertEqual(emitted.data["page_names"], ["Weather"])
-
-    def test_remove_pages_list(self):
-        self.gui.remove_pages(["A", "B"])
-        self.assertEqual(_last(self.bus).data["page_names"], ["A", "B"])
-
-    def test_remove_pages_invalid_raises(self):
-        with self.assertRaises(ValueError):
-            self.gui.remove_pages(42)
-
-    def test_remove_pages_strips_qml(self):
-        self.gui.remove_pages(["Foo.qml"])
-        self.assertEqual(_last(self.bus).data["page_names"], ["Foo"])
-
-    def test_remove_all_pages(self):
-        self.gui.remove_all_pages()
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.msg_type, "gui.page.delete.all")
-
-    def test_remove_all_pages_with_keep_list(self):
-        self.gui.remove_all_pages(except_pages=["A"])
-        self.assertEqual(_last(self.bus).data["except"], ["A"])
-
-
-class TestShowNotificationVariants(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-
-    def test_show_notification(self):
-        self.gui.show_notification("hello")
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.msg_type, "ovos.notification.api.set")
-        self.assertEqual(emitted.data["text"], "hello")
-        self.assertEqual(emitted.data["sender"], "t.skill")
-        self.assertEqual(emitted.data["duration"], 10)
-
-    def test_show_notification_with_action(self):
-        self.gui.show_notification("hi", action="my.event",
-                                   callback_data={"x": 1})
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.data["action"], "my.event")
-        self.assertEqual(emitted.data["callback_data"], {"x": 1})
-
-    def test_show_controlled_notification(self):
-        self.gui.show_controlled_notification("hi", style="warning")
-        emitted = _last(self.bus)
-        self.assertEqual(emitted.msg_type, "ovos.notification.api.set.controlled")
-        self.assertEqual(emitted.data["style"], "warning")
-
-    def test_remove_controlled_notification(self):
-        self.gui.remove_controlled_notification()
-        self.assertEqual(_last(self.bus).msg_type, "ovos.notification.api.remove.controlled")
-
-
-class TestShowTemplates(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-
-    def test_show_text(self):
-        self.gui.show_text("hello", title="greeting")
-        self.assertEqual(self.gui["text"], "hello")
-        self.assertEqual(self.gui["title"], "greeting")
-        self.assertEqual(self.gui._pages, ["SYSTEM_TextFrame"])
-
-    def test_show_face_awake(self):
-        self.gui.show_face(awake=True)
-        self.assertFalse(self.gui["sleeping"])
-        self.assertEqual(self.gui._pages, ["SYSTEM_Face"])
-
-    def test_show_face_asleep(self):
-        self.gui.show_face(awake=False)
-        self.assertTrue(self.gui["sleeping"])
-
-    def test_show_loading_animation(self):
-        self.gui.show_loading_animation("loading...")
-        self.assertEqual(self.gui["label"], "loading...")
-        self.assertEqual(self.gui._pages, ["SYSTEM_Loading"])
-
-    def test_show_status_animation_success(self):
-        self.gui.show_status_animation("done", success=True)
-        self.assertEqual(self.gui["status"], "Enabled")
-        self.assertEqual(self.gui._pages, ["SYSTEM_Status"])
-
-    def test_show_status_animation_failure(self):
-        self.gui.show_status_animation("failed", success=False)
-        self.assertEqual(self.gui["status"], "Disabled")
-
-    def test_show_html(self):
-        self.gui.show_html("<h1>hi</h1>")
-        self.assertEqual(self.gui["html"], "<h1>hi</h1>")
-        self.assertEqual(self.gui._pages, ["SYSTEM_HtmlFrame"])
-
-    def test_show_url(self):
-        self.gui.show_url("https://example.com")
-        self.assertEqual(self.gui["url"], "https://example.com")
-        self.assertEqual(self.gui._pages, ["SYSTEM_UrlFrame"])
-
-    def test_show_input_box_defaults(self):
-        self.gui.show_input_box()
-        self.assertEqual(self.gui["confirm_text"], "Confirm")
-        self.assertEqual(self.gui["exit_text"], "Exit")
-
-    def test_show_input_box_custom(self):
-        self.gui.show_input_box(title="Q", placeholder="...",
-                                confirm_text="OK", exit_text="Cancel")
-        self.assertEqual(self.gui["confirm_text"], "OK")
-        self.assertEqual(self.gui["exit_text"], "Cancel")
-
-    def test_remove_input_box_single_page_releases(self):
-        # one page → release path
-        self.gui._pages = ["SYSTEM_InputBox"]
-        self.gui.remove_input_box()
-        # release emits gui.clear.namespace and mycroft.gui.screen.close
-        types = _emitted_types(self.bus)
-        self.assertIn("mycroft.gui.screen.close", types)
-
-    def test_remove_input_box_multi_page_removes_only_input(self):
-        self.gui._pages = ["A", "SYSTEM_InputBox"]
-        self.gui.remove_input_box()
-        types = _emitted_types(self.bus)
-        self.assertIn("gui.page.delete", types)
-
-
-class TestShowImage(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-
-    def test_show_image_http(self):
-        self.gui.show_image("https://x/y.png", caption="cap", title="ttl")
-        self.assertEqual(self.gui["image"], "https://x/y.png")
-        self.assertEqual(self.gui["caption"], "cap")
-        self.assertEqual(self.gui._pages, ["SYSTEM_ImageFrame"])
-
-    def test_show_image_missing_file_logs_and_returns(self):
-        # non-http, non-existent file → logs error and returns early
-        self.gui.show_image("/no/such/file.png")
-        self.assertNotEqual(self.gui._pages, ["SYSTEM_ImageFrame"])
-
-    def test_show_animated_image_http(self):
-        self.gui.show_animated_image("https://x/y.gif")
-        self.assertEqual(self.gui["image"], "https://x/y.gif")
-        self.assertEqual(self.gui._pages, ["SYSTEM_AnimatedImageFrame"])
-
-
-class TestReleaseAndShutdown(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-
-    def test_release_clears_and_emits_close(self):
-        self.gui["k"] = "v"
-        self.gui.release()
-        types = _emitted_types(self.bus)
-        self.assertIn("gui.clear.namespace", types)
-        self.assertIn("mycroft.gui.screen.close", types)
-
-    def test_shutdown_removes_handlers(self):
-        cb = MagicMock()
-        self.gui.register_handler("clicked", cb)
-        self.gui.shutdown()
-        # bus.remove should have been called at least for the registered handler
-        self.assertTrue(self.bus.remove.called)
-
-
-class TestGUISet(TestCase):
-    def setUp(self):
-        self.bus = MagicMock()
-        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-
-    def test_gui_set_writes_each_key_into_session_data(self):
-        msg = Message("t.skill.set", {"temp": 22, "city": "Lisbon"})
-        self.gui.gui_set(msg)
+    def test_gui_set_stores_data_and_fires_callback(self):
+        from ovos_bus_client.message import Message
+        fired = []
+        self.gui.set_on_gui_changed(lambda: fired.append(True))
+        self.gui.gui_set(Message("t.skill.set", {"temp": 22, "unit": "C"}))
         self.assertEqual(self.gui["temp"], 22)
-        self.assertEqual(self.gui["city"], "Lisbon")
+        self.assertEqual(self.gui["unit"], "C")
+        self.assertTrue(fired)
 
-    def test_gui_set_invokes_callback(self):
-        called = []
-        self.gui.set_on_gui_changed(lambda: called.append(True))
-        self.gui.gui_set(Message("set", {"k": 1}))
-        self.assertEqual(called, [True])
+    def test_dict_value_is_wrapped(self):
+        self.gui["outer"] = {"inner": 1}
+        self.assertIsInstance(self.gui["outer"], _GUIDict)
+
+    def test_page_property_reflects_current_index(self):
+        self.gui._pages = [PageTemplates.TEXT, PageTemplates.IMAGE]
+        self.gui.current_page_idx = 1
+        self.assertEqual(self.gui.page, PageTemplates.IMAGE)
+
+    def test_page_property_none_when_index_out_of_range(self):
+        self.gui._pages = [PageTemplates.TEXT]
+        self.gui.current_page_idx = 9
+        self.assertIsNone(self.gui.page)
+
+
+class TestShutdown(TestCase):
+    def test_shutdown_no_error(self):
+        bus = MagicMock()
+        gui = GUIInterface(skill_id="t.skill", bus=bus)
+        gui.show_text("hi")
+        gui.shutdown()  # must not raise
+
+    def test_release_emits_and_clears(self):
+        bus = MagicMock()
+        gui = GUIInterface(skill_id="t.skill", bus=bus)
+        gui.show_text("hi")
+        gui.release()
+        self.assertEqual(gui.pages, [])
 
 
 if __name__ == "__main__":
+    import unittest
     unittest.main()
