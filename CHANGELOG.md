@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.3.0a1) (2026-06-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.2.0a1...2.3.0a1)
+
+**Merged pull requests:**
+
+- feat: namespace migration via MessageBusClient — both flags on + handler dedup [\#230](https://github.com/OpenVoiceOS/ovos-bus-client/pull/230) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.2.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.2a2...2.2.0a1)
