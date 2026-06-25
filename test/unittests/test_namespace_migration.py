@@ -14,16 +14,15 @@ from unittest.mock import MagicMock, patch
 
 from ovos_bus_client.client.client import MessageBusClient, _bus_flag
 from ovos_bus_client.message import Message
+from ovos_spec_tools import NamespaceTranslator
 
 
 def _client(modernize=True, emit_legacy=True):
     c = MessageBusClient.__new__(MessageBusClient)
     c.emitter = MagicMock()
     c.client = MagicMock()
-    c._modernize = modernize
-    c._emit_legacy = emit_legacy
-    c._migration_window = 1.0
-    c._handler_dedup = {}
+    c._translator = NamespaceTranslator(modernize=modernize, emit_legacy=emit_legacy)
+    c._handler_guards = {}
     c._dedup_registrations = {}
     c.wrapped_funcs = {}
     c.connected_event = Event()
@@ -116,7 +115,7 @@ class TestHandlerDedup(unittest.TestCase):
         c.on("ovos.utterance.speak", handler)
         w_legacy, w_spec = self._wrappers(c, handler)
         data = {"utterance": "hi"}
-        with patch("ovos_bus_client.client.client.time.monotonic") as clk:
+        with patch("ovos_spec_tools.messages.time.monotonic") as clk:
             clk.return_value = 0.0
             w_legacy(Message("speak", data))
             clk.return_value = 2.0  # window elapsed -> mirror no longer collapsed
@@ -169,7 +168,7 @@ class TestRemove(unittest.TestCase):
         c.remove("speak", handler)
         c.remove("ovos.utterance.speak", handler)
         self.assertNotIn(handler, c._dedup_registrations)
-        self.assertNotIn(handler, c._handler_dedup)
+        self.assertNotIn(handler, c._handler_guards)
         self.assertEqual(c._remove_normal.call_count, 2)
 
     def test_remove_resolves_on_collect_wrapper(self):
