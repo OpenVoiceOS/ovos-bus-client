@@ -426,36 +426,69 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
+        # Topics that participate in the namespace migration are wrapped for
+        # de-duplication; everything else registers straight through.
         if event_name in MIGRATION_MAP or event_name in SPEC_TO_LEGACY:
-            # a migrated topic: wrap so that if this handler also ends up on the
-            # counterpart topic, the mirror copy is dropped (handle once).
             wrapped = self._dedup_wrap(func)
             self.emitter.on(event_name, wrapped)
+            # remember the wrapper so remove() can unsubscribe and drop state
             self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
             return
         self.emitter.on(event_name, func)
 
     def _dedup_wrap(self, func: Callable[[Message], Any]):
-        """Wrap a handler so a payload arriving via the COUNTERPART topic within
-        the window is dropped — collapsing the legacy/ovos.* mirror pair without
-        suppressing two genuine same-topic events. State is shared per handler.
+        """Wrap ``func`` so the legacy/``ovos.*`` mirror of one event is dropped.
+
+        Why this is needed
+        ------------------
+        With ``modernize`` / ``emit_legacy`` on, emitting one logical event puts
+        it on the bus on BOTH its legacy and its ``ovos.*`` topic (the original
+        and a "mirror" with identical ``data``). A handler subscribed to BOTH
+        topics — which is allowed, so a repo can migrate without coordinating —
+        would then run twice. This wrapper drops the mirror so it runs once.
+
+        What counts as a mirror (and what does not)
+        -------------------------------------------
+        A delivery is the mirror of a recent one only if it has the **same
+        payload** AND arrives on the **counterpart topic** (legacy<->ovos.*).
+        Crucially, two genuine events on the *same* topic with identical payload
+        (e.g. a skill saying "ok" twice) are NOT treated as duplicates — only a
+        cross-namespace counterpart is. There is no per-message id to rely on
+        (OVOS-MSG-1 §5.4 forbids one), so this content+counterpart+window
+        heuristic is the discriminator.
+
+        State
+        -----
+        ``seen`` maps ``payload -> (topic, timestamp)`` and is shared per handler
+        (``self._handler_dedup[func]``) so the handler's two registrations — its
+        legacy ``on()`` and its ``ovos.*`` ``on()`` — dedupe against each other.
+        Entries older than ``_migration_window`` seconds are pruned each call.
         """
         seen = self._handler_dedup.setdefault(func, {})
 
         def wrapper(message=None):
             try:
                 mtype = message.msg_type
+                # canonicalize the payload to a stable string for comparison
                 payload = _json.dumps(message.data, sort_keys=True, default=str)
             except Exception:
+                # never let dedup bookkeeping break delivery
                 return func(message)
+
             now = time.monotonic()
-            for k in [k for k, (_, ts) in seen.items()
-                      if now - ts >= self._migration_window]:
-                seen.pop(k, None)
+            # drop expired entries so memory stays bounded and the window resets
+            for key in [k for k, (_, ts) in seen.items()
+                        if now - ts >= self._migration_window]:
+                seen.pop(key, None)
+
             prev = seen.get(payload)
-            if prev is not None and prev[0] != mtype \
-                    and migration_counterpart(prev[0]) == mtype:
-                return  # same payload via the counterpart topic = the mirror
+            # same payload seen recently, on the OTHER namespace's topic => mirror
+            is_mirror = (prev is not None
+                         and prev[0] != mtype
+                         and migration_counterpart(prev[0]) == mtype)
+            if is_mirror:
+                return  # already handled via the counterpart topic; drop this one
+
             seen[payload] = (mtype, now)
             return func(message)
 
