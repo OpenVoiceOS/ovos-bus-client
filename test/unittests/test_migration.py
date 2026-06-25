@@ -108,6 +108,16 @@ class TestEmitMigrationPair(unittest.TestCase):
             self.assertEqual(c.args[0].context.get("session", {}).get("session_id"), "s1")
             self.assertEqual(c.args[0].data["utterance"], "hi")
 
+    def test_data_defaults_to_message_data(self):
+        # forward() defaults payload to {}; the helper must reuse message.data
+        bus = MagicMock()
+        src = Message("recognizer_loop:utterance",
+                      {"utterances": ["hello"], "lang": "en-us"})
+        emit_migration_pair(bus, src, "recognizer_loop:utterance",
+                            "ovos.utterance.handle")
+        for c in bus.emit.call_args_list:
+            self.assertEqual(c.args[0].data, {"utterances": ["hello"], "lang": "en-us"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -103,6 +103,13 @@ def emit_migration_pair(bus, message, legacy_type: str, new_type: str,
     the producer side during the migration so consumers on either namespace are
     reached; consumers dedupe the resulting pair via
     :class:`TransitionalDeduplicator`.
+
+    When ``data`` is omitted the inbound ``message.data`` is reused — note that
+    ``Message.forward`` defaults the payload to ``{}`` (it does NOT carry the
+    source data over), so passing ``data=None`` here without this default would
+    emit empty payloads.
     """
+    if data is None:
+        data = message.data
     bus.emit(message.forward(legacy_type, data))
     bus.emit(message.forward(new_type, data))
