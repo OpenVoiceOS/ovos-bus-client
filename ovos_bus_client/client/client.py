@@ -24,6 +24,7 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session
+from ovos_spec_tools.messages import MIGRATION_MAP, migration_counterpart
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -36,6 +37,23 @@ from ovos_bus_client.session import SessionManager, Session
 
 import json as _json
 import warnings as _warnings
+from os import environ
+
+
+def _namespace_migration_enabled() -> bool:
+    """Whether transparent legacy<->ovos.* namespace migration is on (opt-in).
+
+    Enabled by the ``OVOS_BUS_NAMESPACE_MIGRATION`` env var, else by the
+    ``namespace_migration`` config key; default off.
+    """
+    val = environ.get("OVOS_BUS_NAMESPACE_MIGRATION")
+    if val is not None:
+        return val.strip().lower() in ("1", "true", "yes", "on")
+    try:
+        from ovos_config import Configuration
+        return bool(Configuration().get("namespace_migration", False))
+    except Exception:
+        return False
 
 
 def _encryption_keys():
@@ -124,6 +142,10 @@ class MessageBusClient:
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
+        # opt-in transparent legacy<->ovos.* namespace migration (off by default)
+        self._namespace_migration = _namespace_migration_enabled()
+        self._migration_window = 1.0
+        self._migration_handlers = {}  # (event_name, func) -> (counterpart, wrapped)
         if session:
             SessionManager.update(session)
         else:
@@ -256,6 +278,17 @@ class MessageBusClient:
                    Session(self.session_id)
             message.context["session"] = sess.serialize()
 
+        self._send(message)
+
+        # transparent migration: also put the counterpart topic on the wire so
+        # nodes on either namespace receive the event (consumers dedupe).
+        if self._namespace_migration:
+            counterpart = migration_counterpart(message.msg_type)
+            if counterpart:
+                self._send(message.forward(counterpart, message.data))
+
+    def _send(self, message: Message):
+        """Serialize and send a single message over the websocket."""
         if not self.connected_event.wait(10):
             if not self.started_running:
                 raise ValueError('You must execute run_forever() '
@@ -383,7 +416,44 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
+        if self._namespace_migration:
+            counterpart = migration_counterpart(event_name)
+            if counterpart:
+                # listen on both namespaces; the wrapper dedupes so the dual
+                # wire copies invoke the callback once.
+                wrapped = self._migration_wrapper(func)
+                self.emitter.on(event_name, wrapped)
+                self.emitter.on(counterpart, wrapped)
+                self._migration_handlers[(event_name, func)] = (counterpart, wrapped)
+                return
         self.emitter.on(event_name, func)
+
+    def _migration_wrapper(self, func: Callable[[Message], Any]):
+        """Wrap a handler so duplicate legacy/ovos.* copies fire it once.
+
+        Dedup key is the canonical (spec) topic plus the message payload, so the
+        two copies of one logical event collapse. State is per-registration.
+        """
+        seen = {}
+
+        def wrapper(message=None):
+            key = None
+            try:
+                mtype = message.msg_type
+                canonical = MIGRATION_MAP[mtype].value if mtype in MIGRATION_MAP else mtype
+                key = (canonical, _json.dumps(message.data, sort_keys=True, default=str))
+            except Exception:
+                key = None
+            if key is not None:
+                now = time.monotonic()
+                for k in [k for k, t in seen.items() if now - t >= self._migration_window]:
+                    seen.pop(k, None)
+                if key in seen:
+                    return
+                seen[key] = now
+            return func(message)
+
+        return wrapper
 
     def once(self, event_name: str, func: Callable[[Message], Any]):
         """Register callback with event emitter for a single call.
@@ -401,7 +471,12 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        if func in self.wrapped_funcs:
+        migration_key = (event_name, func)
+        if migration_key in self._migration_handlers:
+            counterpart, wrapped = self._migration_handlers.pop(migration_key)
+            self._remove_normal(event_name, wrapped)
+            self._remove_normal(counterpart, wrapped)
+        elif func in self.wrapped_funcs:
             self._remove_wrapped(event_name, func)
         else:
             self._remove_normal(event_name, func)
