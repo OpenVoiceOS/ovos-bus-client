@@ -25,6 +25,11 @@ from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.session import SessionManager
 from ovos_bus_client.util.scheduler import EventScheduler
+from ovos_bus_client.util.migration import (
+    TransitionalDeduplicator,
+    utterance_key,
+    emit_migration_pair,
+)
 
 
 _DEFAULT_WS_CONFIG = {"host": "0.0.0.0",
