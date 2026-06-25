@@ -1,20 +1,37 @@
+import warnings
+
+from ovos_utils.log import deprecated
+
 from ovos_bus_client.message import Message, dig_for_message
+from ovos_bus_client.version import VERSION_MAJOR
+
+_REMOVED_IN = f"{VERSION_MAJOR + 1}.0.0"
+_MOVED_TO = ("EnclosureAPI moved to ovos-gui-api-client; import it from "
+             "`ovos_gui_api_client` instead")
 
 
 class EnclosureAPI:
     """
-    This API is intended to be used to interface with the hardware
-    that is running Mycroft.  It exposes all possible commands which
-    can be sent to a Mycroft enclosure implementation.
+    DEPRECATED — use ``EnclosureAPI`` from ``ovos-gui-api-client``.
 
-    Different enclosure implementations may implement this differently
-    and/or may ignore certain API calls completely.  For example,
-    the eyes_color() API might be ignore on a Mycroft that uses simple
-    LEDs which only turn on/off, or not at all on an implementation
-    where there is no face at all.
+    It lives there alongside ``GUIInterface`` so a skill's ``self.gui`` and
+    ``self.enclosure`` come from the same client::
+
+        from ovos_gui_api_client import EnclosureAPI
+
+    The Mark-1 ``enclosure.*`` protocol it drives is consumed by hardware
+    plugins via ``EnclosureProtocolListener`` (``ovos-ui-enclosure-protocol``);
+    visual output goes through ``GUIInterface`` (OVOS-GUI-1).
+
+    This API exposes all commands that can be sent to a Mycroft-style enclosure.
+    Different enclosure implementations may implement this differently and/or
+    may ignore certain API calls completely.
     """
 
+    @deprecated(_MOVED_TO, _REMOVED_IN)
     def __init__(self, bus=None, skill_id=""):
+        warnings.warn(f"{_MOVED_TO} (removed in ovos-bus-client {_REMOVED_IN})",
+                      DeprecationWarning, stacklevel=2)
         self.bus = bus
         self.skill_id = skill_id
 

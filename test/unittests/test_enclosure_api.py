@@ -1,5 +1,6 @@
 """Coverage tests for ovos_bus_client.apis.enclosure — EnclosureAPI emitters."""
 import unittest
+import warnings
 from unittest import TestCase
 from unittest.mock import MagicMock
 
@@ -9,6 +10,30 @@ from ovos_bus_client.message import Message
 
 def _last_emitted(bus) -> Message:
     return bus.emit.call_args[0][0]
+
+
+class TestEnclosureAPIDeprecation(TestCase):
+    def test_init_warns_pointing_at_new_home(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            EnclosureAPI(bus=MagicMock(), skill_id="s")
+        deprecations = [w for w in caught
+                        if issubclass(w.category, DeprecationWarning)]
+        self.assertTrue(deprecations)
+        msg = str(deprecations[0].message)
+        self.assertIn("ovos-gui-api-client", msg)
+        # removal version is derived from version.py (next major), not hardcoded
+        from ovos_bus_client.version import VERSION_MAJOR
+        self.assertIn(f"{VERSION_MAJOR + 1}.0.0", msg)
+
+    def test_shim_still_functional(self):
+        # the shim must keep working despite the deprecation
+        bus = MagicMock()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            api = EnclosureAPI(bus=bus, skill_id="s")
+        api.eyes_on()
+        self.assertEqual(_last_emitted(bus).msg_type, "enclosure.eyes.on")
 
 
 class TestEnclosureAPIBasics(TestCase):
