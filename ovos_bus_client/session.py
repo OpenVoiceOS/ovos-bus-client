@@ -16,6 +16,10 @@ class UtteranceState(str, enum.Enum):
     RESPONSE = "response"
 
 
+# OVOS-CONVERSE-1 §2.1 default cap for the converse-handler recency stack.
+DEFAULT_CONVERSE_HANDLERS_CAP = 64
+
+
 class IntentContextManagerFrame:
     def __init__(self, entities: List[dict] = None, metadata: Dict = None):
         """
@@ -265,6 +269,10 @@ class Session:
                  expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
                  utterance_states: Dict = None,
+                 active_handlers: Optional[List[Dict]] = None,
+                 converse_handlers: Optional[List[Dict]] = None,
+                 response_mode: Optional[Dict] = None,
+                 converse_handlers_cap: Optional[int] = None,
                  lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
@@ -282,12 +290,23 @@ class Session:
                  persona_id: Optional[str] = None):
         """
         Create a new Session with identifiers, preferences, state flags, and conversational context.
-         
+
         Parameters:
             session_id (str): Session identifier; a new UUID is generated if not provided.
             expiration_seconds (int): Time-to-live in seconds for the session; use -1 for no expiration.
-            active_skills (List[List[Union[str, float]]]): Ordered list of active skills as [skill_id, last_touch_timestamp].
-            utterance_states (Dict): Mapping of skill_id to its UtteranceState.
+            active_skills (List[List[Union[str, float]]]): DEPRECATED back-compat shape — ordered list of
+                active skills as [skill_id, activated_at]. Projects to/from `active_handlers`, which is the
+                canonical OVOS-PIPELINE-1 §7.1 field. Prefer `active_handlers`.
+            utterance_states (Dict): DEPRECATED back-compat shape — mapping of skill_id to its UtteranceState.
+                Response mode is now carried by the structured `response_mode` field (OVOS-CONVERSE-1 §2.2).
+            active_handlers (List[Dict]): OVOS-PIPELINE-1 §7.1 dispatch-recency record — a head-first list of
+                {skill_id, activated_at} objects (most recently activated first).
+            converse_handlers (List[Dict]): OVOS-CONVERSE-1 §2.1 converse-eligibility list — a head-first,
+                deduplicated, capped list of {skill_id, activated_at} objects.
+            response_mode (Dict): OVOS-CONVERSE-1 §2.2 pending-response window — a single {skill_id, expires_at}
+                object, or None when no holder awaits a direct response.
+            converse_handlers_cap (int): Maximum length of `converse_handlers` (OVOS-CONVERSE-1 §2.1); defaults
+                to 64. A value <= 0 means "unbounded".
             lang (str): Language tag for the session (standardized internally) — defaults to system default.
             context (IntentContextManager): Conversational context manager for the session.
             site_id (str): Identifier for the site/location associated with the session.
@@ -322,8 +341,29 @@ class Session:
         self.is_speaking = is_speaking
         self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
 
-        self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
-        self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
+        if converse_handlers_cap is None:
+            converse_handlers_cap = Configuration().get("converse", {}).get(
+                "max_active_skills", DEFAULT_CONVERSE_HANDLERS_CAP)
+        self.converse_handlers_cap = converse_handlers_cap
+
+        # OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1 / §2.2 spec fields.
+        # `active_handlers` is the canonical dispatch-recency record; the legacy
+        # `active_skills` [skill_id, ts] pairs are a back-compat projection of it.
+        self.active_handlers: List[Dict] = self._coerce_handlers(active_handlers)
+        if not self.active_handlers and active_skills:
+            # back-compat: seed canonical store from the legacy pair shape
+            self.active_skills = active_skills
+        self.converse_handlers: List[Dict] = self._coerce_handlers(converse_handlers)
+        self._cap_handlers(self.converse_handlers)
+        self.response_mode: Optional[Dict] = self._coerce_response_mode(response_mode)
+        if self.response_mode is None and utterance_states:
+            # back-compat: a legacy {skill_id: "response"} entry becomes a holder.
+            # Set directly (no touch()) — SessionManager is not ready during __init__.
+            ttl = Configuration().get("converse", {}).get("response_timeout", 300)
+            for skill_id, state in utterance_states.items():
+                if state == UtteranceState.RESPONSE.value:
+                    self.response_mode = {"skill_id": skill_id,
+                                          "expires_at": time.time() + ttl}
 
         self.touch_time = int(time.time())
         self.expiration_seconds = expiration_seconds or \
@@ -364,7 +404,204 @@ class Session:
         NOTE: skills without converse implemented never get added here unless
         using get_response
         """
-        return len(self.active_skills) > 0
+        return len(self.active_handlers) > 0
+
+    # ------------------------------------------------------------------
+    # OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1 / §2.2 handler-list helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _coerce_handlers(handlers: Optional[List[Dict]]) -> List[Dict]:
+        """
+        Normalize a handler list into the spec `{skill_id, activated_at}` object shape.
+
+        Accepts either the spec object shape (list of dicts) or the legacy
+        `[skill_id, activated_at]` pair shape (for back-compat deserialization).
+        Entries are deduplicated by `skill_id` (head wins) and kept head-first.
+        """
+        out: List[Dict] = []
+        seen = set()
+        for entry in handlers or []:
+            if isinstance(entry, dict):
+                skill_id = entry.get("skill_id")
+                activated_at = entry.get("activated_at", time.time())
+            elif isinstance(entry, (list, tuple)) and entry:
+                skill_id = entry[0]
+                activated_at = entry[1] if len(entry) > 1 else time.time()
+            else:
+                continue
+            if not skill_id or skill_id in seen:
+                continue
+            seen.add(skill_id)
+            out.append({"skill_id": skill_id, "activated_at": activated_at})
+        return out
+
+    @staticmethod
+    def _coerce_response_mode(response_mode: Optional[Dict]) -> Optional[Dict]:
+        """
+        Normalize a response_mode value into the spec `{skill_id, expires_at}` shape,
+        or None when there is no holder. Malformed values resolve to None (SESSION-1 §2.1).
+        """
+        if not isinstance(response_mode, dict):
+            return None
+        skill_id = response_mode.get("skill_id")
+        if not skill_id:
+            return None
+        return {"skill_id": skill_id,
+                "expires_at": response_mode.get("expires_at", -1)}
+
+    @staticmethod
+    def _promote_handler(handlers: List[Dict], skill_id: str,
+                         activated_at: Optional[float] = None) -> List[Dict]:
+        """
+        Dedup-and-promote `skill_id` to the head of `handlers` (in place).
+
+        Removes any existing entry with the same `skill_id` then inserts a fresh
+        `{skill_id, activated_at}` at index 0 — the recency-stack rule shared by
+        OVOS-PIPELINE-1 §7.1 and OVOS-CONVERSE-1 §3.1.
+        """
+        if activated_at is None:
+            activated_at = time.time()
+        handlers[:] = [h for h in handlers if h.get("skill_id") != skill_id]
+        handlers.insert(0, {"skill_id": skill_id, "activated_at": activated_at})
+        return handlers
+
+    def _cap_handlers(self, handlers: List[Dict]) -> List[Dict]:
+        """
+        Tail-drop `handlers` down to `self.converse_handlers_cap` entries (in place).
+
+        A cap <= 0 means "unbounded" (OVOS-CONVERSE-1 §2.1). The least-recent
+        surviving owners (the tail) are dropped.
+        """
+        cap = self.converse_handlers_cap
+        if cap and cap > 0 and len(handlers) > cap:
+            del handlers[cap:]
+        return handlers
+
+    # ------------------------------------------------------------------
+    # active_handlers (OVOS-PIPELINE-1 §7.1)
+    # ------------------------------------------------------------------
+    def add_active_handler(self, skill_id: str,
+                           activated_at: Optional[float] = None):
+        """
+        Push a handler onto `active_handlers`, dedup-and-promoting it to the head.
+
+        OVOS-PIPELINE-1 §7.1: the orchestrator pushes
+        `{skill_id, activated_at}`, evicting any prior entry with the same
+        `skill_id`. The list is head-first by recency.
+        """
+        self._promote_handler(self.active_handlers, skill_id, activated_at)
+        self.touch()
+
+    def remove_active_handler(self, skill_id: str):
+        """Remove `skill_id` from `active_handlers` (e.g. STOP-1 drain)."""
+        self.active_handlers[:] = [h for h in self.active_handlers
+                                   if h.get("skill_id") != skill_id]
+        self.touch()
+
+    # ------------------------------------------------------------------
+    # converse_handlers (OVOS-CONVERSE-1 §2.1)
+    # ------------------------------------------------------------------
+    def add_converse_handler(self, skill_id: str,
+                             activated_at: Optional[float] = None):
+        """
+        Stamp a handler onto `converse_handlers`, dedup-promote to head, tail-drop at cap.
+
+        OVOS-CONVERSE-1 §3.1: remove any existing entry for `skill_id`, insert a
+        fresh `{skill_id, activated_at}` at index 0, then drop the tail if the §2.1
+        cap is exceeded.
+        """
+        self._promote_handler(self.converse_handlers, skill_id, activated_at)
+        self._cap_handlers(self.converse_handlers)
+        self.touch()
+
+    def remove_converse_handler(self, skill_id: str):
+        """Remove `skill_id` from `converse_handlers`."""
+        self.converse_handlers[:] = [h for h in self.converse_handlers
+                                     if h.get("skill_id") != skill_id]
+        self.touch()
+
+    def prune_converse_handlers(self, ttl: float, now: Optional[float] = None):
+        """
+        Drop `converse_handlers` entries older than `ttl` seconds (OVOS-CONVERSE-1 §3.2).
+
+        A caller (the orchestrator) invokes this at the pre-converse and
+        pre-list-emission boundaries. `now - activated_at > ttl` is dropped. A
+        non-positive `ttl` disables time-based pruning.
+        """
+        if not ttl or ttl <= 0:
+            return
+        now = now if now is not None else time.time()
+        self.converse_handlers[:] = [
+            h for h in self.converse_handlers
+            if now - h.get("activated_at", now) <= ttl
+        ]
+
+    # ------------------------------------------------------------------
+    # response_mode (OVOS-CONVERSE-1 §2.2) — single-holder
+    # ------------------------------------------------------------------
+    def set_response_mode(self, skill_id: str, expires_at: float):
+        """
+        Set the single-holder response window (OVOS-CONVERSE-1 §2.2).
+
+        Overwrites any existing holder silently (single-holder invariant).
+        """
+        self.response_mode = {"skill_id": skill_id, "expires_at": expires_at}
+        self.touch()
+
+    def clear_response_mode(self, skill_id: Optional[str] = None):
+        """
+        Clear the response window.
+
+        When `skill_id` is given, only clears it if that skill currently holds the
+        window (avoids one skill clearing another's hold); otherwise clears
+        unconditionally.
+        """
+        if self.response_mode is None:
+            return
+        if skill_id is None or self.response_mode.get("skill_id") == skill_id:
+            self.response_mode = None
+        self.touch()
+
+    # ------------------------------------------------------------------
+    # Back-compat projections — legacy readers across the ecosystem still
+    # use `active_skills` (list of [skill_id, ts] pairs) and `utterance_states`
+    # ({skill_id: state}). These project to/from the canonical spec fields so
+    # there is a single source of truth.
+    # ------------------------------------------------------------------
+    @property
+    def active_skills(self) -> List[List[Union[str, float]]]:
+        """
+        DEPRECATED back-compat view of `active_handlers` as `[skill_id, activated_at]` pairs.
+
+        Reads project the canonical `active_handlers` object list to the legacy
+        pair shape, head-first.
+        """
+        return [[h["skill_id"], h["activated_at"]] for h in self.active_handlers]
+
+    @active_skills.setter
+    def active_skills(self, value: Optional[List[List[Union[str, float]]]]):
+        """Assigning legacy pairs rewrites the canonical `active_handlers` store."""
+        self.active_handlers = self._coerce_handlers(value)
+
+    @property
+    def utterance_states(self) -> Dict:
+        """
+        DEPRECATED back-compat view of response mode as `{skill_id: state}`.
+
+        Only the current `response_mode` holder (if any) is reported as
+        `RESPONSE`; everything else is implicitly `INTENT`.
+        """
+        if self.response_mode and self.response_mode.get("skill_id"):
+            return {self.response_mode["skill_id"]: UtteranceState.RESPONSE.value}
+        return {}
+
+    @utterance_states.setter
+    def utterance_states(self, value: Optional[Dict]):
+        """Assigning legacy utterance_states rewrites the structured `response_mode`."""
+        self.response_mode = None
+        for skill_id, state in (value or {}).items():
+            if state == UtteranceState.RESPONSE.value:
+                self.enable_response_mode(skill_id)
 
     def touch(self):
         """
@@ -386,41 +623,42 @@ class Session:
 
     def enable_response_mode(self, skill_id: str):
         """
-        Mark a skill as expecting a response
+        Mark a skill as expecting a response (OVOS-CONVERSE-1 §2.2 response_mode).
+
+        Back-compat shim around `set_response_mode`: sets the single-holder window
+        with a deployment-default TTL.
         @param skill_id: ID of skill expecting a response
         """
-        self.utterance_states[skill_id] = UtteranceState.RESPONSE.value
-        self.touch()
+        ttl = Configuration().get("converse", {}).get("response_timeout", 300)
+        self.set_response_mode(skill_id, time.time() + ttl)
 
     def disable_response_mode(self, skill_id: str):
         """
-        Mark a skill as not expecting a response (handling intents normally)
-        @param skill_id: ID of skill expecting a response
+        Mark a skill as not expecting a response (OVOS-CONVERSE-1 §2.2).
+
+        Back-compat shim around `clear_response_mode`: clears the window only if
+        `skill_id` currently holds it.
+        @param skill_id: ID of skill no longer expecting a response
         """
-        self.utterance_states[skill_id] = UtteranceState.INTENT.value
-        self.touch()
+        self.clear_response_mode(skill_id)
 
     def activate_skill(self, skill_id: str):
         """
-        Add a skill to the front of the active_skills list
+        Add a skill to the front of the active-handler recency list.
+
+        Back-compat shim around `add_active_handler` (OVOS-PIPELINE-1 §7.1).
         @param skill_id: ID of skill to activate
         """
-        # remove it from active list
-        self.deactivate_skill(skill_id)
-        # add skill with timestamp to start of active list
-        self.active_skills.insert(0, [skill_id, time.time()])
-        self.touch()
+        self.add_active_handler(skill_id)
 
     def deactivate_skill(self, skill_id: str):
         """
-        Remove a skill from the active_skills list
+        Remove a skill from the active-handler recency list.
+
+        Back-compat shim around `remove_active_handler`.
         @param skill_id: ID of skill to deactivate
         """
-        active_ids = [s[0] for s in self.active_skills]
-        if skill_id in active_ids:
-            idx = active_ids.index(skill_id)
-            self.active_skills.pop(idx)
-        self.touch()
+        self.remove_active_handler(skill_id)
 
     def is_active(self, skill_id: str) -> bool:
         """
@@ -428,41 +666,35 @@ class Session:
         @param skill_id: ID of skill to check
         @return: True if the requested skill is active
         """
-        active_ids = [s[0] for s in self.active_skills]
-        return skill_id in active_ids
+        return any(h.get("skill_id") == skill_id for h in self.active_handlers)
 
     def clear(self):
         """
-        Clear active_skills
+        Clear active_handlers
         """
-        self.active_skills = []
+        self.active_handlers = []
         self.touch()
 
     def serialize(self) -> dict:
         """
         Produce a dictionary representation of the session suitable for JSON serialization.
-        
+
+        The OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1, §2.2 spec fields are
+        emitted following SESSION-1 §2.1 omission-not-null: `active_handlers`,
+        `converse_handlers`, and `response_mode` are present only when non-empty,
+        and are never serialized as JSON `null`.
+
+        The legacy `active_skills` (list of `[skill_id, activated_at]` pairs) and
+        `utterance_states` keys are still emitted, projected from the canonical
+        spec fields, so that ecosystem readers that parse the raw serialized dict
+        keep working.
+
         Returns:
-            dict: A JSON-serializable mapping containing session state with keys:
-                - "active_skills": list of active skills and their timestamps
-                - "utterance_states": mapping of skill_id to utterance state
-                - "session_id": session identifier
-                - "persona_id": associated persona identifier or None
-                - "lang": language code for the session
-                - "context": serialized intent context manager state
-                - "site_id": site identifier
-                - "pipeline": intent processing pipeline identifier
-                - "location": location preference data
-                - "system_unit": measurement system preference
-                - "time_format": preferred time format
-                - "date_format": preferred date format
-                - "is_speaking": boolean indicating if audio output is active
-                - "is_recording": boolean indicating if recording is active
-                - "blacklisted_skills": list of skill IDs that are blacklisted
-                - "blacklisted_intents": list of intent names that are blacklisted
+            dict: A JSON-serializable mapping of session state.
         """
         # safe for json dumping
-        return {
+        data = {
+            # legacy back-compat projections (read by existing ecosystem code)
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
@@ -480,6 +712,14 @@ class Session:
             "blacklisted_skills": self.blacklisted_skills,
             "blacklisted_intents": self.blacklisted_intents
         }
+        # SESSION-1 §2.1: omit-when-empty, never null
+        if self.active_handlers:
+            data["active_handlers"] = self.active_handlers
+        if self.converse_handlers:
+            data["converse_handlers"] = self.converse_handlers
+        if self.response_mode:
+            data["response_mode"] = self.response_mode
+        return data
 
     def update_history(self, message: Message = None):
         """
@@ -502,7 +742,12 @@ class Session:
         """
         uid = data.get("session_id")
         pid = data.get("persona_id")
+        # spec fields (OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1, §2.2) take
+        # precedence over the legacy back-compat keys when present.
+        active_handlers = data.get("active_handlers")
         active = data.get("active_skills") or []
+        converse_handlers = data.get("converse_handlers")
+        response_mode = data.get("response_mode")
         states = data.get("utterance_states") or {}
         lang = data.get("lang")
         context = IntentContextManager.deserialize(data.get("context", {}))
@@ -519,6 +764,9 @@ class Session:
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
+                       active_handlers=active_handlers,
+                       converse_handlers=converse_handlers,
+                       response_mode=response_mode,
                        lang=lang,
                        context=context,
                        pipeline=pipeline,
