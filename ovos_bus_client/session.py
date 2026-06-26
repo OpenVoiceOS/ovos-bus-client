@@ -8,16 +8,14 @@ from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang
+from ovos_spec_tools.session import (Session as _SpecSession,
+                                     DEFAULT_CONVERSE_HANDLERS_CAP)
 from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
     INTENT = "intent"  # includes converse
     RESPONSE = "response"
-
-
-# OVOS-CONVERSE-1 §2.1 default cap for the converse-handler recency stack.
-DEFAULT_CONVERSE_HANDLERS_CAP = 64
 
 
 class IntentContextManagerFrame:
@@ -264,7 +262,31 @@ class IntentContextManager:
         return self._strip_result(result)
 
 
-class Session:
+class Session(_SpecSession):
+    """OVOS-SESSION-1 carrier with the bus-client lifecycle layered on top.
+
+    The wire shape — every OVOS-SESSION-1 §3 / OVOS-PIPELINE-1 §7.1 /
+    OVOS-CONVERSE-1 §2.1, §2.2 field, the omission-not-null serialize rule,
+    the recency / cap / prune handler helpers — is inherited unchanged from
+    :class:`ovos_spec_tools.session.Session`, the canonical reference
+    implementation. This subclass adds only what the spec primitive
+    deliberately omits (it is pure data + stdlib, config-agnostic):
+
+    - **deployment defaults**: a uuid4 ``session_id`` when none is given, the
+      configured ``lang`` / blacklists / ``pipeline`` / converse cap, read
+      from ``ovos-config`` and injected into the parent constructor;
+    - **lifecycle bookkeeping**: ``touch()`` / ``touch_time`` /
+      ``expiration_seconds`` / ``expired()`` and ``SessionManager``
+      registration on every mutation;
+    - **bus-client-only state**: the ``IntentContextManager``, location /
+      unit / format preferences, the speaking / recording flags, the
+      persona id;
+    - **back-compat projections**: the legacy ``active_skills`` /
+      ``utterance_states`` views (and their ``activate_skill`` /
+      ``enable_response_mode`` / ``clear`` shims), plus the legacy
+      ``serialize`` / ``deserialize`` dict shape ecosystem readers expect.
+    """
+
     def __init__(self, session_id: str = None,
                  expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
@@ -306,7 +328,7 @@ class Session:
             response_mode (Dict): OVOS-CONVERSE-1 §2.2 pending-response window — a single {skill_id, expires_at}
                 object, or None when no holder awaits a direct response.
             converse_handlers_cap (int): Maximum length of `converse_handlers` (OVOS-CONVERSE-1 §2.1); defaults
-                to 64. A value <= 0 means "unbounded".
+                to the configured value or 64. A value <= 0 means "unbounded".
             lang (str): Language tag for the session (standardized internally) — defaults to system default.
             context (IntentContextManager): Conversational context manager for the session.
             site_id (str): Identifier for the site/location associated with the session.
@@ -327,48 +349,19 @@ class Session:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         if stt_prefs:
             log_deprecation("'stt_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
-        self.session_id = session_id or str(uuid4())
-        self.blacklisted_skills = (blacklisted_skills or
-                                   Configuration().get("skills", {}).get("blacklisted_skills", []))
-        self.blacklisted_intents = (blacklisted_intents or
-                                    Configuration().get("intents", {}).get("blacklisted_intents", []))
-        self.lang = standardize_lang(lang or get_default_lang())
-        self.system_unit = system_unit or Configuration().get("system_unit", "metric")
-        self.date_format = date_format or Configuration().get("date_format", "DMY")
-        self.time_format = time_format or Configuration().get("time_format", "full")
 
-        self.is_recording = is_recording
-        self.is_speaking = is_speaking
-        self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
-
+        # --- ovos-config deployment defaults the canonical class omits -------
+        session_id = session_id or str(uuid4())
+        blacklisted_skills = (blacklisted_skills or
+                              Configuration().get("skills", {}).get("blacklisted_skills", []))
+        blacklisted_intents = (blacklisted_intents or
+                               Configuration().get("intents", {}).get("blacklisted_intents", []))
+        lang = standardize_lang(lang or get_default_lang())
+        site_id = site_id or Configuration().get("site_id") or "unknown"
         if converse_handlers_cap is None:
             converse_handlers_cap = Configuration().get("converse", {}).get(
                 "max_active_skills", DEFAULT_CONVERSE_HANDLERS_CAP)
-        self.converse_handlers_cap = converse_handlers_cap
-
-        # OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1 / §2.2 spec fields.
-        # `active_handlers` is the canonical dispatch-recency record; the legacy
-        # `active_skills` [skill_id, ts] pairs are a back-compat projection of it.
-        self.active_handlers: List[Dict] = self._coerce_handlers(active_handlers)
-        if not self.active_handlers and active_skills:
-            # back-compat: seed canonical store from the legacy pair shape
-            self.active_skills = active_skills
-        self.converse_handlers: List[Dict] = self._coerce_handlers(converse_handlers)
-        self._cap_handlers(self.converse_handlers)
-        self.response_mode: Optional[Dict] = self._coerce_response_mode(response_mode)
-        if self.response_mode is None and utterance_states:
-            # back-compat: a legacy {skill_id: "response"} entry becomes a holder.
-            # Set directly (no touch()) — SessionManager is not ready during __init__.
-            ttl = Configuration().get("converse", {}).get("response_timeout", 300)
-            for skill_id, state in utterance_states.items():
-                if state == UtteranceState.RESPONSE.value:
-                    self.response_mode = {"skill_id": skill_id,
-                                          "expires_at": time.time() + ttl}
-
-        self.touch_time = int(time.time())
-        self.expiration_seconds = expiration_seconds or \
-                                  Configuration().get('session', {}).get("ttl", -1)
-        self.pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
+        pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
             "stop_high",
             "converse",
             "padatious_high",
@@ -382,8 +375,41 @@ class Session:
             "fallback_medium",
             "fallback_low"
         ]
-        self.context = context or IntentContextManager()
 
+        # back-compat: seed the canonical active_handlers store from the legacy
+        # active_skills [skill_id, ts] pair shape when no spec field was given.
+        if not active_handlers and active_skills:
+            active_handlers = active_skills  # parent _coerce_handlers accepts pairs
+        # back-compat: a legacy {skill_id: "response"} entry becomes a holder.
+        if response_mode is None and utterance_states:
+            ttl = Configuration().get("converse", {}).get("response_timeout", 300)
+            for skill_id, state in utterance_states.items():
+                if state == UtteranceState.RESPONSE.value:
+                    response_mode = {"skill_id": skill_id,
+                                     "expires_at": time.time() + ttl}
+
+        # --- canonical SESSION-1 fields / helpers (inherited) ----------------
+        super().__init__(session_id=session_id,
+                         lang=lang,
+                         site_id=site_id,
+                         pipeline=pipeline,
+                         blacklisted_skills=blacklisted_skills,
+                         blacklisted_intents=blacklisted_intents,
+                         active_handlers=active_handlers,
+                         converse_handlers=converse_handlers,
+                         response_mode=response_mode,
+                         converse_handlers_cap=converse_handlers_cap)
+
+        # --- bus-client-only state the canonical class does not carry --------
+        self.system_unit = system_unit or Configuration().get("system_unit", "metric")
+        self.date_format = date_format or Configuration().get("date_format", "DMY")
+        self.time_format = time_format or Configuration().get("time_format", "full")
+        self.is_recording = is_recording
+        self.is_speaking = is_speaking
+        self.touch_time = int(time.time())
+        self.expiration_seconds = expiration_seconds or \
+                                  Configuration().get('session', {}).get("ttl", -1)
+        self.context = context or IntentContextManager()
         self.location_preferences = location_prefs or Configuration().get("location", {})
         self.persona_id = persona_id
 
@@ -391,175 +417,44 @@ class Session:
     def timezone(self) -> Optional[str]:
         """
         Return the session's configured timezone code.
-        
+
         Returns:
             timezone_code (Optional[str]): Timezone identifier like 'America/Los_Angeles' if set in location preferences, `None` otherwise.
         """
         return self.location_preferences.get('timezone', {}).get('code')
 
-    @property
-    def active(self) -> bool:
-        """
-        Return true if any skills attached to this session are active.
-        NOTE: skills without converse implemented never get added here unless
-        using get_response
-        """
-        return len(self.active_handlers) > 0
-
     # ------------------------------------------------------------------
-    # OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1 / §2.2 handler-list helpers
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _coerce_handlers(handlers: Optional[List[Dict]]) -> List[Dict]:
-        """
-        Normalize a handler list into the spec `{skill_id, activated_at}` object shape.
-
-        Accepts either the spec object shape (list of dicts) or the legacy
-        `[skill_id, activated_at]` pair shape (for back-compat deserialization).
-        Entries are deduplicated by `skill_id` (head wins) and kept head-first.
-        """
-        out: List[Dict] = []
-        seen = set()
-        for entry in handlers or []:
-            if isinstance(entry, dict):
-                skill_id = entry.get("skill_id")
-                activated_at = entry.get("activated_at", time.time())
-            elif isinstance(entry, (list, tuple)) and entry:
-                skill_id = entry[0]
-                activated_at = entry[1] if len(entry) > 1 else time.time()
-            else:
-                continue
-            if not skill_id or skill_id in seen:
-                continue
-            seen.add(skill_id)
-            out.append({"skill_id": skill_id, "activated_at": activated_at})
-        return out
-
-    @staticmethod
-    def _coerce_response_mode(response_mode: Optional[Dict]) -> Optional[Dict]:
-        """
-        Normalize a response_mode value into the spec `{skill_id, expires_at}` shape,
-        or None when there is no holder. Malformed values resolve to None (SESSION-1 §2.1).
-        """
-        if not isinstance(response_mode, dict):
-            return None
-        skill_id = response_mode.get("skill_id")
-        if not skill_id:
-            return None
-        return {"skill_id": skill_id,
-                "expires_at": response_mode.get("expires_at", -1)}
-
-    @staticmethod
-    def _promote_handler(handlers: List[Dict], skill_id: str,
-                         activated_at: Optional[float] = None) -> List[Dict]:
-        """
-        Dedup-and-promote `skill_id` to the head of `handlers` (in place).
-
-        Removes any existing entry with the same `skill_id` then inserts a fresh
-        `{skill_id, activated_at}` at index 0 — the recency-stack rule shared by
-        OVOS-PIPELINE-1 §7.1 and OVOS-CONVERSE-1 §3.1.
-        """
-        if activated_at is None:
-            activated_at = time.time()
-        handlers[:] = [h for h in handlers if h.get("skill_id") != skill_id]
-        handlers.insert(0, {"skill_id": skill_id, "activated_at": activated_at})
-        return handlers
-
-    def _cap_handlers(self, handlers: List[Dict]) -> List[Dict]:
-        """
-        Tail-drop `handlers` down to `self.converse_handlers_cap` entries (in place).
-
-        A cap <= 0 means "unbounded" (OVOS-CONVERSE-1 §2.1). The least-recent
-        surviving owners (the tail) are dropped.
-        """
-        cap = self.converse_handlers_cap
-        if cap and cap > 0 and len(handlers) > cap:
-            del handlers[cap:]
-        return handlers
-
-    # ------------------------------------------------------------------
-    # active_handlers (OVOS-PIPELINE-1 §7.1)
+    # touch() on mutation — lifecycle bookkeeping the canonical class omits.
+    # Thin overrides: delegate to super(), then register the change.
     # ------------------------------------------------------------------
     def add_active_handler(self, skill_id: str,
                            activated_at: Optional[float] = None):
-        """
-        Push a handler onto `active_handlers`, dedup-and-promoting it to the head.
-
-        OVOS-PIPELINE-1 §7.1: the orchestrator pushes
-        `{skill_id, activated_at}`, evicting any prior entry with the same
-        `skill_id`. The list is head-first by recency.
-        """
-        self._promote_handler(self.active_handlers, skill_id, activated_at)
+        super().add_active_handler(skill_id, activated_at)
         self.touch()
 
     def remove_active_handler(self, skill_id: str):
-        """Remove `skill_id` from `active_handlers` (e.g. STOP-1 drain)."""
-        self.active_handlers[:] = [h for h in self.active_handlers
-                                   if h.get("skill_id") != skill_id]
+        super().remove_active_handler(skill_id)
         self.touch()
 
-    # ------------------------------------------------------------------
-    # converse_handlers (OVOS-CONVERSE-1 §2.1)
-    # ------------------------------------------------------------------
     def add_converse_handler(self, skill_id: str,
                              activated_at: Optional[float] = None):
-        """
-        Stamp a handler onto `converse_handlers`, dedup-promote to head, tail-drop at cap.
-
-        OVOS-CONVERSE-1 §3.1: remove any existing entry for `skill_id`, insert a
-        fresh `{skill_id, activated_at}` at index 0, then drop the tail if the §2.1
-        cap is exceeded.
-        """
-        self._promote_handler(self.converse_handlers, skill_id, activated_at)
-        self._cap_handlers(self.converse_handlers)
+        super().add_converse_handler(skill_id, activated_at)
         self.touch()
 
     def remove_converse_handler(self, skill_id: str):
-        """Remove `skill_id` from `converse_handlers`."""
-        self.converse_handlers[:] = [h for h in self.converse_handlers
-                                     if h.get("skill_id") != skill_id]
+        super().remove_converse_handler(skill_id)
         self.touch()
 
     def prune_converse_handlers(self, ttl: float, now: Optional[float] = None):
-        """
-        Drop `converse_handlers` entries older than `ttl` seconds (OVOS-CONVERSE-1 §3.2).
+        super().prune_converse_handlers(ttl, now)
+        self.touch()
 
-        A caller (the orchestrator) invokes this at the pre-converse and
-        pre-list-emission boundaries. `now - activated_at > ttl` is dropped. A
-        non-positive `ttl` disables time-based pruning.
-        """
-        if not ttl or ttl <= 0:
-            return
-        now = now if now is not None else time.time()
-        self.converse_handlers[:] = [
-            h for h in self.converse_handlers
-            if now - h.get("activated_at", now) <= ttl
-        ]
-
-    # ------------------------------------------------------------------
-    # response_mode (OVOS-CONVERSE-1 §2.2) — single-holder
-    # ------------------------------------------------------------------
     def set_response_mode(self, skill_id: str, expires_at: float):
-        """
-        Set the single-holder response window (OVOS-CONVERSE-1 §2.2).
-
-        Overwrites any existing holder silently (single-holder invariant).
-        """
-        self.response_mode = {"skill_id": skill_id, "expires_at": expires_at}
+        super().set_response_mode(skill_id, expires_at)
         self.touch()
 
     def clear_response_mode(self, skill_id: Optional[str] = None):
-        """
-        Clear the response window.
-
-        When `skill_id` is given, only clears it if that skill currently holds the
-        window (avoids one skill clearing another's hold); otherwise clears
-        unconditionally.
-        """
-        if self.response_mode is None:
-            return
-        if skill_id is None or self.response_mode.get("skill_id") == skill_id:
-            self.response_mode = None
+        super().clear_response_mode(skill_id)
         self.touch()
 
     # ------------------------------------------------------------------
@@ -679,46 +574,42 @@ class Session:
         """
         Produce a dictionary representation of the session suitable for JSON serialization.
 
-        The OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1, §2.2 spec fields are
-        emitted following SESSION-1 §2.1 omission-not-null: `active_handlers`,
+        The OVOS-SESSION-1 §3 spec fields (including the OVOS-PIPELINE-1 §7.1 /
+        OVOS-CONVERSE-1 §2.1, §2.2 handler fields) are emitted by the canonical
+        parent following SESSION-1 §2.1 omission-not-null: `active_handlers`,
         `converse_handlers`, and `response_mode` are present only when non-empty,
         and are never serialized as JSON `null`.
 
-        The legacy `active_skills` (list of `[skill_id, activated_at]` pairs) and
-        `utterance_states` keys are still emitted, projected from the canonical
-        spec fields, so that ecosystem readers that parse the raw serialized dict
-        keep working.
+        On top of the parent's wire dict this layers the legacy
+        `active_skills` (list of `[skill_id, activated_at]` pairs),
+        `utterance_states`, `context`, and `location` keys (plus the
+        bus-client-only preference / flag fields), projected from the canonical
+        state, so that ecosystem readers parsing the raw serialized dict keep
+        working.
 
         Returns:
             dict: A JSON-serializable mapping of session state.
         """
-        # safe for json dumping
-        data = {
-            # legacy back-compat projections (read by existing ecosystem code)
+        # canonical SESSION-1 wire shape (spec fields, omit-when-empty)
+        data = super().to_dict()
+        # legacy back-compat projections + bus-client-only state
+        data.update({
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
             "persona_id": self.persona_id,
-            "lang": self.lang,
             "context": self.context.serialize(),
-            "site_id": self.site_id,
-            "pipeline": self.pipeline,
             "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
             "date_format": self.date_format,
             "is_speaking": self.is_speaking,
             "is_recording": self.is_recording,
-            "blacklisted_skills": self.blacklisted_skills,
-            "blacklisted_intents": self.blacklisted_intents
-        }
-        # SESSION-1 §2.1: omit-when-empty, never null
-        if self.active_handlers:
-            data["active_handlers"] = self.active_handlers
-        if self.converse_handlers:
-            data["converse_handlers"] = self.converse_handlers
-        if self.response_mode:
-            data["response_mode"] = self.response_mode
+            # always emit raw lists for legacy readers (canonical omits when empty)
+            "blacklisted_skills": self.blacklisted_skills or [],
+            "blacklisted_intents": self.blacklisted_intents or [],
+            "pipeline": self.pipeline or [],
+        })
         return data
 
     def update_history(self, message: Message = None):
@@ -733,10 +624,10 @@ class Session:
     def deserialize(data: Dict):
         """
         Construct a Session object from a serialized session dictionary.
-        
+
         Parameters:
             data (dict): Serialized session data as produced by Session.serialize().
-        
+
         Returns:
             Session: A Session instance reconstructed from the provided data.
         """

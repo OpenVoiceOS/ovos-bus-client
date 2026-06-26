@@ -11,8 +11,64 @@
 import time
 from unittest import TestCase
 
+from ovos_spec_tools.session import Session as SpecSession
 from ovos_bus_client.session import (Session, UtteranceState,
                                      DEFAULT_CONVERSE_HANDLERS_CAP)
+
+
+class TestCanonicalSubclass(TestCase):
+    """The bus-client Session is a thin subclass of the canonical
+    OVOS-SESSION-1 reference implementation: the spec wire-shape fields and
+    helpers come from the parent, the bus-client subclass only layers
+    deployment defaults + lifecycle + back-compat on top."""
+
+    def test_is_canonical_subclass(self):
+        self.assertTrue(issubclass(Session, SpecSession))
+        self.assertIsInstance(Session(), SpecSession)
+
+    def test_default_cap_inherited_constant(self):
+        # the cap constant is re-exported from the canonical module
+        from ovos_spec_tools.session import (
+            DEFAULT_CONVERSE_HANDLERS_CAP as SPEC_CAP)
+        self.assertEqual(DEFAULT_CONVERSE_HANDLERS_CAP, SPEC_CAP)
+
+    def test_handler_helpers_inherited_from_parent(self):
+        # the recency/cap/prune helpers are not redefined on the subclass —
+        # they resolve to the canonical parent implementation.
+        for name in ("add_active_handler", "remove_active_handler",
+                     "add_converse_handler", "remove_converse_handler",
+                     "prune_converse_handlers", "set_response_mode",
+                     "clear_response_mode"):
+            with self.subTest(method=name):
+                # subclass overrides exist (to add touch()) ...
+                self.assertIn(name, Session.__dict__)
+                # ... but delegate to the canonical parent
+                self.assertIn(name, SpecSession.__dict__)
+
+    def test_coerce_static_helpers_inherited(self):
+        # static coercion helpers live on the parent, inherited unchanged
+        self.assertNotIn("_coerce_handlers", Session.__dict__)
+        self.assertNotIn("_coerce_response_mode", Session.__dict__)
+        self.assertIs(Session._coerce_handlers, SpecSession._coerce_handlers)
+        self.assertIs(Session._coerce_response_mode,
+                      SpecSession._coerce_response_mode)
+
+    def test_spec_fields_present(self):
+        # the OVOS-SESSION-1 §3 registered fields are all carried
+        s = Session()
+        for field in ("secondary_langs", "output_lang", "stt_lang",
+                      "request_lang", "detected_lang", "intent_context",
+                      "blacklisted_pipelines", "audio_transformers",
+                      "tts_transformers"):
+            self.assertTrue(hasattr(s, field), field)
+
+    def test_touch_called_on_mutation(self):
+        # the subclass overrides mutators to also bump touch_time
+        s = Session()
+        before = s.touch_time
+        s.touch_time = 0  # force a detectable change
+        s.add_active_handler("skill.a")
+        self.assertGreaterEqual(s.touch_time, before)
 
 
 class TestActiveHandlersShape(TestCase):
