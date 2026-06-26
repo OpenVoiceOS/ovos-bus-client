@@ -11,4 +11,6 @@ jobs:
     with:
       python_versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
       install_extras: 'test'
+      # in-flight cross-dep: spec-tools fallback_handlers (PR #45) not yet published
+      pre_install_pip: 'git+https://github.com/OpenVoiceOS/ovos-spec-tools@fix/session-fallback-handlers'
       test_path: 'test/unittests'
