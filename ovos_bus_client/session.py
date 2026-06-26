@@ -1,7 +1,7 @@
 import enum
 import time
 from threading import Lock, Event
-from typing import Optional, List, Tuple, Union, Iterable, Dict
+from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
 
 from ovos_config.config import Configuration
@@ -372,8 +372,10 @@ class Session(_SpecSession):
 
         # back-compat: seed the canonical active_handlers store from the legacy
         # active_skills [skill_id, ts] pair shape when no spec field was given.
+        # The parent _coerce_handlers only accepts the spec {skill_id,
+        # activated_at} object shape, so translate the legacy pairs here.
         if not active_handlers and active_skills:
-            active_handlers = active_skills  # parent _coerce_handlers accepts pairs
+            active_handlers = self._pairs_to_handler_objects(active_skills)
         # back-compat: a legacy {skill_id: "response"} entry becomes a holder.
         if response_mode is None and utterance_states:
             ttl = Configuration().get("converse", {}).get("response_timeout", 300)
@@ -474,7 +476,33 @@ class Session(_SpecSession):
     @active_skills.setter
     def active_skills(self, value: Optional[List[List[Union[str, float]]]]):
         """Assigning legacy pairs rewrites the canonical `active_handlers` store."""
-        self.active_handlers = self._coerce_handlers(value)
+        self.active_handlers = self._coerce_handlers(
+            self._pairs_to_handler_objects(value))
+
+    @staticmethod
+    def _pairs_to_handler_objects(value) -> List[Dict[str, Any]]:
+        """Translate the legacy active_skills shapes into spec handler objects.
+
+        The canonical `_coerce_handlers` (OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1
+        §2.1) accepts only `{skill_id, activated_at}` objects. Legacy callers
+        still hand a `[skill_id, activated_at]` pair (or a bare `skill_id`
+        string); map those to the object shape here, at the bus-client
+        boundary, and pass anything already in object shape straight through so
+        the parent stays the single normalizer/validator.
+        """
+        out: List[Dict[str, Any]] = []
+        for entry in value or []:
+            if isinstance(entry, dict):
+                out.append(entry)
+            elif isinstance(entry, str):
+                out.append({"skill_id": entry, "activated_at": None})
+            elif isinstance(entry, (list, tuple)) and entry:
+                skill_id = entry[0]
+                activated_at = entry[1] if len(entry) > 1 else None
+                out.append({"skill_id": skill_id, "activated_at": activated_at})
+            else:
+                out.append(entry)
+        return out
 
     @property
     def utterance_states(self) -> Dict:
@@ -634,7 +662,9 @@ class Session(_SpecSession):
         # spec fields (OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1, §2.2) take
         # precedence over the legacy back-compat keys when present.
         active_handlers = data.get("active_handlers")
-        active = data.get("active_skills") or []
+        # legacy wire shape carries active_skills as [skill_id, ts] pairs; map
+        # them to the spec handler objects the constructor/parent expect.
+        active = Session._pairs_to_handler_objects(data.get("active_skills") or [])
         converse_handlers = data.get("converse_handlers")
         response_mode = data.get("response_mode")
         states = data.get("utterance_states") or {}
