@@ -279,8 +279,7 @@ class Session(_SpecSession):
       ``expiration_seconds`` / ``expired()`` and ``SessionManager``
       registration on every mutation;
     - **bus-client-only state**: the ``IntentContextManager``, location /
-      unit / format preferences, the speaking / recording flags, the
-      persona id;
+      unit / format preferences, the speaking / recording flags;
     - **back-compat projections**: the legacy ``active_skills`` /
       ``utterance_states`` views (and their ``activate_skill`` /
       ``enable_response_mode`` / ``clear`` shims), plus the legacy
@@ -308,7 +307,8 @@ class Session(_SpecSession):
                  is_recording: bool = False,
                  blacklisted_intents: Optional[List[str]] = None,
                  blacklisted_skills: Optional[List[str]] = None,
-                 persona_id: Optional[str] = None):
+                 persona_id: Optional[str] = None,
+                 fallback_handlers: Optional[List[str]] = None):
         """
         Create a new Session with identifiers, preferences, state flags, and conversational context.
 
@@ -341,6 +341,8 @@ class Session(_SpecSession):
             blacklisted_intents (Optional[List[str]]): Intents to ignore for this session.
             blacklisted_skills (Optional[List[str]]): Skills to ignore for this session.
             persona_id (Optional[str]): Optional persona identifier associated with this session.
+            fallback_handlers (Optional[List[str]]): OVOS-FALLBACK-1 §4 registered session field —
+                ordered skill-id strings. Inherited canonical field; forwarded to the parent.
         """
         if tts_prefs:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
@@ -393,7 +395,9 @@ class Session(_SpecSession):
                          blacklisted_intents=blacklisted_intents,
                          active_handlers=active_handlers,
                          converse_handlers=converse_handlers,
-                         response_mode=response_mode)
+                         response_mode=response_mode,
+                         persona_id=persona_id,
+                         fallback_handlers=fallback_handlers)
 
         # --- bus-client-only state the canonical class does not carry --------
         self.system_unit = system_unit or Configuration().get("system_unit", "metric")
@@ -406,7 +410,9 @@ class Session(_SpecSession):
                                   Configuration().get('session', {}).get("ttl", -1)
         self.context = context or IntentContextManager()
         self.location_preferences = location_prefs or Configuration().get("location", {})
-        self.persona_id = persona_id
+        # persona_id is an inherited canonical field (OVOS-PERSONA-1, registered
+        # on ovos_spec_tools.Session); it is forwarded to super().__init__ above
+        # so the parent owns its validation + omit-when-empty serialization.
 
     @property
     def timezone(self) -> Optional[str]:
@@ -619,11 +625,13 @@ class Session(_SpecSession):
         # canonical SESSION-1 wire shape (spec fields, omit-when-empty)
         data = super().to_dict()
         # legacy back-compat projections + bus-client-only state
+        # NOTE: persona_id is a canonical inherited field — the parent's
+        # to_dict() above already emits it with SESSION-1 §2.1 omit-when-empty
+        # handling, so it is intentionally NOT re-emitted here.
         data.update({
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
-            "persona_id": self.persona_id,
             "context": self.context.serialize(),
             "location": self.location_preferences,
             "system_unit": self.system_unit,
@@ -659,6 +667,7 @@ class Session(_SpecSession):
         """
         uid = data.get("session_id")
         pid = data.get("persona_id")
+        fallback_handlers = data.get("fallback_handlers")
         # spec fields (OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1, §2.2) take
         # precedence over the legacy back-compat keys when present.
         active_handlers = data.get("active_handlers")
@@ -691,6 +700,7 @@ class Session(_SpecSession):
                        pipeline=pipeline,
                        site_id=site_id,
                        persona_id=pid,
+                       fallback_handlers=fallback_handlers,
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,

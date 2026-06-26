@@ -313,3 +313,44 @@ class TestActiveSkillsBackCompat(TestCase):
         s = Session.deserialize(data)
         self.assertIsNotNone(s.response_mode)
         self.assertEqual(s.response_mode["skill_id"], "skill.a")
+
+
+class TestInheritedCanonicalScalarFields(TestCase):
+    """persona_id (OVOS-PERSONA-1) and fallback_handlers (OVOS-FALLBACK-1 §4)
+    are inherited canonical fields: the subclass forwards them to
+    ``super().__init__`` so the parent owns validation + omit-when-empty,
+    instead of re-declaring / re-emitting them."""
+
+    def test_persona_id_forwarded_to_parent(self):
+        s = Session("sid", persona_id="assistant")
+        self.assertEqual(s.persona_id, "assistant")
+
+    def test_persona_id_round_trip(self):
+        s = Session("sid", persona_id="assistant")
+        back = Session.deserialize(s.serialize())
+        self.assertEqual(back.persona_id, "assistant")
+
+    def test_persona_id_omitted_from_canonical_dict_when_none(self):
+        # parent to_dict() honours SESSION-1 §2.1 omit-when-empty
+        s = Session("sid")
+        self.assertIsNone(s.persona_id)
+        self.assertNotIn("persona_id", SpecSession.to_dict(s))
+
+    def test_fallback_handlers_forwarded_to_parent(self):
+        s = Session("sid", fallback_handlers=["skill.a", "skill.b"])
+        self.assertEqual(s.fallback_handlers, ["skill.a", "skill.b"])
+
+    def test_fallback_handlers_round_trip(self):
+        s = Session("sid", fallback_handlers=["skill.a", "skill.b"])
+        back = Session.deserialize(s.serialize())
+        self.assertEqual(back.fallback_handlers, ["skill.a", "skill.b"])
+
+    def test_fallback_handlers_omitted_when_empty(self):
+        # §3.4 empty-list ≡ omission; parent to_dict() drops it
+        s = Session("sid")
+        self.assertIsNone(s.fallback_handlers)
+        self.assertNotIn("fallback_handlers", SpecSession.to_dict(s))
+
+    def test_fallback_handlers_is_inherited_not_overridden(self):
+        # the field is carried by the canonical parent, not redeclared here
+        self.assertIn("fallback_handlers", SpecSession().__init__.__code__.co_varnames)
