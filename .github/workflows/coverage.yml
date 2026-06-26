@@ -13,7 +13,8 @@ jobs:
       coverage_source: 'ovos_bus_client'
       test_path: 'test/unittests'
       install_extras: '-e .[test]'
-      pre_install_pip: 'git+https://github.com/OpenVoiceOS/ovos-spec-tools@fix/session-fallback-handlers'
+      # in-flight cross-dep: spec-tools translate_payload (PR #42) not yet published
+      pre_install_pip: 'git+https://github.com/OpenVoiceOS/ovos-spec-tools@fix/conformance-message'
       # Floor matches what pytest --cov reports in CI. Real coverage measured
       # via `coverage run -m pytest && coverage report` is ~93%; pytest-cov
       # under-reports module-import lines because the cov plugin starts after
