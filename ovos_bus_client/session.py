@@ -9,7 +9,8 @@ from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang
 from ovos_spec_tools.session import (Session as _SpecSession,
-                                     DEFAULT_CONVERSE_HANDLERS_CAP)
+                                     DEFAULT_CONVERSE_HANDLERS_CAP,
+                                     SESSION1_REGISTERED_FIELDS)
 from ovos_bus_client.message import dig_for_message, Message
 
 
@@ -308,7 +309,8 @@ class Session(_SpecSession):
                  blacklisted_intents: Optional[List[str]] = None,
                  blacklisted_skills: Optional[List[str]] = None,
                  persona_id: Optional[str] = None,
-                 fallback_handlers: Optional[List[str]] = None):
+                 fallback_handlers: Optional[List[str]] = None,
+                 **canonical_kwargs):
         """
         Create a new Session with identifiers, preferences, state flags, and conversational context.
 
@@ -343,6 +345,14 @@ class Session(_SpecSession):
             persona_id (Optional[str]): Optional persona identifier associated with this session.
             fallback_handlers (Optional[List[str]]): OVOS-FALLBACK-1 §4 registered session field —
                 ordered skill-id strings. Inherited canonical field; forwarded to the parent.
+            **canonical_kwargs: Every remaining canonical ``ovos_spec_tools.Session``
+                SESSION-1 field — ``secondary_langs``, ``output_lang``, ``stt_lang``,
+                ``request_lang``, ``detected_lang``, ``intent_context``,
+                ``blacklisted_pipelines``, the six ``*_transformers`` lists, the six
+                ``blacklisted_*_transformers`` lists, and ``extras`` — is accepted here
+                and forwarded verbatim to the parent so the full registered field set
+                round-trips. Unknown keys raise (the parent ``__init__`` rejects them),
+                preserving the typo-catching contract.
         """
         if tts_prefs:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
@@ -387,6 +397,11 @@ class Session(_SpecSession):
                                      "expires_at": time.time() + ttl}
 
         # --- canonical SESSION-1 fields / helpers (inherited) ----------------
+        # Every registered field is forwarded to the canonical parent so the
+        # whole SESSION-1 §3 surface round-trips. The explicitly-named params
+        # above are the ones bus-client applies deployment defaults to (or that
+        # have legacy back-compat aliases / dedicated docs); the rest arrive via
+        # canonical_kwargs and pass straight through.
         super().__init__(session_id=session_id,
                          lang=lang,
                          site_id=site_id,
@@ -397,7 +412,8 @@ class Session(_SpecSession):
                          converse_handlers=converse_handlers,
                          response_mode=response_mode,
                          persona_id=persona_id,
-                         fallback_handlers=fallback_handlers)
+                         fallback_handlers=fallback_handlers,
+                         **canonical_kwargs)
 
         # --- bus-client-only state the canonical class does not carry --------
         self.system_unit = system_unit or Configuration().get("system_unit", "metric")
@@ -659,48 +675,76 @@ class Session(_SpecSession):
         """
         Construct a Session object from a serialized session dictionary.
 
+        Every canonical OVOS-SESSION-1 §3 field is restored by delegating field
+        extraction to the canonical parser (``_SpecSession.from_dict`` then reading
+        the populated attributes), so the full registered field set —
+        ``secondary_langs``, the per-channel language overrides, the six
+        ``*_transformers`` lists, the six ``blacklisted_*_transformers`` lists,
+        ``blacklisted_pipelines``, ``intent_context``, ``fallback_handlers``,
+        ``persona_id``, … — round-trips rather than a hand-enumerated subset. On
+        top of the canonical kwargs this overlays the bus-client-only state
+        (``context``, ``location``, unit/format prefs, the speaking / recording
+        flags) and the legacy back-compat aliases (``active_skills`` /
+        ``utterance_states``).
+
         Parameters:
             data (dict): Serialized session data as produced by Session.serialize().
 
         Returns:
             Session: A Session instance reconstructed from the provided data.
         """
-        uid = data.get("session_id")
-        pid = data.get("persona_id")
-        fallback_handlers = data.get("fallback_handlers")
-        # spec fields (OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1, §2.2) take
-        # precedence over the legacy back-compat keys when present.
-        active_handlers = data.get("active_handlers")
-        # legacy wire shape carries active_skills as [skill_id, ts] pairs; map
-        # them to the spec handler objects the constructor/parent expect.
+        data = data or {}
+        # Delegate canonical field extraction to the parent: from_dict() applies
+        # the SESSION-1 §2 parsing rules (null-as-omitted, unknown→extras). Read
+        # the recognised registered fields back off the populated instance — this
+        # is the single source of truth for which keys are canonical, so adding a
+        # field to the spec needs no edit here. Reading attributes (not to_dict())
+        # avoids re-absorbing the bus-client-only overlay keys, which from_dict()
+        # routes into `extras`. Empty lists / None are dropped (matching
+        # to_dict()'s omit-when-empty rule): an empty active_handlers[] must NOT
+        # be forwarded, or it would block the legacy active_skills back-compat
+        # seeding in __init__.
+        _canon = _SpecSession.from_dict(data)
+        canonical_kwargs = {name: getattr(_canon, name)
+                            for name in SESSION1_REGISTERED_FIELDS
+                            if getattr(_canon, name)}
+        # session_id / lang / site_id / pipeline / blacklisted_* are explicit
+        # bus-client params (they carry deployment defaults); pull them out of the
+        # canonical bag so they are not also passed via **canonical_kwargs.
+        uid = canonical_kwargs.pop("session_id", None)
+        lang = canonical_kwargs.pop("lang", None)
+        site_id = canonical_kwargs.pop("site_id", "unknown")
+        pipeline = canonical_kwargs.pop("pipeline", [])
+        blacklisted_skills = canonical_kwargs.pop("blacklisted_skills", [])
+        blacklisted_intents = canonical_kwargs.pop("blacklisted_intents", [])
+
+        # legacy back-compat aliases — only seed the canonical handler/response
+        # stores from these when the canonical keys were absent. Legacy wire shape
+        # carries active_skills as [skill_id, ts] pairs; map them to spec handler
+        # objects the constructor expects.
         active = Session._pairs_to_handler_objects(data.get("active_skills") or [])
-        converse_handlers = data.get("converse_handlers")
-        response_mode = data.get("response_mode")
         states = data.get("utterance_states") or {}
-        lang = data.get("lang")
+        if "active_handlers" in canonical_kwargs:
+            active = []  # canonical field wins over the legacy alias
+        if "response_mode" in canonical_kwargs:
+            states = {}
+
+        # bus-client-only state the canonical class does not carry.
         context = IntentContextManager.deserialize(data.get("context", {}))
-        site_id = data.get("site_id", "unknown")
-        pipeline = data.get("pipeline", [])
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
         time_format = data.get("time_format")
         is_recording = data.get("is_recording", False)
         is_speaking = data.get("is_speaking", False)
-        blacklisted_skills = data.get("blacklisted_skills", [])
-        blacklisted_intents = data.get("blacklisted_intents", [])
+
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
-                       active_handlers=active_handlers,
-                       converse_handlers=converse_handlers,
-                       response_mode=response_mode,
                        lang=lang,
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id,
-                       persona_id=pid,
-                       fallback_handlers=fallback_handlers,
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,
@@ -708,7 +752,8 @@ class Session(_SpecSession):
                        is_recording=is_recording,
                        is_speaking=is_speaking,
                        blacklisted_intents=blacklisted_intents,
-                       blacklisted_skills=blacklisted_skills)
+                       blacklisted_skills=blacklisted_skills,
+                       **canonical_kwargs)
 
     @staticmethod
     def from_message(message: Message = None):

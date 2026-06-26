@@ -354,3 +354,99 @@ class TestInheritedCanonicalScalarFields(TestCase):
     def test_fallback_handlers_is_inherited_not_overridden(self):
         # the field is carried by the canonical parent, not redeclared here
         self.assertIn("fallback_handlers", SpecSession().__init__.__code__.co_varnames)
+
+
+class TestFullCanonicalRoundTrip(TestCase):
+    """SESSION-1 conformance: EVERY canonical registered field must survive a
+    serialize -> deserialize cycle through the bus-client Session subclass.
+
+    Regression guard: the subclass previously hand-enumerated only a subset of
+    canonical fields in __init__/deserialize, silently dropping ~20 of them
+    (secondary_langs, the per-channel language overrides, the 6 *_transformers
+    lists, the 6 blacklisted_*_transformers lists, blacklisted_pipelines,
+    intent_context, ...). This asserts the full set round-trips."""
+
+    def _populated_session(self):
+        # a NON-default value on every canonical field. secondary_langs MUST NOT
+        # contain `lang` (§3.2.2), so keep them disjoint.
+        return Session(
+            session_id="sid-full",
+            lang="en-US",
+            secondary_langs=["pt-PT", "es-ES"],
+            output_lang="fr-FR",
+            stt_lang="de-DE",
+            request_lang="it-IT",
+            detected_lang="nl-NL",
+            site_id="siteX",
+            pipeline=["stop_high", "converse"],
+            intent_context={"k": "v"},
+            blacklisted_skills=["bs.skill"],
+            blacklisted_intents=["bi.intent"],
+            blacklisted_pipelines=["bp.pipe"],
+            audio_transformers=["at1"],
+            utterance_transformers=["ut1"],
+            metadata_transformers=["mt1"],
+            intent_transformers=["it1"],
+            dialog_transformers=["dt1"],
+            tts_transformers=["tt1"],
+            blacklisted_audio_transformers=["bat1"],
+            blacklisted_utterance_transformers=["but1"],
+            blacklisted_metadata_transformers=["bmt1"],
+            blacklisted_intent_transformers=["bit1"],
+            blacklisted_dialog_transformers=["bdt1"],
+            blacklisted_tts_transformers=["btt1"],
+            fallback_handlers=["fb.skill"],
+            active_handlers=[{"skill_id": "ah.skill", "activated_at": 1.0}],
+            converse_handlers=[{"skill_id": "ch.skill", "activated_at": 2.0}],
+            response_mode={"skill_id": "rm.skill", "expires_at": 9.0},
+            persona_id="persona-1",
+        )
+
+    # the complete canonical field set asserted equal post round-trip
+    CANONICAL_FIELDS = (
+        "session_id", "lang", "secondary_langs", "output_lang", "stt_lang",
+        "request_lang", "detected_lang", "site_id", "pipeline", "intent_context",
+        "blacklisted_skills", "blacklisted_intents", "blacklisted_pipelines",
+        "audio_transformers", "utterance_transformers", "metadata_transformers",
+        "intent_transformers", "dialog_transformers", "tts_transformers",
+        "blacklisted_audio_transformers", "blacklisted_utterance_transformers",
+        "blacklisted_metadata_transformers", "blacklisted_intent_transformers",
+        "blacklisted_dialog_transformers", "blacklisted_tts_transformers",
+        "fallback_handlers", "active_handlers", "converse_handlers",
+        "response_mode", "persona_id",
+    )
+
+    def test_constructor_accepts_every_canonical_field(self):
+        # the bug: Session(secondary_langs=[...]) raised TypeError. Building a
+        # fully-populated session must not raise and must store every field.
+        s = self._populated_session()
+        for field in self.CANONICAL_FIELDS:
+            with self.subTest(field=field):
+                self.assertTrue(getattr(s, field),
+                                f"{field} was not stored on the instance")
+
+    def test_every_canonical_field_round_trips(self):
+        s = self._populated_session()
+        back = Session.deserialize(s.serialize())
+        for field in self.CANONICAL_FIELDS:
+            with self.subTest(field=field):
+                self.assertEqual(getattr(back, field), getattr(s, field),
+                                 f"{field} did not survive the round-trip")
+
+    def test_no_registered_field_left_behind(self):
+        # cross-check against the spec registry: every SESSION1 registered field
+        # is present in CANONICAL_FIELDS (so this guard can't silently rot).
+        from ovos_spec_tools.session import SESSION1_REGISTERED_FIELDS
+        self.assertEqual(set(SESSION1_REGISTERED_FIELDS),
+                         set(self.CANONICAL_FIELDS))
+
+    def test_backcompat_still_round_trips_alongside(self):
+        # the legacy active_skills / utterance_states aliases keep working after
+        # the forward-all refactor.
+        s = Session("sid-bc")
+        s.active_skills = [["legacy.a", 1.0], ["legacy.b", 2.0]]
+        s.enable_response_mode("resp.skill")
+        back = Session.deserialize(s.serialize())
+        self.assertEqual(back.active_skills, [["legacy.a", 1.0], ["legacy.b", 2.0]])
+        self.assertEqual(back.utterance_states,
+                         {"resp.skill": UtteranceState.RESPONSE.value})
