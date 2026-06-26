@@ -116,7 +116,7 @@ class TestActiveHandlersShape(TestCase):
 
 class TestConverseHandlers(TestCase):
     def test_dedup_and_recency(self):
-        s = Session(converse_handlers_cap=64)
+        s = Session()
         s.add_converse_handler("skill.a", activated_at=1.0)
         s.add_converse_handler("skill.b", activated_at=2.0)
         s.add_converse_handler("skill.a", activated_at=3.0)
@@ -124,23 +124,31 @@ class TestConverseHandlers(TestCase):
         self.assertEqual(ids, ["skill.a", "skill.b"])
 
     def test_cap_eviction_tail_drop(self):
-        s = Session(converse_handlers_cap=3)
+        # §2.1 — the cap is supplied per insertion by the orchestrator.
+        s = Session()
         for i in range(5):
-            s.add_converse_handler(f"skill.{i}", activated_at=float(i))
+            s.add_converse_handler(f"skill.{i}", activated_at=float(i), cap=3)
         # head-first, only the 3 most recent survive (skill.4, 3, 2)
         ids = [h["skill_id"] for h in s.converse_handlers]
         self.assertEqual(ids, ["skill.4", "skill.3", "skill.2"])
         self.assertEqual(len(s.converse_handlers), 3)
 
     def test_cap_unbounded(self):
-        s = Session(converse_handlers_cap=0)  # unbounded
+        s = Session()
         for i in range(100):
-            s.add_converse_handler(f"skill.{i}")
+            s.add_converse_handler(f"skill.{i}", cap=0)  # unbounded
         self.assertEqual(len(s.converse_handlers), 100)
 
-    def test_default_cap_value(self):
+    def test_cap_is_not_session_state(self):
+        # §2.1 — the cap is a deployment value applied at insertion time,
+        # never an attribute carried on the session.
         s = Session()
-        self.assertEqual(s.converse_handlers_cap, DEFAULT_CONVERSE_HANDLERS_CAP)
+        self.assertFalse(hasattr(s, "converse_handlers_cap"))
+
+    def test_default_cap_value(self):
+        # the default cap is the spec's documented §2.1 value, used as the
+        # add_converse_handler default arg — not a session field.
+        self.assertEqual(DEFAULT_CONVERSE_HANDLERS_CAP, 64)
 
     def test_ttl_prune(self):
         now = time.time()

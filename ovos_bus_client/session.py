@@ -294,7 +294,6 @@ class Session(_SpecSession):
                  active_handlers: Optional[List[Dict]] = None,
                  converse_handlers: Optional[List[Dict]] = None,
                  response_mode: Optional[Dict] = None,
-                 converse_handlers_cap: Optional[int] = None,
                  lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
@@ -327,8 +326,6 @@ class Session(_SpecSession):
                 deduplicated, capped list of {skill_id, activated_at} objects.
             response_mode (Dict): OVOS-CONVERSE-1 §2.2 pending-response window — a single {skill_id, expires_at}
                 object, or None when no holder awaits a direct response.
-            converse_handlers_cap (int): Maximum length of `converse_handlers` (OVOS-CONVERSE-1 §2.1); defaults
-                to the configured value or 64. A value <= 0 means "unbounded".
             lang (str): Language tag for the session (standardized internally) — defaults to system default.
             context (IntentContextManager): Conversational context manager for the session.
             site_id (str): Identifier for the site/location associated with the session.
@@ -358,9 +355,6 @@ class Session(_SpecSession):
                                Configuration().get("intents", {}).get("blacklisted_intents", []))
         lang = standardize_lang(lang or get_default_lang())
         site_id = site_id or Configuration().get("site_id") or "unknown"
-        if converse_handlers_cap is None:
-            converse_handlers_cap = Configuration().get("converse", {}).get(
-                "max_active_skills", DEFAULT_CONVERSE_HANDLERS_CAP)
         pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
             "stop_high",
             "converse",
@@ -397,8 +391,7 @@ class Session(_SpecSession):
                          blacklisted_intents=blacklisted_intents,
                          active_handlers=active_handlers,
                          converse_handlers=converse_handlers,
-                         response_mode=response_mode,
-                         converse_handlers_cap=converse_handlers_cap)
+                         response_mode=response_mode)
 
         # --- bus-client-only state the canonical class does not carry --------
         self.system_unit = system_unit or Configuration().get("system_unit", "metric")
@@ -437,8 +430,13 @@ class Session(_SpecSession):
         self.touch()
 
     def add_converse_handler(self, skill_id: str,
-                             activated_at: Optional[float] = None):
-        super().add_converse_handler(skill_id, activated_at)
+                             activated_at: Optional[float] = None,
+                             cap: Optional[int] = DEFAULT_CONVERSE_HANDLERS_CAP):
+        # `cap` is the OVOS-CONVERSE-1 §2.1 per-insertion limit. It is NOT
+        # session state: the orchestrator passes the deployment-configured
+        # cap at call time (e.g. from converse.max_active_skills). This
+        # Session never reads or stores the cap itself.
+        super().add_converse_handler(skill_id, activated_at, cap=cap)
         self.touch()
 
     def remove_converse_handler(self, skill_id: str):
