@@ -345,7 +345,7 @@ class Session(_SpecSession):
                  response_mode: Optional[Dict] = None,
                  lang: str = None,
                  context: IntentContextManager = None,
-                 site_id: str = "unknown",
+                 site_id: Optional[str] = None,
                  pipeline: List[str] = None,
                  stt_prefs: Dict = None,
                  tts_prefs: Dict = None,
@@ -415,7 +415,13 @@ class Session(_SpecSession):
         blacklisted_intents = (blacklisted_intents or
                                Configuration().get("intents", {}).get("blacklisted_intents", []))
         lang = standardize_lang(lang or get_default_lang())
-        site_id = site_id or Configuration().get("site_id") or "unknown"
+        # OVOS-BRIDGE-1 §3.3: site_id is the opaque group identifier. A deployer
+        # MAY configure one (the bridge's own determination, step 1), but an
+        # unset site_id MUST stay absent — it is NOT fabricated as a sentinel
+        # such as "unknown". `None` round-trips as an omitted wire field via the
+        # canonical parent's omit-when-None serialization, and consumers MUST
+        # treat an absent site_id as an unknown group (§3.3 step 3).
+        site_id = site_id or Configuration().get("site_id") or None
         pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
             "stop_high",
             "converse",
@@ -770,7 +776,9 @@ class Session(_SpecSession):
         # canonical bag so they are not also passed via **canonical_kwargs.
         uid = canonical_kwargs.pop("session_id", None)
         lang = canonical_kwargs.pop("lang", None)
-        site_id = canonical_kwargs.pop("site_id", "unknown")
+        # OVOS-BRIDGE-1 §3.3: an absent site_id on the wire stays absent through
+        # the deserialize derivation — it is not fabricated as a sentinel here.
+        site_id = canonical_kwargs.pop("site_id", None)
         pipeline = canonical_kwargs.pop("pipeline", [])
         blacklisted_skills = canonical_kwargs.pop("blacklisted_skills", [])
         blacklisted_intents = canonical_kwargs.pop("blacklisted_intents", [])
