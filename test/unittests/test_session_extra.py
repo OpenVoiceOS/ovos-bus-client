@@ -242,6 +242,51 @@ class TestSessionSerialization(TestCase):
         sess = Session.from_message(msg)
         self.assertEqual(sess.session_id, "default")
 
+
+class TestSiteIdAbsence(TestCase):
+    """OVOS-BRIDGE-1 §3.3: an unset site_id MUST stay absent (not fabricated
+    as a sentinel such as "unknown"), and a present site_id MUST survive every
+    forward / reply / response derivation unchanged."""
+
+    def setUp(self):
+        _reset_session_manager()
+
+    def test_unset_site_id_is_none_not_sentinel(self):
+        s = Session("sid")
+        self.assertIsNone(s.site_id)
+        self.assertNotEqual(s.site_id, "unknown")
+
+    def test_unset_site_id_omitted_from_wire(self):
+        # §3.3: an absent site_id MUST NOT be emitted as a value (not as
+        # JSON null, not as a fabricated sentinel) — the key is omitted.
+        s = Session("sid")
+        self.assertNotIn("site_id", s.serialize())
+
+    def test_absent_site_id_stays_absent_through_deserialize(self):
+        s = Session("sid")
+        restored = Session.deserialize(s.serialize())
+        self.assertIsNone(restored.site_id)
+        self.assertNotIn("site_id", restored.serialize())
+
+    def test_deserialize_payload_without_site_id_stays_absent(self):
+        # a wire payload that never carried site_id must not gain "unknown"
+        restored = Session.deserialize({"session_id": "sid"})
+        self.assertIsNone(restored.site_id)
+
+    def test_present_site_id_survives_forward(self):
+        s = Session("sid", site_id="kitchen")
+        msg = Message("orig", context={"session": s.serialize()})
+        fwd = msg.forward("downstream")
+        sess = Session.from_message(fwd)
+        self.assertEqual(sess.site_id, "kitchen")
+
+    def test_present_site_id_survives_reply_and_response(self):
+        s = Session("sid", site_id="lab")
+        msg = Message("orig", context={"session": s.serialize()})
+        for derived in (msg.reply("answer"), msg.response()):
+            sess = Session.from_message(derived)
+            self.assertEqual(sess.site_id, "lab")
+
     def test_from_message_falls_back_when_none(self):
         _reset_session_manager()
         sess = Session.from_message(None)
