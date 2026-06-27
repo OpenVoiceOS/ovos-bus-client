@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.4.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.4.0a1...2.4.1a1)
+
+**Merged pull requests:**
+
+- fix: keep an unset site\_id absent instead of fabricating "unknown" \(BRIDGE-1 §3.3\) [\#237](https://github.com/OpenVoiceOS/ovos-bus-client/pull/237) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.4.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.3.0a2...2.4.0a1)
