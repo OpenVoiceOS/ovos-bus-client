@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.0a1...2.5.1a1)
+
+**Merged pull requests:**
+
+- fix: translate mirrored payload onto counterpart topic [\#235](https://github.com/OpenVoiceOS/ovos-bus-client/pull/235) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.5.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.4.1a1...2.5.0a1)
