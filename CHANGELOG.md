@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.4.1a1...2.5.0a1)
+
+**Merged pull requests:**
+
+- feat: SessionManager owns the ovos.session.sync intent\_context merge \(OVOS-CONTEXT-1 §5.3\) [\#239](https://github.com/OpenVoiceOS/ovos-bus-client/pull/239) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.4.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.4.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.4.0a1...2.4.1a1)
