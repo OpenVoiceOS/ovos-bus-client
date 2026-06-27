@@ -197,7 +197,10 @@ class TestSessionSkillManagement(TestCase):
         s.enable_response_mode("skill.a")
         self.assertEqual(s.utterance_states["skill.a"], UtteranceState.RESPONSE.value)
         s.disable_response_mode("skill.a")
-        self.assertEqual(s.utterance_states["skill.a"], UtteranceState.INTENT.value)
+        # OVOS-CONVERSE-1 §2.2: a non-holder is implicitly INTENT (absent from the
+        # legacy utterance_states view); ecosystem readers use .get(id, INTENT).
+        self.assertEqual(s.utterance_states.get("skill.a", UtteranceState.INTENT.value),
+                         UtteranceState.INTENT.value)
 
 
 class TestSessionSerialization(TestCase):

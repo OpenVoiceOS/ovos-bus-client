@@ -1,19 +1,71 @@
 import enum
 import time
 from threading import Lock, Event
-from typing import Optional, List, Tuple, Union, Iterable, Dict
+from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
 
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang
+from ovos_spec_tools.session import (Session as _SpecSession,
+                                     DEFAULT_CONVERSE_HANDLERS_CAP,
+                                     SESSION1_REGISTERED_FIELDS)
 from ovos_bus_client.message import dig_for_message, Message
 
 
 class UtteranceState(str, enum.Enum):
     INTENT = "intent"  # includes converse
     RESPONSE = "response"
+
+
+class _UtteranceStatesView(dict):
+    """Write-through back-compat view of the structured ``response_mode``.
+
+    Legacy callers across the ecosystem treated ``Session.utterance_states`` as a
+    plain mutable ``{skill_id: UtteranceState}`` dict, e.g.
+    ``session.utterance_states[skill_id] = UtteranceState.RESPONSE`` to put a skill
+    in response state, or ``del session.utterance_states[skill_id]`` to clear it.
+
+    The canonical store is now the single-holder ``response_mode`` window
+    (OVOS-CONVERSE-1 §2.2). This view is seeded with the current projection so
+    reads behave exactly like the old dict, and in-place mutations are forwarded
+    to the owning session's ``enable_response_mode`` / ``disable_response_mode``
+    so they are not silently lost.
+    """
+
+    def __init__(self, session: "Session", initial: Dict):
+        super().__init__(initial)
+        self._session = session
+
+    def __setitem__(self, skill_id, state):
+        state_value = getattr(state, "value", state)
+        if state_value == UtteranceState.RESPONSE.value:
+            self._session.enable_response_mode(skill_id)
+        else:
+            self._session.disable_response_mode(skill_id)
+        # rebuild from the canonical store so the view stays consistent with the
+        # single-holder invariant rather than accumulating stale keys. Use the
+        # plain-dict ops (super()) here so we don't re-clear response_mode.
+        super().clear()
+        super().update(dict(self._session.utterance_states))
+
+    def __delitem__(self, skill_id):
+        self._session.disable_response_mode(skill_id)
+        if skill_id in self:
+            super().__delitem__(skill_id)
+
+    def pop(self, skill_id, *args):
+        self._session.disable_response_mode(skill_id)
+        return super().pop(skill_id, *args)
+
+    def update(self, *args, **kwargs):
+        for skill_id, state in dict(*args, **kwargs).items():
+            self[skill_id] = state
+
+    def clear(self):
+        self._session.clear_response_mode()
+        super().clear()
 
 
 class IntentContextManagerFrame:
@@ -260,11 +312,37 @@ class IntentContextManager:
         return self._strip_result(result)
 
 
-class Session:
+class Session(_SpecSession):
+    """OVOS-SESSION-1 carrier with the bus-client lifecycle layered on top.
+
+    The wire shape — every OVOS-SESSION-1 §3 / OVOS-PIPELINE-1 §7.1 /
+    OVOS-CONVERSE-1 §2.1, §2.2 field, the omission-not-null serialize rule,
+    the recency / cap / prune handler helpers — is inherited unchanged from
+    :class:`ovos_spec_tools.session.Session`, the canonical reference
+    implementation. This subclass adds only what the spec primitive
+    deliberately omits (it is pure data + stdlib, config-agnostic):
+
+    - **deployment defaults**: a uuid4 ``session_id`` when none is given, the
+      configured ``lang`` / blacklists / ``pipeline`` / converse cap, read
+      from ``ovos-config`` and injected into the parent constructor;
+    - **lifecycle bookkeeping**: ``touch()`` / ``touch_time`` /
+      ``expiration_seconds`` / ``expired()`` and ``SessionManager``
+      registration on every mutation;
+    - **bus-client-only state**: the ``IntentContextManager``, location /
+      unit / format preferences, the speaking / recording flags;
+    - **back-compat projections**: the legacy ``active_skills`` /
+      ``utterance_states`` views (and their ``activate_skill`` /
+      ``enable_response_mode`` / ``clear`` shims), plus the legacy
+      ``serialize`` / ``deserialize`` dict shape ecosystem readers expect.
+    """
+
     def __init__(self, session_id: str = None,
                  expiration_seconds: int = None,
                  active_skills: List[List[Union[str, float]]] = None,
                  utterance_states: Dict = None,
+                 active_handlers: Optional[List[Dict]] = None,
+                 converse_handlers: Optional[List[Dict]] = None,
+                 response_mode: Optional[Dict] = None,
                  lang: str = None,
                  context: IntentContextManager = None,
                  site_id: str = "unknown",
@@ -279,15 +357,26 @@ class Session:
                  is_recording: bool = False,
                  blacklisted_intents: Optional[List[str]] = None,
                  blacklisted_skills: Optional[List[str]] = None,
-                 persona_id: Optional[str] = None):
+                 persona_id: Optional[str] = None,
+                 fallback_handlers: Optional[List[str]] = None,
+                 **canonical_kwargs):
         """
         Create a new Session with identifiers, preferences, state flags, and conversational context.
-         
+
         Parameters:
             session_id (str): Session identifier; a new UUID is generated if not provided.
             expiration_seconds (int): Time-to-live in seconds for the session; use -1 for no expiration.
-            active_skills (List[List[Union[str, float]]]): Ordered list of active skills as [skill_id, last_touch_timestamp].
-            utterance_states (Dict): Mapping of skill_id to its UtteranceState.
+            active_skills (List[List[Union[str, float]]]): DEPRECATED back-compat shape — ordered list of
+                active skills as [skill_id, activated_at]. Projects to/from `active_handlers`, which is the
+                canonical OVOS-PIPELINE-1 §7.1 field. Prefer `active_handlers`.
+            utterance_states (Dict): DEPRECATED back-compat shape — mapping of skill_id to its UtteranceState.
+                Response mode is now carried by the structured `response_mode` field (OVOS-CONVERSE-1 §2.2).
+            active_handlers (List[Dict]): OVOS-PIPELINE-1 §7.1 dispatch-recency record — a head-first list of
+                {skill_id, activated_at} objects (most recently activated first).
+            converse_handlers (List[Dict]): OVOS-CONVERSE-1 §2.1 converse-eligibility list — a head-first,
+                deduplicated, capped list of {skill_id, activated_at} objects.
+            response_mode (Dict): OVOS-CONVERSE-1 §2.2 pending-response window — a single {skill_id, expires_at}
+                object, or None when no holder awaits a direct response.
             lang (str): Language tag for the session (standardized internally) — defaults to system default.
             context (IntentContextManager): Conversational context manager for the session.
             site_id (str): Identifier for the site/location associated with the session.
@@ -303,32 +392,31 @@ class Session:
             blacklisted_intents (Optional[List[str]]): Intents to ignore for this session.
             blacklisted_skills (Optional[List[str]]): Skills to ignore for this session.
             persona_id (Optional[str]): Optional persona identifier associated with this session.
+            fallback_handlers (Optional[List[str]]): OVOS-FALLBACK-1 §4 registered session field —
+                ordered skill-id strings. Inherited canonical field; forwarded to the parent.
+            **canonical_kwargs: Every remaining canonical ``ovos_spec_tools.Session``
+                SESSION-1 field — ``secondary_langs``, ``output_lang``, ``stt_lang``,
+                ``request_lang``, ``detected_lang``, ``intent_context``,
+                ``blacklisted_pipelines``, the six ``*_transformers`` lists, the six
+                ``blacklisted_*_transformers`` lists, and ``extras`` — is accepted here
+                and forwarded verbatim to the parent so the full registered field set
+                round-trips. Unknown keys raise (the parent ``__init__`` rejects them),
+                preserving the typo-catching contract.
         """
         if tts_prefs:
             log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
         if stt_prefs:
             log_deprecation("'stt_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
-        self.session_id = session_id or str(uuid4())
-        self.blacklisted_skills = (blacklisted_skills or
-                                   Configuration().get("skills", {}).get("blacklisted_skills", []))
-        self.blacklisted_intents = (blacklisted_intents or
-                                    Configuration().get("intents", {}).get("blacklisted_intents", []))
-        self.lang = standardize_lang(lang or get_default_lang())
-        self.system_unit = system_unit or Configuration().get("system_unit", "metric")
-        self.date_format = date_format or Configuration().get("date_format", "DMY")
-        self.time_format = time_format or Configuration().get("time_format", "full")
 
-        self.is_recording = is_recording
-        self.is_speaking = is_speaking
-        self.site_id = site_id or Configuration().get("site_id") or "unknown"  # indoors placement info
-
-        self.active_skills = active_skills or []  # [skill_id , timestamp]# (Message , timestamp)
-        self.utterance_states = utterance_states or {}  # {skill_id: UtteranceState}
-
-        self.touch_time = int(time.time())
-        self.expiration_seconds = expiration_seconds or \
-                                  Configuration().get('session', {}).get("ttl", -1)
-        self.pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
+        # --- ovos-config deployment defaults the canonical class omits -------
+        session_id = session_id or str(uuid4())
+        blacklisted_skills = (blacklisted_skills or
+                              Configuration().get("skills", {}).get("blacklisted_skills", []))
+        blacklisted_intents = (blacklisted_intents or
+                               Configuration().get("intents", {}).get("blacklisted_intents", []))
+        lang = standardize_lang(lang or get_default_lang())
+        site_id = site_id or Configuration().get("site_id") or "unknown"
+        pipeline = pipeline or Configuration().get('intents', {}).get("pipeline") or [
             "stop_high",
             "converse",
             "padatious_high",
@@ -342,29 +430,178 @@ class Session:
             "fallback_medium",
             "fallback_low"
         ]
-        self.context = context or IntentContextManager()
 
+        # back-compat: seed the canonical active_handlers store from the legacy
+        # active_skills [skill_id, ts] pair shape when no spec field was given.
+        # The parent _coerce_handlers only accepts the spec {skill_id,
+        # activated_at} object shape, so translate the legacy pairs here.
+        if not active_handlers and active_skills:
+            active_handlers = self._pairs_to_handler_objects(active_skills)
+        # back-compat: a legacy {skill_id: "response"} entry becomes a holder.
+        if response_mode is None and utterance_states:
+            ttl = Configuration().get("converse", {}).get("response_timeout", 300)
+            for skill_id, state in utterance_states.items():
+                if state == UtteranceState.RESPONSE.value:
+                    response_mode = {"skill_id": skill_id,
+                                     "expires_at": time.time() + ttl}
+
+        # --- canonical SESSION-1 fields / helpers (inherited) ----------------
+        # Every registered field is forwarded to the canonical parent so the
+        # whole SESSION-1 §3 surface round-trips. The explicitly-named params
+        # above are the ones bus-client applies deployment defaults to (or that
+        # have legacy back-compat aliases / dedicated docs); the rest arrive via
+        # canonical_kwargs and pass straight through.
+        super().__init__(session_id=session_id,
+                         lang=lang,
+                         site_id=site_id,
+                         pipeline=pipeline,
+                         blacklisted_skills=blacklisted_skills,
+                         blacklisted_intents=blacklisted_intents,
+                         active_handlers=active_handlers,
+                         converse_handlers=converse_handlers,
+                         response_mode=response_mode,
+                         persona_id=persona_id,
+                         fallback_handlers=fallback_handlers,
+                         **canonical_kwargs)
+
+        # --- bus-client-only state the canonical class does not carry --------
+        self.system_unit = system_unit or Configuration().get("system_unit", "metric")
+        self.date_format = date_format or Configuration().get("date_format", "DMY")
+        self.time_format = time_format or Configuration().get("time_format", "full")
+        self.is_recording = is_recording
+        self.is_speaking = is_speaking
+        self.touch_time = int(time.time())
+        self.expiration_seconds = expiration_seconds or \
+                                  Configuration().get('session', {}).get("ttl", -1)
+        self.context = context or IntentContextManager()
         self.location_preferences = location_prefs or Configuration().get("location", {})
-        self.persona_id = persona_id
+        # persona_id is an inherited canonical field (OVOS-PERSONA-1, registered
+        # on ovos_spec_tools.Session); it is forwarded to super().__init__ above
+        # so the parent owns its validation + omit-when-empty serialization.
 
     @property
     def timezone(self) -> Optional[str]:
         """
         Return the session's configured timezone code.
-        
+
         Returns:
             timezone_code (Optional[str]): Timezone identifier like 'America/Los_Angeles' if set in location preferences, `None` otherwise.
         """
         return self.location_preferences.get('timezone', {}).get('code')
 
+    # ------------------------------------------------------------------
+    # touch() on mutation — lifecycle bookkeeping the canonical class omits.
+    # Thin overrides: delegate to super(), then register the change.
+    # ------------------------------------------------------------------
+    def add_active_handler(self, skill_id: str,
+                           activated_at: Optional[float] = None):
+        super().add_active_handler(skill_id, activated_at)
+        self.touch()
+
+    def remove_active_handler(self, skill_id: str):
+        super().remove_active_handler(skill_id)
+        self.touch()
+
+    def add_converse_handler(self, skill_id: str,
+                             activated_at: Optional[float] = None,
+                             cap: Optional[int] = DEFAULT_CONVERSE_HANDLERS_CAP):
+        # `cap` is the OVOS-CONVERSE-1 §2.1 per-insertion limit. It is NOT
+        # session state: the orchestrator passes the deployment-configured
+        # cap at call time (e.g. from converse.max_active_skills). This
+        # Session never reads or stores the cap itself.
+        super().add_converse_handler(skill_id, activated_at, cap=cap)
+        self.touch()
+
+    def remove_converse_handler(self, skill_id: str):
+        super().remove_converse_handler(skill_id)
+        self.touch()
+
+    def prune_converse_handlers(self, ttl: float, now: Optional[float] = None):
+        super().prune_converse_handlers(ttl, now)
+        self.touch()
+
+    def set_response_mode(self, skill_id: str, expires_at: float):
+        super().set_response_mode(skill_id, expires_at)
+        self.touch()
+
+    def clear_response_mode(self, skill_id: Optional[str] = None):
+        super().clear_response_mode(skill_id)
+        self.touch()
+
+    # ------------------------------------------------------------------
+    # Back-compat projections — legacy readers across the ecosystem still
+    # use `active_skills` (list of [skill_id, ts] pairs) and `utterance_states`
+    # ({skill_id: state}). These project to/from the canonical spec fields so
+    # there is a single source of truth.
+    # ------------------------------------------------------------------
     @property
-    def active(self) -> bool:
+    def active_skills(self) -> List[List[Union[str, float]]]:
         """
-        Return true if any skills attached to this session are active.
-        NOTE: skills without converse implemented never get added here unless
-        using get_response
+        DEPRECATED back-compat view of `active_handlers` as `[skill_id, activated_at]` pairs.
+
+        Reads project the canonical `active_handlers` object list to the legacy
+        pair shape, head-first.
         """
-        return len(self.active_skills) > 0
+        return [[h["skill_id"], h["activated_at"]] for h in self.active_handlers]
+
+    @active_skills.setter
+    def active_skills(self, value: Optional[List[List[Union[str, float]]]]):
+        """Assigning legacy pairs rewrites the canonical `active_handlers` store."""
+        self.active_handlers = self._coerce_handlers(
+            self._pairs_to_handler_objects(value))
+
+    @staticmethod
+    def _pairs_to_handler_objects(value) -> List[Dict[str, Any]]:
+        """Translate the legacy active_skills shapes into spec handler objects.
+
+        The canonical `_coerce_handlers` (OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1
+        §2.1) accepts only `{skill_id, activated_at}` objects. Legacy callers
+        still hand a `[skill_id, activated_at]` pair (or a bare `skill_id`
+        string); map those to the object shape here, at the bus-client
+        boundary, and pass anything already in object shape straight through so
+        the parent stays the single normalizer/validator.
+        """
+        out: List[Dict[str, Any]] = []
+        for entry in value or []:
+            if isinstance(entry, dict):
+                out.append(entry)
+            elif isinstance(entry, str):
+                out.append({"skill_id": entry, "activated_at": None})
+            elif isinstance(entry, (list, tuple)) and entry:
+                skill_id = entry[0]
+                activated_at = entry[1] if len(entry) > 1 else None
+                out.append({"skill_id": skill_id, "activated_at": activated_at})
+            else:
+                out.append(entry)
+        return out
+
+    @property
+    def utterance_states(self) -> Dict:
+        """
+        DEPRECATED back-compat view of response mode as `{skill_id: state}`.
+
+        Only the current `response_mode` holder (if any) is reported as
+        `RESPONSE`; everything else is implicitly `INTENT`.
+
+        Returns a write-through view: legacy in-place mutations
+        (``session.utterance_states[skill_id] = UtteranceState.RESPONSE`` /
+        ``del session.utterance_states[skill_id]``) are forwarded to the
+        structured `response_mode` store, preserving the pre-refactor behavior
+        where `utterance_states` was a plain mutable dict.
+        """
+        if self.response_mode and self.response_mode.get("skill_id"):
+            projection = {self.response_mode["skill_id"]: UtteranceState.RESPONSE.value}
+        else:
+            projection = {}
+        return _UtteranceStatesView(self, projection)
+
+    @utterance_states.setter
+    def utterance_states(self, value: Optional[Dict]):
+        """Assigning legacy utterance_states rewrites the structured `response_mode`."""
+        self.response_mode = None
+        for skill_id, state in (value or {}).items():
+            if state == UtteranceState.RESPONSE.value:
+                self.enable_response_mode(skill_id)
 
     def touch(self):
         """
@@ -386,41 +623,42 @@ class Session:
 
     def enable_response_mode(self, skill_id: str):
         """
-        Mark a skill as expecting a response
+        Mark a skill as expecting a response (OVOS-CONVERSE-1 §2.2 response_mode).
+
+        Back-compat shim around `set_response_mode`: sets the single-holder window
+        with a deployment-default TTL.
         @param skill_id: ID of skill expecting a response
         """
-        self.utterance_states[skill_id] = UtteranceState.RESPONSE.value
-        self.touch()
+        ttl = Configuration().get("converse", {}).get("response_timeout", 300)
+        self.set_response_mode(skill_id, time.time() + ttl)
 
     def disable_response_mode(self, skill_id: str):
         """
-        Mark a skill as not expecting a response (handling intents normally)
-        @param skill_id: ID of skill expecting a response
+        Mark a skill as not expecting a response (OVOS-CONVERSE-1 §2.2).
+
+        Back-compat shim around `clear_response_mode`: clears the window only if
+        `skill_id` currently holds it.
+        @param skill_id: ID of skill no longer expecting a response
         """
-        self.utterance_states[skill_id] = UtteranceState.INTENT.value
-        self.touch()
+        self.clear_response_mode(skill_id)
 
     def activate_skill(self, skill_id: str):
         """
-        Add a skill to the front of the active_skills list
+        Add a skill to the front of the active-handler recency list.
+
+        Back-compat shim around `add_active_handler` (OVOS-PIPELINE-1 §7.1).
         @param skill_id: ID of skill to activate
         """
-        # remove it from active list
-        self.deactivate_skill(skill_id)
-        # add skill with timestamp to start of active list
-        self.active_skills.insert(0, [skill_id, time.time()])
-        self.touch()
+        self.add_active_handler(skill_id)
 
     def deactivate_skill(self, skill_id: str):
         """
-        Remove a skill from the active_skills list
+        Remove a skill from the active-handler recency list.
+
+        Back-compat shim around `remove_active_handler`.
         @param skill_id: ID of skill to deactivate
         """
-        active_ids = [s[0] for s in self.active_skills]
-        if skill_id in active_ids:
-            idx = active_ids.index(skill_id)
-            self.active_skills.pop(idx)
-        self.touch()
+        self.remove_active_handler(skill_id)
 
     def is_active(self, skill_id: str) -> bool:
         """
@@ -428,58 +666,58 @@ class Session:
         @param skill_id: ID of skill to check
         @return: True if the requested skill is active
         """
-        active_ids = [s[0] for s in self.active_skills]
-        return skill_id in active_ids
+        return any(h.get("skill_id") == skill_id for h in self.active_handlers)
 
     def clear(self):
         """
-        Clear active_skills
+        Clear active_handlers
         """
-        self.active_skills = []
+        self.active_handlers = []
         self.touch()
 
     def serialize(self) -> dict:
         """
         Produce a dictionary representation of the session suitable for JSON serialization.
-        
+
+        The OVOS-SESSION-1 §3 spec fields (including the OVOS-PIPELINE-1 §7.1 /
+        OVOS-CONVERSE-1 §2.1, §2.2 handler fields) are emitted by the canonical
+        parent following SESSION-1 §2.1 omission-not-null: `active_handlers`,
+        `converse_handlers`, and `response_mode` are present only when non-empty,
+        and are never serialized as JSON `null`.
+
+        On top of the parent's wire dict this layers the legacy
+        `active_skills` (list of `[skill_id, activated_at]` pairs),
+        `utterance_states`, `context`, and `location` keys (plus the
+        bus-client-only preference / flag fields), projected from the canonical
+        state, so that ecosystem readers parsing the raw serialized dict keep
+        working.
+
         Returns:
-            dict: A JSON-serializable mapping containing session state with keys:
-                - "active_skills": list of active skills and their timestamps
-                - "utterance_states": mapping of skill_id to utterance state
-                - "session_id": session identifier
-                - "persona_id": associated persona identifier or None
-                - "lang": language code for the session
-                - "context": serialized intent context manager state
-                - "site_id": site identifier
-                - "pipeline": intent processing pipeline identifier
-                - "location": location preference data
-                - "system_unit": measurement system preference
-                - "time_format": preferred time format
-                - "date_format": preferred date format
-                - "is_speaking": boolean indicating if audio output is active
-                - "is_recording": boolean indicating if recording is active
-                - "blacklisted_skills": list of skill IDs that are blacklisted
-                - "blacklisted_intents": list of intent names that are blacklisted
+            dict: A JSON-serializable mapping of session state.
         """
-        # safe for json dumping
-        return {
+        # canonical SESSION-1 wire shape (spec fields, omit-when-empty)
+        data = super().to_dict()
+        # legacy back-compat projections + bus-client-only state
+        # NOTE: persona_id is a canonical inherited field — the parent's
+        # to_dict() above already emits it with SESSION-1 §2.1 omit-when-empty
+        # handling, so it is intentionally NOT re-emitted here.
+        data.update({
             "active_skills": self.active_skills,
             "utterance_states": self.utterance_states,
             "session_id": self.session_id,
-            "persona_id": self.persona_id,
-            "lang": self.lang,
             "context": self.context.serialize(),
-            "site_id": self.site_id,
-            "pipeline": self.pipeline,
             "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
             "date_format": self.date_format,
             "is_speaking": self.is_speaking,
             "is_recording": self.is_recording,
-            "blacklisted_skills": self.blacklisted_skills,
-            "blacklisted_intents": self.blacklisted_intents
-        }
+            # always emit raw lists for legacy readers (canonical omits when empty)
+            "blacklisted_skills": self.blacklisted_skills or [],
+            "blacklisted_intents": self.blacklisted_intents or [],
+            "pipeline": self.pipeline or [],
+        })
+        return data
 
     def update_history(self, message: Message = None):
         """
@@ -493,29 +731,70 @@ class Session:
     def deserialize(data: Dict):
         """
         Construct a Session object from a serialized session dictionary.
-        
+
+        Every canonical OVOS-SESSION-1 §3 field is restored by delegating field
+        extraction to the canonical parser (``_SpecSession.from_dict`` then reading
+        the populated attributes), so the full registered field set —
+        ``secondary_langs``, the per-channel language overrides, the six
+        ``*_transformers`` lists, the six ``blacklisted_*_transformers`` lists,
+        ``blacklisted_pipelines``, ``intent_context``, ``fallback_handlers``,
+        ``persona_id``, … — round-trips rather than a hand-enumerated subset. On
+        top of the canonical kwargs this overlays the bus-client-only state
+        (``context``, ``location``, unit/format prefs, the speaking / recording
+        flags) and the legacy back-compat aliases (``active_skills`` /
+        ``utterance_states``).
+
         Parameters:
             data (dict): Serialized session data as produced by Session.serialize().
-        
+
         Returns:
             Session: A Session instance reconstructed from the provided data.
         """
-        uid = data.get("session_id")
-        pid = data.get("persona_id")
-        active = data.get("active_skills") or []
+        data = data or {}
+        # Delegate canonical field extraction to the parent: from_dict() applies
+        # the SESSION-1 §2 parsing rules (null-as-omitted, unknown→extras). Read
+        # the recognised registered fields back off the populated instance — this
+        # is the single source of truth for which keys are canonical, so adding a
+        # field to the spec needs no edit here. Reading attributes (not to_dict())
+        # avoids re-absorbing the bus-client-only overlay keys, which from_dict()
+        # routes into `extras`. Empty lists / None are dropped (matching
+        # to_dict()'s omit-when-empty rule): an empty active_handlers[] must NOT
+        # be forwarded, or it would block the legacy active_skills back-compat
+        # seeding in __init__.
+        _canon = _SpecSession.from_dict(data)
+        canonical_kwargs = {name: getattr(_canon, name)
+                            for name in SESSION1_REGISTERED_FIELDS
+                            if getattr(_canon, name)}
+        # session_id / lang / site_id / pipeline / blacklisted_* are explicit
+        # bus-client params (they carry deployment defaults); pull them out of the
+        # canonical bag so they are not also passed via **canonical_kwargs.
+        uid = canonical_kwargs.pop("session_id", None)
+        lang = canonical_kwargs.pop("lang", None)
+        site_id = canonical_kwargs.pop("site_id", "unknown")
+        pipeline = canonical_kwargs.pop("pipeline", [])
+        blacklisted_skills = canonical_kwargs.pop("blacklisted_skills", [])
+        blacklisted_intents = canonical_kwargs.pop("blacklisted_intents", [])
+
+        # legacy back-compat aliases — only seed the canonical handler/response
+        # stores from these when the canonical keys were absent. Legacy wire shape
+        # carries active_skills as [skill_id, ts] pairs; map them to spec handler
+        # objects the constructor expects.
+        active = Session._pairs_to_handler_objects(data.get("active_skills") or [])
         states = data.get("utterance_states") or {}
-        lang = data.get("lang")
+        if "active_handlers" in canonical_kwargs:
+            active = []  # canonical field wins over the legacy alias
+        if "response_mode" in canonical_kwargs:
+            states = {}
+
+        # bus-client-only state the canonical class does not carry.
         context = IntentContextManager.deserialize(data.get("context", {}))
-        site_id = data.get("site_id", "unknown")
-        pipeline = data.get("pipeline", [])
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
         time_format = data.get("time_format")
         is_recording = data.get("is_recording", False)
         is_speaking = data.get("is_speaking", False)
-        blacklisted_skills = data.get("blacklisted_skills", [])
-        blacklisted_intents = data.get("blacklisted_intents", [])
+
         return Session(uid,
                        active_skills=active,
                        utterance_states=states,
@@ -523,7 +802,6 @@ class Session:
                        context=context,
                        pipeline=pipeline,
                        site_id=site_id,
-                       persona_id=pid,
                        location_prefs=location,
                        system_unit=system_unit,
                        date_format=date_format,
@@ -531,7 +809,8 @@ class Session:
                        is_recording=is_recording,
                        is_speaking=is_speaking,
                        blacklisted_intents=blacklisted_intents,
-                       blacklisted_skills=blacklisted_skills)
+                       blacklisted_skills=blacklisted_skills,
+                       **canonical_kwargs)
 
     @staticmethod
     def from_message(message: Message = None):
