@@ -426,5 +426,110 @@ class TestGUISet(TestCase):
         self.assertEqual(called, [True])
 
 
+def _value_sets(bus):
+    return [c.args[0] for c in bus.emit.call_args_list
+            if c.args[0].msg_type == "gui.value.set"]
+
+
+def _page_shows(bus):
+    return [c.args[0] for c in bus.emit.call_args_list
+            if c.args[0].msg_type == "gui.page.show"]
+
+
+class TestGUI1NoneKeyOmission(TestCase):
+    """OVOS-GUI-1 §3.3 / §8.1: a producer MUST omit absent optional keys
+    rather than emit them as JSON null."""
+
+    def setUp(self):
+        self.bus = MagicMock()
+        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+
+    def test_value_set_omits_none_valued_keys(self):
+        # show_text assigns title=None when no title is supplied
+        self.gui.show_text("hello")
+        data = _value_sets(self.bus)[-1].data
+        self.assertIn("text", data)
+        self.assertNotIn("title", data)        # was None -> omitted
+        self.assertNotIn(None, data.values())  # no null on the wire
+
+    def test_value_set_keeps_present_keys(self):
+        self.gui.show_text("hello", title="Greeting")
+        data = _value_sets(self.bus)[-1].data
+        self.assertEqual(data["text"], "hello")
+        self.assertEqual(data["title"], "Greeting")
+
+    def test_page_show_omits_idle_when_unset(self):
+        self.gui.show_page("SYSTEM_TextFrame")
+        data = _page_shows(self.bus)[-1].data
+        self.assertNotIn("__idle", data)       # was null -> omitted
+        self.assertNotIn(None, data.values())
+
+    def test_page_show_keeps_idle_when_set(self):
+        self.gui.show_page("SYSTEM_TextFrame", override_idle=30)
+        data = _page_shows(self.bus)[-1].data
+        self.assertEqual(data["__idle"], 30)
+
+    def test_sync_data_omits_none(self):
+        self.gui._pages = ["SYSTEM_TextFrame"]  # so __setitem__ triggers a sync
+        self.bus.reset_mock()
+        self.gui["caption"] = None
+        self.gui["title"] = "x"
+        data = _value_sets(self.bus)[-1].data
+        self.assertNotIn("caption", data)
+        self.assertEqual(data["title"], "x")
+
+
+class TestGUI1ImageWireShape(TestCase):
+    """OVOS-GUI-1 §3.5 / §8.1: an image-bearing key carries an http(s) URL or a
+    data: URI; a producer MUST NOT place a bare filesystem path on the wire."""
+
+    def setUp(self):
+        self.bus = MagicMock()
+        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+
+    def test_http_url_passthrough(self):
+        self.assertEqual(
+            self.gui._to_wire_image("http://example.com/a.png"),
+            "http://example.com/a.png")
+
+    def test_data_uri_passthrough(self):
+        uri = "data:image/png;base64,Zm9v"
+        self.assertEqual(self.gui._to_wire_image(uri), uri)
+
+    def test_local_file_becomes_data_uri(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+            path = f.name
+        try:
+            wire = self.gui._to_wire_image(path)
+            self.assertTrue(wire.startswith("data:image/png;base64,"))
+            self.assertNotIn(path, wire)
+        finally:
+            import os
+            os.unlink(path)
+
+    def test_show_image_emits_data_uri_for_local_file(self):
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+            path = f.name
+        try:
+            self.gui.show_image(path)
+            img = _value_sets(self.bus)[-1].data["image"]
+            self.assertTrue(img.startswith("data:image/png;base64,"))
+            self.assertNotIn(path, img)
+        finally:
+            os.unlink(path)
+
+    def test_show_image_keeps_http_url(self):
+        with patch("ovos_bus_client.apis.gui.GUIInterface._resolve_url",
+                   return_value="https://example.com/a.png"):
+            self.gui.show_image("https://example.com/a.png")
+        img = _value_sets(self.bus)[-1].data["image"]
+        self.assertEqual(img, "https://example.com/a.png")
+
+
 if __name__ == "__main__":
     unittest.main()
