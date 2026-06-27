@@ -288,9 +288,13 @@ class MessageBusClient:
         self._send(message)
 
         # also put the namespace counterpart(s) on the wire (per the flags); the
-        # mirror is sent directly, never re-translated.
+        # mirrored payload is reshaped into the counterpart topic's shape (identity
+        # for payload-compatible renames, a per-topic transform for shape-changing
+        # ones) so a consumer on the counterpart topic receives it in *its* shape.
         for topic in self._translator.counterpart_topics(message.msg_type):
-            self._send(message.forward(topic, message.data))
+            translated = self._translator.translate_payload(
+                from_topic=message.msg_type, to_topic=topic, data=message.data)
+            self._send(message.forward(topic, translated))
 
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""

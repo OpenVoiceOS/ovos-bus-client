@@ -36,6 +36,15 @@ def _sent_types(c):
     return [json.loads(call.args[0])["type"] for call in c.client.send.call_args_list]
 
 
+def _sent(c):
+    """[(topic, data), ...] for every serialized Message put on the wire."""
+    out = []
+    for call in c.client.send.call_args_list:
+        payload = json.loads(call.args[0])
+        out.append((payload["type"], payload["data"]))
+    return out
+
+
 class TestDefaultsOn(unittest.TestCase):
     def test_both_flags_default_on(self):
         # no env var and empty config -> the default (True) is returned
@@ -72,6 +81,47 @@ class TestEmitTranslation(unittest.TestCase):
         c = _client(modernize=False, emit_legacy=False)
         c.emit(Message("speak", {"utterance": "hi"}))
         self.assertEqual(_sent_types(c), ["speak"])
+
+
+class TestEmitPayloadTranslation(unittest.TestCase):
+    """The mirrored emission carries the counterpart topic's PAYLOAD shape,
+    not a verbatim copy of the producer's payload (translate_payload bridge)."""
+
+    def test_shape_changing_legacy_to_spec_reshapes_payload(self):
+        c = _client()
+        # legacy handler.start payload shape: {"handler": <fn name>}
+        c.emit(Message("mycroft.skill.handler.start", {"handler": "HelloIntent"}))
+        sent = _sent(c)
+        # original on the legacy topic is verbatim
+        self.assertEqual(sent[0], ("mycroft.skill.handler.start",
+                                   {"handler": "HelloIntent"}))
+        # mirror on the spec topic is RESHAPED into the spec shape
+        # ({"intent_name": ...}), NOT the verbatim legacy {"handler": ...}
+        spec_topic, spec_data = sent[1]
+        self.assertEqual(spec_topic, "ovos.intent.handler.start")
+        self.assertEqual(spec_data, {"intent_name": "HelloIntent"})
+        self.assertNotIn("handler", spec_data)  # not verbatim
+
+    def test_shape_changing_spec_to_legacy_reshapes_payload(self):
+        c = _client()
+        # spec handler.start payload shape: {"skill_id", "intent_name"}
+        c.emit(Message("ovos.intent.handler.start",
+                       {"skill_id": "skill.foo", "intent_name": "HelloIntent"}))
+        sent = _sent(c)
+        self.assertEqual(sent[0][0], "ovos.intent.handler.start")
+        legacy_topic, legacy_data = sent[1]
+        self.assertEqual(legacy_topic, "mycroft.skill.handler.start")
+        # reshaped to the legacy shape -> carries "handler"
+        self.assertEqual(legacy_data.get("handler"), "HelloIntent")
+
+    def test_payload_compatible_rename_stays_equivalent(self):
+        c = _client()
+        data = {"utterance": "hi", "lang": "en-us"}
+        c.emit(Message("speak", dict(data)))
+        sent = _sent(c)
+        self.assertEqual(sent[0], ("speak", data))
+        # payload-compatible rename: mirror carries equivalent (identity) data
+        self.assertEqual(sent[1], ("ovos.utterance.speak", data))
 
 
 class TestHandlerDedup(unittest.TestCase):
