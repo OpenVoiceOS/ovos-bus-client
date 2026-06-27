@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.4.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.3.0a2...2.4.0a1)
+
+**Merged pull requests:**
+
+- feat: Session subclasses ovos\_spec\_tools.Session \(canonical SESSION-1\) + back-compat shim [\#234](https://github.com/OpenVoiceOS/ovos-bus-client/pull/234) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.3.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.3.0a2) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.3.0a1...2.3.0a2)
