@@ -19,6 +19,55 @@ class UtteranceState(str, enum.Enum):
     RESPONSE = "response"
 
 
+class _UtteranceStatesView(dict):
+    """Write-through back-compat view of the structured ``response_mode``.
+
+    Legacy callers across the ecosystem treated ``Session.utterance_states`` as a
+    plain mutable ``{skill_id: UtteranceState}`` dict, e.g.
+    ``session.utterance_states[skill_id] = UtteranceState.RESPONSE`` to put a skill
+    in response state, or ``del session.utterance_states[skill_id]`` to clear it.
+
+    The canonical store is now the single-holder ``response_mode`` window
+    (OVOS-CONVERSE-1 §2.2). This view is seeded with the current projection so
+    reads behave exactly like the old dict, and in-place mutations are forwarded
+    to the owning session's ``enable_response_mode`` / ``disable_response_mode``
+    so they are not silently lost.
+    """
+
+    def __init__(self, session: "Session", initial: Dict):
+        super().__init__(initial)
+        self._session = session
+
+    def __setitem__(self, skill_id, state):
+        state_value = getattr(state, "value", state)
+        if state_value == UtteranceState.RESPONSE.value:
+            self._session.enable_response_mode(skill_id)
+        else:
+            self._session.disable_response_mode(skill_id)
+        # rebuild from the canonical store so the view stays consistent with the
+        # single-holder invariant rather than accumulating stale keys. Use the
+        # plain-dict ops (super()) here so we don't re-clear response_mode.
+        super().clear()
+        super().update(dict(self._session.utterance_states))
+
+    def __delitem__(self, skill_id):
+        self._session.disable_response_mode(skill_id)
+        if skill_id in self:
+            super().__delitem__(skill_id)
+
+    def pop(self, skill_id, *args):
+        self._session.disable_response_mode(skill_id)
+        return super().pop(skill_id, *args)
+
+    def update(self, *args, **kwargs):
+        for skill_id, state in dict(*args, **kwargs).items():
+            self[skill_id] = state
+
+    def clear(self):
+        self._session.clear_response_mode()
+        super().clear()
+
+
 class IntentContextManagerFrame:
     def __init__(self, entities: List[dict] = None, metadata: Dict = None):
         """
@@ -533,10 +582,18 @@ class Session(_SpecSession):
 
         Only the current `response_mode` holder (if any) is reported as
         `RESPONSE`; everything else is implicitly `INTENT`.
+
+        Returns a write-through view: legacy in-place mutations
+        (``session.utterance_states[skill_id] = UtteranceState.RESPONSE`` /
+        ``del session.utterance_states[skill_id]``) are forwarded to the
+        structured `response_mode` store, preserving the pre-refactor behavior
+        where `utterance_states` was a plain mutable dict.
         """
         if self.response_mode and self.response_mode.get("skill_id"):
-            return {self.response_mode["skill_id"]: UtteranceState.RESPONSE.value}
-        return {}
+            projection = {self.response_mode["skill_id"]: UtteranceState.RESPONSE.value}
+        else:
+            projection = {}
+        return _UtteranceStatesView(self, projection)
 
     @utterance_states.setter
     def utterance_states(self, value: Optional[Dict]):
