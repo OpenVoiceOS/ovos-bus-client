@@ -873,7 +873,7 @@ class SessionManager:
         cls.bus.on("recognizer_loop:record_end", cls.handle_recording_end)
         cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
         cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
-        cls.bus.on("ovos.session.sync", cls.handle_default_session_request)
+        cls.bus.on("ovos.session.sync", cls.handle_session_sync)
         cls.sync()
 
     @staticmethod
@@ -1059,6 +1059,72 @@ class SessionManager:
         sess.is_speaking = False
         cls.update(sess)
 
+    @staticmethod
+    def merge_intent_context(target: Dict[str, Any],
+                             payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """OVOS-CONTEXT-1 §5.3 — apply an ``ovos.session.sync``
+        ``intent_context`` payload **entry-by-entry** onto a target map.
+
+        The merge is the spec's set + null-delete semantics, applied in
+        place on ``target`` (the session's working ``intent_context`` map):
+
+        - a key mapping to an **entry object** sets or replaces that key;
+        - a key mapping to JSON ``null`` **removes** that key;
+        - keys absent from the payload are left **unchanged**.
+
+        Concurrent handlers writing **disjoint** keys therefore do not
+        overwrite each other (§5.3). This is plain dict-level logic — the
+        SessionManager singleton owns session state, so it owns the merge.
+
+        @param target: the session's current ``intent_context`` map
+            (mutated in place).
+        @param payload: the inbound ``intent_context`` sync payload.
+        @return: the merged ``target`` map.
+        """
+        if not payload:
+            return target
+        for key, entry in payload.items():
+            if entry is None:
+                target.pop(key, None)
+            elif isinstance(entry, dict):
+                target[key] = entry
+            else:
+                LOG.warning(f"ignoring malformed intent_context entry "
+                            f"for key '{key}': {entry!r}")
+        return target
+
     @classmethod
-    def handle_default_session_request(cls, message=None):
+    def handle_session_sync(cls, message=None):
+        """OVOS-CONTEXT-1 §5.3 — handle an ``ovos.session.sync`` request.
+
+        The sync carries the emitter's updated session snapshot in
+        ``Message.context.session`` (the standard session carrier). The
+        singleton resolves the target session and merges the snapshot's
+        ``intent_context`` entry-by-entry onto it (set + null-delete, §5.3),
+        keeping the managed session the authoritative owner of intent
+        context. The legacy default-session echo is then preserved for
+        callers that emit a bare ``ovos.session.sync`` to *request* the
+        current default session.
+        """
+        if message is not None:
+            # the session rides in ``message.context.session`` — resolve it
+            # via the canonical carrier rather than ``message.data``.
+            inbound = Session.from_message(message)
+            payload = inbound.intent_context if inbound else None
+            if payload is not None:
+                # merge onto the *managed* (authoritative) session if we
+                # already track it — the singleton owns the working map.
+                # A session we have never seen is adopted from the carrier.
+                sid = inbound.session_id
+                sess = cls.sessions.get(sid, inbound)
+                merged = cls.merge_intent_context(
+                    dict(sess.intent_context or {}), payload)
+                sess.intent_context = merged or None
+                cls.update(sess)
+                LOG.debug(f"merged intent_context sync for session "
+                          f"'{sess.session_id}': {list(payload.keys())}")
         cls.sync(message)
+
+    # legacy alias — ``ovos.session.sync`` historically routed here to echo
+    # the default session; it now also performs the OVOS-CONTEXT-1 §5.3 merge
+    handle_default_session_request = handle_session_sync
