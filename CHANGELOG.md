@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.0a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a3...2.6.0a1)
+
+**Merged pull requests:**
+
+- feat: shared HandlerLifecycle done-signal helper for in-process dispatchers [\#246](https://github.com/OpenVoiceOS/ovos-bus-client/pull/246) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.5.1a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a3) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a2...2.5.1a3)
