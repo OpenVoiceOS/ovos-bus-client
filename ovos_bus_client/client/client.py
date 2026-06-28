@@ -24,7 +24,7 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session
-from ovos_spec_tools.messages import NamespaceTranslator
+from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -190,7 +190,7 @@ class MessageBusClient:
         self.emitter.emit("open")
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
-        self.emit(Message("ovos.session.sync")) # request default session update
+        self.emit(Message(SpecMessage.SESSION_SYNC)) # request default session update
 
     def on_close(self, *args):
         """
