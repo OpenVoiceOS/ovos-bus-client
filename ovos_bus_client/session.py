@@ -7,7 +7,7 @@ from uuid import uuid4
 from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
-from ovos_spec_tools import standardize_lang
+from ovos_spec_tools import standardize_lang, SpecMessage
 from ovos_spec_tools.session import (Session as _SpecSession,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
                                      SESSION1_REGISTERED_FIELDS)
@@ -862,7 +862,7 @@ class SessionManager:
     @classmethod
     def sync(cls, message=None):
         if cls.bus:
-            message = message or Message("ovos.session.sync")
+            message = message or Message(SpecMessage.SESSION_SYNC)
             cls.bus.emit(message.reply("ovos.session.update_default",
                                        {"session_data": cls.default_session.serialize()}))
 
@@ -873,7 +873,7 @@ class SessionManager:
         cls.bus.on("recognizer_loop:record_end", cls.handle_recording_end)
         cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
         cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
-        cls.bus.on("ovos.session.sync", cls.handle_session_sync)
+        cls.bus.on(SpecMessage.SESSION_SYNC, cls.handle_session_sync)
         cls.sync()
 
     @staticmethod
