@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.1a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a3) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a2...2.5.1a3)
+
+**Merged pull requests:**
+
+- refactor: use SpecMessage.SESSION\_SYNC for the ovos.session.sync topic [\#245](https://github.com/OpenVoiceOS/ovos-bus-client/pull/245) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.5.1a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a2) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a1...2.5.1a2)
