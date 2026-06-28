@@ -182,6 +182,87 @@ def test_decorator_exception_path_reraises():
     assert "nope" in emitted[-1].data["exception"]
 
 
+def test_caller_data_emitted_verbatim_on_start_and_complete():
+    """A caller-supplied payload (e.g. workshop's {'name': ...}) is used as-is."""
+    bus = FakeBus()
+    emitted = _recorder(bus)
+    msg = _trigger()
+
+    base = {"name": "get_time", "extra": 1}
+    with HandlerLifecycle(bus, msg, skill_id="ovos-date-time", data=base):
+        pass
+
+    types = [m.msg_type for m in emitted]
+    assert types == ["mycroft.skill.handler.start",
+                     "mycroft.skill.handler.complete"]
+    for m in emitted:
+        assert m.data == {"name": "get_time", "extra": 1}
+        # default {"handler": ...} is NOT added when data is supplied
+        assert "handler" not in m.data
+        assert m.context["skill_id"] == "ovos-date-time"
+
+
+def test_caller_data_error_merges_exception_without_mutating():
+    """On error the exception merges into a COPY; caller's dict is untouched."""
+    bus = FakeBus()
+    emitted = _recorder(bus)
+    msg = _trigger()
+
+    base = {"name": "get_time"}
+    with pytest.raises(ValueError, match="kaboom"):
+        with HandlerLifecycle(bus, msg, skill_id="x", data=base):
+            raise ValueError("kaboom")
+
+    err = emitted[-1]
+    assert err.msg_type == "mycroft.skill.handler.error"
+    assert err.data["name"] == "get_time"
+    assert "kaboom" in err.data["exception"]
+    # the caller's original dict was NOT mutated
+    assert base == {"name": "get_time"}
+
+
+def test_caller_data_not_mutated_across_emissions():
+    """The same base dict is reused for start+complete without accumulating."""
+    bus = FakeBus()
+    emitted = _recorder(bus)
+    msg = _trigger()
+
+    base = {"name": "h"}
+    with HandlerLifecycle(bus, msg, skill_id="x", data=base):
+        pass
+
+    assert base == {"name": "h"}
+    for m in emitted:
+        assert m.data == {"name": "h"}
+
+
+def test_data_none_keeps_default_handler_payload():
+    """data=None falls back to the {'handler': handler_name} default."""
+    bus = FakeBus()
+    emitted = _recorder(bus)
+    msg = _trigger()
+
+    with HandlerLifecycle(bus, msg, skill_id="x", handler_name="h", data=None):
+        pass
+
+    for m in emitted:
+        assert m.data == {"handler": "h"}
+
+
+def test_decorator_caller_data_emitted_verbatim():
+    bus = FakeBus()
+    emitted = _recorder(bus)
+
+    @report_handler_lifecycle(bus, skill_id="ovos-stop",
+                              data={"name": "handle_stop"})
+    def handle_stop(message):
+        return "ok"
+
+    assert handle_stop(_trigger()) == "ok"
+    for m in emitted:
+        assert m.data == {"name": "handle_stop"}
+
+
 def test_works_without_real_bus_duck_typed_emit():
     """Any object exposing .emit works (no MessageBusClient required)."""
     class FakeEmitter:

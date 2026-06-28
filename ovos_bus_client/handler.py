@@ -49,6 +49,13 @@ Example
 ...                        handler_name="ask_persona"):
 ...     handler(message)  # start emitted on enter, complete on clean exit,
 ...                        # error emitted (and re-raised) on exception
+
+Each adopter may preserve its own existing payload via ``data=...``. For
+example, ovos-workshop keeps its historical ``{"name": ...}`` shape:
+
+>>> with HandlerLifecycle(self.bus, message, skill_id=self.skill_id,
+...                        data={"name": get_handler_name(handler)}):
+...     handler(message)
 """
 from functools import wraps
 from typing import Optional, Any, Callable
@@ -87,8 +94,20 @@ class HandlerLifecycle:
             preserved through ``forward`` on every emission.
         skill_id: the dispatching skill/plugin id, stamped into
             ``context["skill_id"]`` so the orchestrator can correlate.
-        handler_name: human/diagnostic name of the handler, carried in the
-            payload (``data["handler"]``). Optional.
+        handler_name: human/diagnostic name of the handler. When ``data`` is
+            not supplied, this becomes the default payload (``{"handler":
+            handler_name}``). Ignored when ``data`` is given. Optional.
+        data: base payload for every emission, used **verbatim** (a fresh copy
+            is forwarded each time, so neither the caller's dict nor this base
+            is ever mutated; on the error path ``{"exception": ...}`` is merged
+            into that copy). This lets each adopter preserve its existing
+            payload — e.g. ovos-workshop passes
+            ``data={"name": get_handler_name(handler)}`` to keep its historical
+            ``{"name": ...}`` shape. When ``None`` (default), the payload falls
+            back to ``{"handler": handler_name}`` (or ``{}`` when no
+            ``handler_name`` is given). Core reads neither field — it correlates
+            on ``context["skill_id"]`` and reads ``data["exception"]`` on error —
+            so this is purely about preserving each adopter's payload.
         handler_info: base topic for the done-signal. Defaults to
             ``mycroft.skill.handler`` to match ovos-workshop. An empty/false
             value disables emission entirely (matching workshop semantics).
@@ -97,17 +116,24 @@ class HandlerLifecycle:
     def __init__(self, bus: Any, message: Message,
                  skill_id: Optional[str] = None,
                  handler_name: Optional[str] = None,
+                 data: Optional[dict] = None,
                  handler_info: str = DEFAULT_HANDLER_INFO):
         self.bus = bus
         self.message = message
         self.skill_id = skill_id
         self.handler_name = handler_name
+        self.data = data
         self.handler_info = handler_info
 
     def _payload(self, extra: Optional[dict] = None) -> dict:
-        data = {}
-        if self.handler_name is not None:
-            data["handler"] = self.handler_name
+        # build a fresh dict every call so neither the caller-supplied base
+        # (self.data) nor any forwarded payload is mutated across emissions
+        if self.data is not None:
+            data = dict(self.data)
+        elif self.handler_name is not None:
+            data = {"handler": self.handler_name}
+        else:
+            data = {}
         if extra:
             data.update(extra)
         return data
@@ -158,6 +184,7 @@ class HandlerLifecycle:
 def report_handler_lifecycle(bus: Any,
                              skill_id: Optional[str] = None,
                              handler_name: Optional[str] = None,
+                             data: Optional[dict] = None,
                              handler_info: str = DEFAULT_HANDLER_INFO
                              ) -> Callable:
     """Decorator wrapping a ``handler(message)`` with :class:`HandlerLifecycle`.
@@ -176,8 +203,11 @@ def report_handler_lifecycle(bus: Any,
     Args:
         bus: object exposing ``.emit(Message)``.
         skill_id: dispatching skill/plugin id (``context["skill_id"]``).
-        handler_name: diagnostic handler name (``data["handler"]``); defaults
-            to the wrapped function's ``__name__`` when not given.
+        handler_name: diagnostic handler name (``data["handler"]`` when ``data``
+            is not given); defaults to the wrapped function's ``__name__``.
+        data: base payload for every emission, used verbatim (see
+            :class:`HandlerLifecycle`). When ``None`` (default) the payload
+            falls back to ``{"handler": handler_name}``.
         handler_info: base topic for the done-signal (default
             ``mycroft.skill.handler``).
     """
@@ -188,7 +218,8 @@ def report_handler_lifecycle(bus: Any,
         @wraps(func)
         def wrapper(message: Message, *args, **kwargs):
             with HandlerLifecycle(bus, message, skill_id=skill_id,
-                                  handler_name=name, handler_info=handler_info):
+                                  handler_name=name, data=data,
+                                  handler_info=handler_info):
                 return func(message, *args, **kwargs)
 
         return wrapper
