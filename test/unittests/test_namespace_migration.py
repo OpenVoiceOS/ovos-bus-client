@@ -89,30 +89,31 @@ class TestEmitPayloadTranslation(unittest.TestCase):
 
     def test_shape_changing_legacy_to_spec_reshapes_payload(self):
         c = _client()
-        # legacy handler.start payload shape: {"handler": <fn name>}
-        c.emit(Message("mycroft.skill.handler.start", {"handler": "HelloIntent"}))
+        # legacy detach_intent payload shape: {"intent_name": "<skill_id>:<name>"}
+        c.emit(Message("detach_intent", {"intent_name": "skill.foo:HelloIntent"}))
         sent = _sent(c)
         # original on the legacy topic is verbatim
-        self.assertEqual(sent[0], ("mycroft.skill.handler.start",
-                                   {"handler": "HelloIntent"}))
+        self.assertEqual(sent[0], ("detach_intent",
+                                   {"intent_name": "skill.foo:HelloIntent"}))
         # mirror on the spec topic is RESHAPED into the spec shape
-        # ({"intent_name": ...}), NOT the verbatim legacy {"handler": ...}
+        # ({"skill_id", "intent_name"}), NOT the verbatim legacy munged form
         spec_topic, spec_data = sent[1]
-        self.assertEqual(spec_topic, "ovos.intent.handler.start")
-        self.assertEqual(spec_data, {"intent_name": "HelloIntent"})
+        self.assertEqual(spec_topic, "ovos.intent.deregister")
+        self.assertEqual(spec_data, {"skill_id": "skill.foo",
+                                     "intent_name": "HelloIntent"})
         self.assertNotIn("handler", spec_data)  # not verbatim
 
     def test_shape_changing_spec_to_legacy_reshapes_payload(self):
         c = _client()
-        # spec handler.start payload shape: {"skill_id", "intent_name"}
-        c.emit(Message("ovos.intent.handler.start",
+        # spec deregister payload shape: {"skill_id", "intent_name"}
+        c.emit(Message("ovos.intent.deregister",
                        {"skill_id": "skill.foo", "intent_name": "HelloIntent"}))
         sent = _sent(c)
-        self.assertEqual(sent[0][0], "ovos.intent.handler.start")
+        self.assertEqual(sent[0][0], "ovos.intent.deregister")
         legacy_topic, legacy_data = sent[1]
-        self.assertEqual(legacy_topic, "mycroft.skill.handler.start")
-        # reshaped to the legacy shape -> carries "handler"
-        self.assertEqual(legacy_data.get("handler"), "HelloIntent")
+        self.assertEqual(legacy_topic, "detach_intent")
+        # reshaped to the legacy munged form -> "<skill_id>:<intent_name>"
+        self.assertEqual(legacy_data, {"intent_name": "skill.foo:HelloIntent"})
 
     def test_payload_compatible_rename_stays_equivalent(self):
         c = _client()
