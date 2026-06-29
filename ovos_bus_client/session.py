@@ -868,27 +868,37 @@ class Session(_SpecSession):
         return sess
 
 
-class SessionManager(_SpecSessionManager):
-    """Bus-integrated SessionManager.
+class _BusSessionManagerMixin:
+    """OVOS bus integration grafted onto the spec-tools SessionManager registry.
 
-    The value-passing registry — the ``sessions`` store, ``get`` / ``update`` /
-    ``_store`` folding, and the ``Message.forward`` / ``reply`` session stamping
-    — lives in :class:`ovos_spec_tools.session.SessionManager`. This subclass
-    adds the OVOS bus integration (default-session broadcast, recording /
-    speaking state handlers, intent-context sync) and, at import time, points the
-    *shared* registry's ``session_cls`` at the bus-client :class:`Session`
-    subclass so every fold / stamp builds the richer object.
+    There is intentionally **one** ``SessionManager`` class / registry. These
+    bus methods are *copied onto* :class:`ovos_spec_tools.session.SessionManager`
+    at import (see the bottom of this module), not held on a subclass. A subclass
+    would inherit the registry's shared ``sessions`` dict only until something
+    reassigned ``SessionManager.sessions = {...}`` — at which point the subclass
+    would shadow it and desync from ``Message.forward`` / ``reply`` stamping
+    (which reaches the base class). Grafting onto the one class makes that
+    impossible: a reassignment hits the single shared registry.
 
-    The registry state (``sessions``, ``default_session``, ``session_cls``,
-    ``_lock``) is **inherited, never re-declared here**, so this class and the
-    spec-tools base operate on the one shared registry — that is what lets
-    ``Message.forward`` / ``reply`` (which reach the base) observe the same live
-    sessions the bus handlers fold.
+    Adds the bus integration — default-session broadcast, recording / speaking
+    state handlers, intent-context sync — and overrides ``get`` / ``update`` /
+    ``reset_default_session`` with the bus-flavoured variants. The folding,
+    ``_store`` and ``sync_message_session`` stamping stay the spec-tools base's.
     """
     bus = None
 
     @classmethod
     def sync(cls, message=None):
+        """Broadcast the default session on the bus.
+
+        DEPRECATED: the default session propagates by value-passing like any
+        other session (it folds on receive, stamps on forward/reply); an
+        explicit default-session broadcast is legacy and will be removed.
+        """
+        log_deprecation("SessionManager.sync / the default-session broadcast is "
+                        "legacy; the default session propagates by value-passing "
+                        "like any other session",
+                        _NEXT_MAJOR_VERSION)
         if cls.bus:
             message = message or Message(SpecMessage.SESSION_SYNC)
             cls.bus.emit(message.reply("ovos.session.update_default",
@@ -930,7 +940,9 @@ class SessionManager(_SpecSessionManager):
         """
         Define and return a new default_session (then broadcast it on the bus)
         """
-        sess = super().reset_default_session()
+        sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+        cls.sessions[DEFAULT_SESSION_ID] = sess
+        cls.default_session = sess
         LOG.info("Default Session reset")
         cls.sync()
         return sess
@@ -958,7 +970,9 @@ class SessionManager(_SpecSessionManager):
             # this log is dangerous, session may contain things like passwords and access keys
             # this comment is here to avoid reintroducing it by accident
             # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
-        return super().update(sess)
+        if not sess:
+            raise ValueError("Expected Session and got None")
+        return cls._store(sess)
 
     @classmethod
     def get(cls, message: Optional[Message] = None) -> Session:
@@ -1166,10 +1180,18 @@ class SessionManager(_SpecSessionManager):
     handle_default_session_request = handle_session_sync
 
 
-# Point the *shared* spec-tools registry at the bus-client Session subclass so
-# every fold/stamp — including Message.forward/reply stamping, which reaches the
-# spec-tools base — builds the richer Session (legacy projections, bus-only
-# state). Set on the base class so both it and this subclass resolve the same
-# session_cls, then materialize the default session as that class.
+# Graft the bus integration onto the ONE shared spec-tools registry class (not a
+# subclass — see _BusSessionManagerMixin) and expose it under the historical name
+# so ``from ovos_bus_client.session import SessionManager`` is unchanged. Because
+# it is the same object as ``ovos_spec_tools.session.SessionManager``, there is a
+# single ``sessions`` registry: Message.forward/reply stamping and the bus
+# handlers always see the same live sessions, even if a caller reassigns
+# ``SessionManager.sessions``.
+for _name, _attr in vars(_BusSessionManagerMixin).items():
+    if not _name.startswith("__"):
+        setattr(_SpecSessionManager, _name, _attr)
+# point the registry at the richer bus-client Session subclass so every
+# fold/stamp builds it, then materialize the default session as that class.
 _SpecSessionManager.session_cls = Session
+SessionManager = _SpecSessionManager
 SessionManager.get_default_session()
