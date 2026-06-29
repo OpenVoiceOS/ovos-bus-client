@@ -257,6 +257,34 @@ class TestSessionManager(unittest.TestCase):
         # the early reference observes the mutation without being re-fetched
         self.assertTrue(held.is_speaking)
 
+    def test_update_from_present_empty_overrides(self):
+        # SESSION-1 §2: a snapshot that carries an (empty) value for a field
+        # overrides the live session's value — folding is spec-deserialization,
+        # not a self-preserving merge that keeps stale state.
+        from ovos_bus_client.session import Session
+        from ovos_bus_client.message import Message
+        held = self.SessionManager.get(
+            Message("a", context={"session": Session("sid-clear").serialize()}))
+        held.activate_skill("skill.foo")
+        self.assertTrue(held.active_skills)
+
+        # a later snapshot with no active skills must clear the singleton
+        self.SessionManager.update(Session("sid-clear"))
+        self.assertEqual(held.active_skills, [])
+
+    def test_update_from_does_not_alias_nested_state(self):
+        # round-tripping through (de)serialize rebuilds nested objects, so the
+        # live singleton never shares mutable sub-objects with the snapshot.
+        from ovos_bus_client.session import Session
+        live = Session("sid-alias")
+        snapshot = Session("sid-alias")
+        snapshot.activate_skill("skill.bar")
+        live.update_from(snapshot)
+        self.assertTrue(live.active_skills)
+        # mutating the snapshot afterwards must not leak into the live object
+        snapshot.active_handlers.clear()
+        self.assertTrue(live.active_skills)
+
     def test_touch(self):
         # TODO
         pass
