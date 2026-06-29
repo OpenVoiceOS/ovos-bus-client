@@ -1,6 +1,6 @@
 import enum
 import time
-from threading import Lock, Event
+from threading import Event
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
 
@@ -9,7 +9,9 @@ from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang, SpecMessage
 from ovos_spec_tools.session import (Session as _SpecSession,
+                                     SessionManager as _SpecSessionManager,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
+                                     DEFAULT_SESSION_ID,
                                      SESSION1_REGISTERED_FIELDS)
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.version import VERSION_MAJOR
@@ -624,7 +626,14 @@ class Session(_SpecSession):
     def expired(self) -> bool:
         """
         Return True if the session has expired
+
+        DEPRECATED: session expiry / ``touch_time`` / ``expiration_seconds`` are
+        not part of OVOS-SESSION-1; the singleton registry never expires
+        sessions. Retained only for back-compat.
         """
+        log_deprecation("Session.expired()/touch_time/expiration_seconds are "
+                        "not part of OVOS-SESSION-1 and will be removed",
+                        _NEXT_MAJOR_VERSION)
         if self.expiration_seconds < 0:
             return False
         return int(time.time()) - self.touch_time > self.expiration_seconds
@@ -825,35 +834,9 @@ class Session(_SpecSession):
                        blacklisted_skills=blacklisted_skills,
                        **canonical_kwargs)
 
-    def update_from(self, other: "Session") -> "Session":
-        """Mutate this session in place to mirror ``other``'s state.
-
-        The OVOS bus is value-passing: every message carries a serialized
-        snapshot of its session, so each :meth:`from_message` would otherwise
-        build a *fresh* ``Session`` object for the same id. ``SessionManager``
-        keeps exactly one live object per ``session_id`` and folds incoming
-        snapshots onto it through here, so a reference taken at one point in a
-        flow still observes writes made through a later snapshot of the same id
-        (e.g. ``is_speaking`` flipped by an ``audio_output_*`` handler).
-
-        The snapshot is applied with full OVOS-SESSION-1 §2 deserialization
-        semantics rather than a raw ``__dict__`` merge: the incoming state is
-        round-tripped through :meth:`serialize` / :meth:`deserialize`, so a key
-        present on the wire overrides this session's value (even when empty) and
-        a null / omitted key resolves to the spec default — exactly as a freshly
-        received message would parse. Round-tripping also rebuilds the nested
-        state (``context``, handler lists, …) freshly, so the live object never
-        aliases ``other``'s mutable sub-objects.
-
-        The ``session_id`` is preserved — it is the registry key and must not
-        drift even if ``other`` carries a different one.
-        """
-        if other is self:
-            return self
-        rebuilt = Session.deserialize(other.serialize())
-        rebuilt.session_id = self.session_id
-        self.__dict__ = rebuilt.__dict__
-        return self
+    # update_from is inherited from ovos_spec_tools.session.Session: it rebuilds
+    # via type(self).deserialize(other.serialize()), so a bus-client Session
+    # rebuilds as a bus-client Session (full §2 semantics, no aliasing).
 
     @staticmethod
     def from_message(message: Message = None):
@@ -869,7 +852,7 @@ class Session(_SpecSession):
             lang = message.context.get("lang") or \
                    message.data.get("lang")
             sess = message.context["session"]
-            if "lang" not in sess:
+            if lang and "lang" not in sess:
                 sess["lang"] = lang
             sess = Session.deserialize(sess)
         else:
@@ -880,18 +863,28 @@ class Session(_SpecSession):
                           f"context={message.context}")
             else:
                 LOG.warning(f"No message found, using default session")
-            # new session
-            sess = SessionManager.default_session
-        if sess and sess.expired():
-            LOG.debug(f"unexpiring session {sess.session_id}")
+            # no session on the message -> the default session
+            sess = SessionManager.get_default_session()
         return sess
 
 
-class SessionManager:
-    """ Keeps track of the current active session. """
-    default_session: Session = Session("default")
-    __lock = Lock()
-    sessions = {"default": default_session}
+class SessionManager(_SpecSessionManager):
+    """Bus-integrated SessionManager.
+
+    The value-passing registry — the ``sessions`` store, ``get`` / ``update`` /
+    ``_store`` folding, and the ``Message.forward`` / ``reply`` session stamping
+    — lives in :class:`ovos_spec_tools.session.SessionManager`. This subclass
+    adds the OVOS bus integration (default-session broadcast, recording /
+    speaking state handlers, intent-context sync) and, at import time, points the
+    *shared* registry's ``session_cls`` at the bus-client :class:`Session`
+    subclass so every fold / stamp builds the richer object.
+
+    The registry state (``sessions``, ``default_session``, ``session_cls``,
+    ``_lock``) is **inherited, never re-declared here**, so this class and the
+    spec-tools base operate on the one shared registry — that is what lets
+    ``Message.forward`` / ``reply`` (which reach the base) observe the same live
+    sessions the bus handlers fold.
+    """
     bus = None
 
     @classmethod
@@ -911,51 +904,51 @@ class SessionManager:
         cls.bus.on(SpecMessage.SESSION_SYNC, cls.handle_session_sync)
         cls.sync()
 
-    @staticmethod
-    def prune_sessions():
+    @classmethod
+    def prune_sessions(cls):
         """
         Discard any expired sessions
-        """
-        # TODO: Consider when to prune sessions; an event or callback scheduled
-        #   on `touch`, periodically scheduled event, or triggered on some
-        #   interaction with `SessionManager` (ideally threaded to not slow
-        #   down references)
-        SessionManager.sessions = {sid: s for sid, s in
-                                   SessionManager.sessions.items()
-                                   if not s.expired}
 
-    @staticmethod
-    def reset_default_session() -> Session:
+        DEPRECATED: session expiry is not part of OVOS-SESSION-1; the singleton
+        registry does not expire sessions. Retained as a no-op-ish back-compat
+        shim.
         """
-        Define and return a new default_session
-        """
-        with SessionManager.__lock:
-            sess = Session("default")
-            LOG.info(f"Default Session reset")
-            SessionManager.default_session = SessionManager.sessions["default"] = sess
-            SessionManager.sync()
-        return SessionManager.default_session
+        log_deprecation("SessionManager.prune_sessions / session expiry are not "
+                        "part of OVOS-SESSION-1 and will be removed",
+                        _NEXT_MAJOR_VERSION)
+        # mutate the shared registry dict in place (do NOT rebind it, or this
+        # class would shadow the base's shared ``sessions`` and forward/reply
+        # stamping would diverge from the bus handlers).
+        keep = {sid: s for sid, s in cls.sessions.items()
+                if not (s.expiration_seconds >= 0
+                        and int(time.time()) - s.touch_time > s.expiration_seconds)}
+        cls.sessions.clear()
+        cls.sessions.update(keep)
 
-    @staticmethod
-    def update(sess: Session, make_default: bool = False) -> Session:
+    @classmethod
+    def reset_default_session(cls) -> Session:
         """
-        Register ``sess`` in the singleton store and return the live object
-        for its id.
+        Define and return a new default_session (then broadcast it on the bus)
+        """
+        sess = super().reset_default_session()
+        LOG.info("Default Session reset")
+        cls.sync()
+        return sess
+
+    @classmethod
+    def update(cls, sess: Session, make_default: bool = False) -> Session:
+        """Register ``sess`` in the shared singleton store; return the live object.
+
+        Folding semantics live in the spec-tools base; this override only keeps
+        the deprecated ``make_default`` flag.
 
         @param sess: Session to update
         @param make_default: DEPRECATED. if true, rewrite ``sess.session_id`` to
             "default". Redundant under the singleton store: any session whose id
-            is already "default" syncs ``default_session`` automatically (see
-            :meth:`_store`), so promote a session by setting its id to "default"
-            instead of mutating it through this flag.
-        @return: the canonical (singleton) Session for ``sess.session_id`` —
-            the same object on every call for that id, so the caller can rebind
-            to it. When the id is already known the incoming snapshot is folded
-            onto the existing instance rather than replacing it.
+            is already "default" syncs ``default_session`` automatically, so
+            promote a session by setting its id to "default" instead.
+        @return: the canonical (singleton) Session for ``sess.session_id``.
         """
-        if not sess:
-            raise ValueError(f"Expected Session and got None")
-
         if make_default:
             log_deprecation("'make_default' kwarg is deprecated and will be "
                             "removed; set session_id='default' on the session "
@@ -965,56 +958,29 @@ class SessionManager:
             # this log is dangerous, session may contain things like passwords and access keys
             # this comment is here to avoid reintroducing it by accident
             # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
-
-        return SessionManager._store(sess)
+        return super().update(sess)
 
     @classmethod
-    def _store(cls, sess: Session) -> Session:
-        """Register ``sess`` and return the one live object for its id.
-
-        Every ``session_id`` maps to a single, stable ``Session`` instance for
-        the lifetime of the process. When the id is already known, the incoming
-        snapshot is folded onto the existing object (see
-        :meth:`Session.update_from`) and that object — not the snapshot — is
-        returned, so object identity per id never changes. This is what lets a
-        held session reference observe later mutations to the same id, instead
-        of each bus message silently swapping in a fresh, disconnected object.
-        """
-        with cls.__lock:
-            existing = cls.sessions.get(sess.session_id)
-            if existing is not None and existing is not sess:
-                existing.update_from(sess)
-                sess = existing
-            cls.sessions[sess.session_id] = sess
-            if sess.session_id == "default":
-                cls.default_session = sess
-        return sess
-
-    @staticmethod
-    def get(message: Optional[Message] = None) -> Session:
+    def get(cls, message: Optional[Message] = None) -> Session:
         """
         Get the active session for a given Message
+
+        Adds the bus-client niceties over the spec-tools base: a
+        ``dig_for_message`` fallback and the legacy ``Session.from_message``
+        extraction (which carries the context ``lang`` onto a session that
+        omits it). Folding onto the shared singleton is the base's job.
 
         @param message: Message to get session for
         @return: Session from message or default_session
         """
-        sess = SessionManager.default_session
         message = message or dig_for_message()
-
-        # A message exists, get a real session
-        if message:
-            msg_sess = Session.from_message(message)
-            if msg_sess:
-                if msg_sess.session_id != "default":  # reserved namespace for ovos-core
-                    # fold the message snapshot onto the singleton for this id
-                    # and hand back that single live object (never the snapshot)
-                    return SessionManager._store(msg_sess)
-            else:
-                LOG.debug(f"No session from message, use default session")
-        else:
-            LOG.debug(f"No message, use default session")
-
-        return sess
+        if message is None:
+            LOG.debug("No message, use default session")
+            return cls.get_default_session()
+        # every session — including the default id — folds onto the one live
+        # object for its id (the wire is value-passing; nothing is owner-only).
+        msg_sess = Session.from_message(message)
+        return cls._store(msg_sess) if msg_sess else cls.get_default_session()
 
     @staticmethod
     def touch(message: Message = None):
@@ -1198,3 +1164,12 @@ class SessionManager:
     # legacy alias — ``ovos.session.sync`` historically routed here to echo
     # the default session; it now also performs the OVOS-CONTEXT-1 §5.3 merge
     handle_default_session_request = handle_session_sync
+
+
+# Point the *shared* spec-tools registry at the bus-client Session subclass so
+# every fold/stamp — including Message.forward/reply stamping, which reaches the
+# spec-tools base — builds the richer Session (legacy projections, bus-only
+# state). Set on the base class so both it and this subclass resolve the same
+# session_cls, then materialize the default session as that class.
+_SpecSessionManager.session_cls = Session
+SessionManager.get_default_session()
