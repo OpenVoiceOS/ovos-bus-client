@@ -213,12 +213,49 @@ class TestSessionManager(unittest.TestCase):
         # TODO
 
     def test_update(self):
-        # TODO
-        pass
+        from ovos_bus_client.session import Session
+        sess = Session("sid-update")
+        # update returns the canonical (singleton) object for the id
+        canonical = self.SessionManager.update(sess)
+        self.assertIs(canonical, sess)
+        self.assertIs(self.SessionManager.sessions["sid-update"], sess)
 
-    def test_get(self):
-        # TODO - rewrite test, .get has no side effects now, lang update happens in ovos-core
-        pass
+        # a second snapshot for the same id is folded onto the singleton in
+        # place — the original object identity is preserved, not replaced
+        snapshot = Session("sid-update")
+        snapshot.lang = "pt-PT"
+        returned = self.SessionManager.update(snapshot)
+        self.assertIs(returned, sess)
+        self.assertIsNot(returned, snapshot)
+        self.assertEqual(sess.lang, "pt-PT")
+
+    def test_get_returns_singleton(self):
+        from ovos_bus_client.session import Session
+        from ovos_bus_client.message import Message
+        sess = Session("sid-get")
+        msg = Message("test", context={"session": sess.serialize()})
+
+        first = self.SessionManager.get(msg)
+        second = self.SessionManager.get(msg)
+        # every get() for the same id hands back the one live object, even
+        # though each message carries its own serialized snapshot
+        self.assertIs(first, second)
+        self.assertIs(self.SessionManager.sessions["sid-get"], first)
+
+    def test_held_reference_observes_later_mutation(self):
+        # the corner case the singleton fixes: a reference taken early in a
+        # flow must see a flag flipped through a later snapshot of the same id
+        from ovos_bus_client.session import Session
+        from ovos_bus_client.message import Message
+        held = self.SessionManager.get(
+            Message("a", context={"session": Session("sid-flag").serialize()}))
+        self.assertFalse(held.is_speaking)
+
+        speaking = Session("sid-flag")
+        speaking.is_speaking = True
+        self.SessionManager.update(speaking)
+        # the early reference observes the mutation without being re-fetched
+        self.assertTrue(held.is_speaking)
 
     def test_touch(self):
         # TODO

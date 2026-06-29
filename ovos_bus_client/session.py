@@ -820,6 +820,27 @@ class Session(_SpecSession):
                        blacklisted_skills=blacklisted_skills,
                        **canonical_kwargs)
 
+    def update_from(self, other: "Session") -> "Session":
+        """Mutate this session in place to mirror ``other``'s state.
+
+        The OVOS bus is value-passing: every message carries a serialized
+        snapshot of its session, so each :meth:`from_message` would otherwise
+        build a *fresh* ``Session`` object for the same id. ``SessionManager``
+        keeps exactly one live object per ``session_id`` and folds incoming
+        snapshots onto it through here, so a reference taken at one point in a
+        flow still observes writes made through a later snapshot of the same id
+        (e.g. ``is_speaking`` flipped by an ``audio_output_*`` handler).
+
+        Last-writer-wins: ``other`` fully replaces this session's fields. The
+        ``session_id`` is preserved — it is the registry key and must not drift.
+        """
+        if other is self:
+            return self
+        sid = self.session_id
+        self.__dict__.update(other.__dict__)
+        self.session_id = sid
+        return self
+
     @staticmethod
     def from_message(message: Message = None):
         """
@@ -902,11 +923,17 @@ class SessionManager:
         return SessionManager.default_session
 
     @staticmethod
-    def update(sess: Session, make_default: bool = False):
+    def update(sess: Session, make_default: bool = False) -> Session:
         """
-        Update the last_touch timestamp on the current session
+        Register ``sess`` in the singleton store and return the live object
+        for its id.
+
         @param sess: Session to update
         @param make_default: if true, set default_session to sess
+        @return: the canonical (singleton) Session for ``sess.session_id`` —
+            the same object on every call for that id, so the caller can rebind
+            to it. When the id is already known the incoming snapshot is folded
+            onto the existing instance rather than replacing it.
         """
         if not sess:
             raise ValueError(f"Expected Session and got None")
@@ -917,9 +944,29 @@ class SessionManager:
             # this comment is here to avoid reintroducing it by accident
             # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
 
-        if sess.session_id == "default":
-            SessionManager.default_session = sess
-        SessionManager.sessions[sess.session_id] = sess
+        return SessionManager._store(sess)
+
+    @classmethod
+    def _store(cls, sess: Session) -> Session:
+        """Register ``sess`` and return the one live object for its id.
+
+        Every ``session_id`` maps to a single, stable ``Session`` instance for
+        the lifetime of the process. When the id is already known, the incoming
+        snapshot is folded onto the existing object (see
+        :meth:`Session.update_from`) and that object — not the snapshot — is
+        returned, so object identity per id never changes. This is what lets a
+        held session reference observe later mutations to the same id, instead
+        of each bus message silently swapping in a fresh, disconnected object.
+        """
+        with cls.__lock:
+            existing = cls.sessions.get(sess.session_id)
+            if existing is not None and existing is not sess:
+                existing.update_from(sess)
+                sess = existing
+            cls.sessions[sess.session_id] = sess
+            if sess.session_id == "default":
+                cls.default_session = sess
+        return sess
 
     @staticmethod
     def get(message: Optional[Message] = None) -> Session:
@@ -937,8 +984,9 @@ class SessionManager:
             msg_sess = Session.from_message(message)
             if msg_sess:
                 if msg_sess.session_id != "default":  # reserved namespace for ovos-core
-                    SessionManager.sessions[msg_sess.session_id] = msg_sess
-                    return msg_sess
+                    # fold the message snapshot onto the singleton for this id
+                    # and hand back that single live object (never the snapshot)
+                    return SessionManager._store(msg_sess)
             else:
                 LOG.debug(f"No session from message, use default session")
         else:
