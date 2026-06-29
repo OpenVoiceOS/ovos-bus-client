@@ -836,14 +836,23 @@ class Session(_SpecSession):
         flow still observes writes made through a later snapshot of the same id
         (e.g. ``is_speaking`` flipped by an ``audio_output_*`` handler).
 
-        Last-writer-wins: ``other`` fully replaces this session's fields. The
-        ``session_id`` is preserved — it is the registry key and must not drift.
+        The snapshot is applied with full OVOS-SESSION-1 §2 deserialization
+        semantics rather than a raw ``__dict__`` merge: the incoming state is
+        round-tripped through :meth:`serialize` / :meth:`deserialize`, so a key
+        present on the wire overrides this session's value (even when empty) and
+        a null / omitted key resolves to the spec default — exactly as a freshly
+        received message would parse. Round-tripping also rebuilds the nested
+        state (``context``, handler lists, …) freshly, so the live object never
+        aliases ``other``'s mutable sub-objects.
+
+        The ``session_id`` is preserved — it is the registry key and must not
+        drift even if ``other`` carries a different one.
         """
         if other is self:
             return self
-        sid = self.session_id
-        self.__dict__.update(other.__dict__)
-        self.session_id = sid
+        rebuilt = Session.deserialize(other.serialize())
+        rebuilt.session_id = self.session_id
+        self.__dict__ = rebuilt.__dict__
         return self
 
     @staticmethod
