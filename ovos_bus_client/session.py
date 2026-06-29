@@ -1016,6 +1016,53 @@ class SessionManager:
 
         return sess
 
+    @classmethod
+    def sync_message_session(cls, message: Message,
+                            default_session_id: str = "default") -> Message:
+        """Stamp an outgoing message with the freshest live session for *its own* id.
+
+        WHY THIS IS NECESSARY (and not a workaround):
+        The bus is value-passing and ``SessionManager`` keeps ONE live ``Session``
+        per id. The happy path for any component is
+        ``sess = SessionManager.get(message)`` -> mutate ``sess`` -> emit a
+        ``message.forward(...)`` (e.g. ``self.speak`` from a handler, or the
+        OVOS-PIPELINE-1 §8 lifecycle trio from the dispatcher / HandlerLifecycle).
+        But ``Message.forward`` / ``Message.reply`` DEEP-COPY the *originating*
+        message's ``context["session"]`` — the snapshot as it was BEFORE the
+        mutation. Without a fix, that stale snapshot rides onto the wire and, when
+        a consumer (or the FakeBus ``on_message`` hook) folds it back onto the
+        singleton, REGRESSES shared state (e.g. ``active_skills`` dropping a skill
+        that was just activated). Re-stamping every outgoing message with the live
+        session here closes that gap centrally, so individual emitters do not each
+        have to remember to re-serialize the session after every mutation.
+
+        This is SAFE — it never discards a legitimate update — because in-process
+        session mutations go through ``Session`` methods that ``touch()`` ->
+        ``SessionManager.update`` the singleton, so the singleton is always at
+        least as fresh as any message built in this process.
+
+        Safety guard: a ``session_id`` this process does NOT hold is left untouched
+        (e.g. a HiveMind relay forwarding a remote/authoritative session it never
+        folded locally) — we never overwrite a session we don't own. A message with
+        no session at all is stamped with the default session (matching the prior
+        inject-when-missing behaviour).
+
+        @param message: outgoing Message to stamp (mutated in place)
+        @param default_session_id: the emitting client's bound session id, used
+            when the message carries no session of its own
+        @return: the same Message, for chaining
+        """
+        incoming = message.context.get("session")
+        sid = incoming.get("session_id") if isinstance(incoming, dict) else None
+        sid = sid or default_session_id
+        live = cls.sessions.get(sid)
+        if live is not None:
+            message.context["session"] = live.serialize()
+        elif incoming is None:
+            sess = cls.sessions.get(default_session_id) or Session(default_session_id)
+            message.context["session"] = sess.serialize()
+        return message
+
     @staticmethod
     def touch(message: Message = None):
         """

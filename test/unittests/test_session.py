@@ -285,6 +285,44 @@ class TestSessionManager(unittest.TestCase):
         snapshot.active_handlers.clear()
         self.assertTrue(live.active_skills)
 
+    def test_sync_message_session_stamps_live_state(self):
+        # the singleton outbound half: an outgoing message carrying a STALE
+        # snapshot for an id we hold is re-stamped with the live state, so a
+        # stale reply/forward copy can't propagate onto the wire.
+        from ovos_bus_client.session import Session
+        from ovos_bus_client.message import Message
+        live = self.SessionManager.update(Session("sid-sync"))
+        live.activate_skill("skill.live")
+
+        stale = Session("sid-sync")  # no active skills — a pre-activation copy
+        msg = Message("x", context={"session": stale.serialize()})
+        self.SessionManager.sync_message_session(msg, "default")
+
+        stamped = msg.context["session"]["active_skills"]
+        self.assertEqual([s[0] for s in stamped], ["skill.live"])
+
+    def test_sync_message_session_leaves_unowned_id_untouched(self):
+        # safety guard: a session_id this process does NOT hold is never
+        # overwritten (e.g. a relay forwarding a remote session).
+        from ovos_bus_client.message import Message
+        # craft the dict directly: building a Session + activate_skill would
+        # auto-register it via touch()->update, which would own the id.
+        snapshot = {"session_id": "sid-remote-unowned",
+                    "active_skills": [["skill.remote", 1.0]]}
+        msg = Message("x", context={"session": dict(snapshot)})
+
+        self.assertNotIn("sid-remote-unowned", self.SessionManager.sessions)
+        self.SessionManager.sync_message_session(msg, "default")
+        self.assertEqual(msg.context["session"], snapshot)  # untouched
+
+    def test_sync_message_session_injects_default_when_absent(self):
+        # a message with no session at all gets the default-session stamp
+        # (matches the prior inject-when-missing behaviour).
+        from ovos_bus_client.message import Message
+        msg = Message("x", context={})
+        self.SessionManager.sync_message_session(msg, "default")
+        self.assertEqual(msg.context["session"]["session_id"], "default")
+
     def test_touch(self):
         # TODO
         pass

@@ -283,10 +283,13 @@ class MessageBusClient:
         Args:
             message (Message): Message to send
         """
-        if "session" not in message.context:
-            sess = SessionManager.sessions.get(self.session_id) or \
-                   Session(self.session_id)
-            message.context["session"] = sess.serialize()
+        # stamp the outgoing message with the freshest live session for its own
+        # id (not merely inject-when-missing). Components follow get->mutate->
+        # forward, and Message.forward/reply deep-copy the PRE-mutation session
+        # snapshot; re-stamping here keeps that stale copy from riding onto the
+        # wire and regressing the singleton when a consumer folds it back. See
+        # SessionManager.sync_message_session for the full rationale + safety.
+        SessionManager.sync_message_session(message, self.session_id)
 
         self._send(message)
 
