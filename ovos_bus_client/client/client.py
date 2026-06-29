@@ -267,7 +267,10 @@ class MessageBusClient:
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
         sess = Session.deserialize(new_session)
-        SessionManager.update(sess, make_default=True)
+        # the broadcast payload is default_session.serialize(), so it already
+        # carries session_id == "default"; the singleton store syncs
+        # default_session by id (no make_default rewrite needed).
+        SessionManager.update(sess)
         LOG.debug("synced default_session")
 
     def emit(self, message: Message):

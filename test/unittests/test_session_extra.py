@@ -315,10 +315,14 @@ class TestSessionManager(TestCase):
         self.assertIs(SessionManager.sessions["upd"], s)
 
     def test_update_make_default(self):
+        # "default" is a singleton: make_default folds the snapshot onto the
+        # existing default session (preserving its identity) and returns that
+        # canonical object, rather than swapping in a disconnected one.
         s = Session("foo")
-        SessionManager.update(s, make_default=True)
+        canonical = SessionManager.update(s, make_default=True)
         self.assertEqual(s.session_id, "default")
-        self.assertIs(SessionManager.default_session, s)
+        self.assertIs(SessionManager.default_session, canonical)
+        self.assertIs(SessionManager.sessions["default"], canonical)
 
     def test_update_raises_on_none(self):
         with self.assertRaises(ValueError):
