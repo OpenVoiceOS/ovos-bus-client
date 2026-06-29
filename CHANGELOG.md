@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a2) (2026-06-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.2a1...2.6.2a2)
+
+**Merged pull requests:**
+
+- refactor: SessionManager subclasses the ovos-spec-tools registry [\#254](https://github.com/OpenVoiceOS/ovos-bus-client/pull/254) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.6.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.1a1...2.6.2a1)
