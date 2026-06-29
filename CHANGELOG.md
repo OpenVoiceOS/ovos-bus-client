@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a1) (2026-06-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.1a1...2.6.2a1)
+
+**Merged pull requests:**
+
+- fix: Session.update\_from applies SESSION-1 deserialization semantics [\#251](https://github.com/OpenVoiceOS/ovos-bus-client/pull/251) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.6.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.1a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.0a1...2.6.1a1)
