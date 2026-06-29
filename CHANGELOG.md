@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.1a1) (2026-06-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.0a1...2.6.1a1)
+
+**Merged pull requests:**
+
+- fix: SessionManager keeps one live Session per id \(singleton\) [\#249](https://github.com/OpenVoiceOS/ovos-bus-client/pull/249) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.6.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.0a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a3...2.6.0a1)
