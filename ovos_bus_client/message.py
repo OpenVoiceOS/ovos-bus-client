@@ -193,6 +193,22 @@ def dig_for_message(max_records: int = 10) -> Optional[Message]:
     return None
 
 
+def _stamp_session_if_present(msg: Message) -> Message:
+    """Refresh a derived message's session to the live value for its id.
+
+    Mirrors the ovos_spec_tools ``Message.forward`` / ``reply`` stamping for the
+    bus-client Message subclasses (``CollectionMessage`` / ``GUIMessage``), whose
+    differing ``__init__`` signatures force them to build a base ``Message``
+    directly instead of inheriting the stamping spec methods. A session-less
+    message is left untouched (§5); a session for an id the registry never folded
+    is carried verbatim (handled inside ``sync_message_session``).
+    """
+    if msg.context.get("session"):
+        from ovos_spec_tools.session import SessionManager
+        return SessionManager.sync_message_session(msg)
+    return msg
+
+
 class CollectionMessage(Message):
     """Extension of :class:`Message` for use with collect handlers.
 
@@ -309,7 +325,8 @@ class CollectionMessage(Message):
             Message: A new Message constructed with `msg_type`, `data` (or `{}`), and a deep-copied context from this message.
         """
         from copy import deepcopy
-        return Message(msg_type, data or {}, deepcopy(self.context))
+        return _stamp_session_if_present(
+            Message(msg_type, data or {}, deepcopy(self.context)))
 
     def reply(self, msg_type, data=None, context=None):  # type: ignore[override]
         """
@@ -327,6 +344,9 @@ class CollectionMessage(Message):
         """
         from copy import deepcopy
         new_context = deepcopy(self.context)
+        # an explicit session in the caller-supplied context is honoured (skip
+        # the live-session refresh), matching ovos_spec_tools.Message.reply
+        explicit_session = bool(context) and "session" in context
         if context:
             new_context.update(context)
         src = new_context.get("source")
@@ -336,7 +356,8 @@ class CollectionMessage(Message):
                 dst[0] if isinstance(dst, list) and dst else dst)
         if src is not None:
             new_context["destination"] = src
-        return Message(msg_type, data or {}, new_context)
+        msg = Message(msg_type, data or {}, new_context)
+        return msg if explicit_session else _stamp_session_if_present(msg)
 
     def response(self, data=None, context=None):  # type: ignore[override]
         """
@@ -425,7 +446,8 @@ class GUIMessage(Message):
             Message: A new Message constructed with `msg_type`, `data` (or `{}`), and a deep-copied context from this message.
         """
         from copy import deepcopy
-        return Message(msg_type, data or {}, deepcopy(self.context))
+        return _stamp_session_if_present(
+            Message(msg_type, data or {}, deepcopy(self.context)))
 
     def reply(self, msg_type, data=None, context=None):  # type: ignore[override]
         """
