@@ -84,8 +84,10 @@ def test_skill_id_rides_in_context_and_session_preserved():
     for m in emitted:
         # skill_id stamped for correlation
         assert m.context["skill_id"] == "ovos-fallback"
-        # session preserved through forward (deep copy)
-        assert m.context["session"] == {"session_id": "sess-123"}
+        # forward stamps the LIVE session for this id (refresh, not the bare
+        # verbatim input) — the desync-guard: a derived event always carries
+        # the current session for sess-123, not a pre-mutation snapshot
+        assert m.context["session"]["session_id"] == "sess-123"
         # other context preserved too
         assert m.context["source"] == "unit-test"
 

@@ -257,6 +257,20 @@ class TestSessionManager(unittest.TestCase):
         # the early reference observes the mutation without being re-fetched
         self.assertTrue(held.is_speaking)
 
+    def test_forward_stamps_live_bus_session(self):
+        # bus-client land: get -> mutate -> forward; the derived message carries
+        # the LIVE bus Session for its id (refresh, not the pre-mutation copy).
+        from ovos_bus_client.session import Session
+        from ovos_bus_client.message import Message
+        live = self.SessionManager.get(
+            Message("a", context={"session": Session("sid-fwd").serialize()}))
+        live.activate_skill("my.skill")
+        derived = Message("utt", context={"session": {"session_id": "sid-fwd"}}
+                          ).forward("my.skill.activate")
+        skills = [s[0] for s in
+                  Session.deserialize(derived.context["session"]).active_skills]
+        self.assertIn("my.skill", skills)
+
     def test_update_from_present_empty_overrides(self):
         # SESSION-1 §2: a snapshot that carries an (empty) value for a field
         # overrides the live session's value — folding is spec-deserialization,
