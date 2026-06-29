@@ -12,6 +12,11 @@ from ovos_spec_tools.session import (Session as _SpecSession,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
                                      SESSION1_REGISTERED_FIELDS)
 from ovos_bus_client.message import dig_for_message, Message
+from ovos_bus_client.version import VERSION_MAJOR
+
+# Deprecations are removed at the next major bump. Derive the version from
+# version.py so the warning text can never drift out of date.
+_NEXT_MAJOR_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 
 
 class UtteranceState(str, enum.Enum):
@@ -929,7 +934,11 @@ class SessionManager:
         for its id.
 
         @param sess: Session to update
-        @param make_default: if true, set default_session to sess
+        @param make_default: DEPRECATED. if true, rewrite ``sess.session_id`` to
+            "default". Redundant under the singleton store: any session whose id
+            is already "default" syncs ``default_session`` automatically (see
+            :meth:`_store`), so promote a session by setting its id to "default"
+            instead of mutating it through this flag.
         @return: the canonical (singleton) Session for ``sess.session_id`` —
             the same object on every call for that id, so the caller can rebind
             to it. When the id is already known the incoming snapshot is folded
@@ -939,6 +948,10 @@ class SessionManager:
             raise ValueError(f"Expected Session and got None")
 
         if make_default:
+            log_deprecation("'make_default' kwarg is deprecated and will be "
+                            "removed; set session_id='default' on the session "
+                            "(the singleton store syncs default_session by id)",
+                            _NEXT_MAJOR_VERSION)
             sess.session_id = "default"
             # this log is dangerous, session may contain things like passwords and access keys
             # this comment is here to avoid reintroducing it by accident
