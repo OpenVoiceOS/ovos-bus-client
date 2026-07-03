@@ -20,6 +20,44 @@ from ovos_bus_client.version import VERSION_MAJOR
 # version.py so the warning text can never drift out of date.
 _NEXT_MAJOR_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 
+# Bidirectional-wire back-compat: the canonical parent applies SESSION-1 §2.1
+# omit-when-empty semantics and stores an *empty* collection field as ``None``.
+# On the wire that is equivalent to omission, but in-process it breaks the
+# public contract that these fields are always iterable containers — consumers
+# do ``intent in session.blacklisted_intents`` and a ``None`` raises
+# ``TypeError: argument of type 'NoneType' is not iterable``. These fields are
+# therefore folded back to their canonical empty container after construction
+# so they ALWAYS deserialize to ``[]`` / ``{}``, never ``None``. Serialization
+# still omits them when empty (``to_dict`` drops falsy values), so the wire
+# shape is unchanged. Scalar fields (``site_id``, ``persona_id``, the per-channel
+# language overrides) and the single-object ``response_mode`` legitimately stay
+# ``None`` and are intentionally excluded.
+_CANONICAL_LIST_FIELDS = (
+    "secondary_langs",
+    "pipeline",
+    "blacklisted_skills",
+    "blacklisted_intents",
+    "blacklisted_pipelines",
+    "audio_transformers",
+    "utterance_transformers",
+    "metadata_transformers",
+    "intent_transformers",
+    "dialog_transformers",
+    "tts_transformers",
+    "blacklisted_audio_transformers",
+    "blacklisted_utterance_transformers",
+    "blacklisted_metadata_transformers",
+    "blacklisted_intent_transformers",
+    "blacklisted_dialog_transformers",
+    "blacklisted_tts_transformers",
+    "fallback_handlers",
+    "active_handlers",
+    "converse_handlers",
+)
+_CANONICAL_DICT_FIELDS = (
+    "intent_context",
+)
+
 
 class UtteranceState(str, enum.Enum):
     INTENT = "intent"  # includes converse
@@ -491,6 +529,24 @@ class Session(_SpecSession):
         # persona_id is an inherited canonical field (OVOS-PERSONA-1, registered
         # on ovos_spec_tools.Session); it is forwarded to super().__init__ above
         # so the parent owns its validation + omit-when-empty serialization.
+
+        self._normalize_empty_containers()
+
+    def _normalize_empty_containers(self):
+        """Fold ``None`` canonical collection fields back to empty containers.
+
+        The parent stores an empty list/dict field as ``None`` (SESSION-1 §2.1
+        omit-when-empty). Re-materialize the empty container so the field stays
+        iterable in-process, honouring the bidirectional-wire contract: a legacy
+        or explicitly-null wire value folds to ``[]`` / ``{}`` rather than
+        leaking a ``None`` that breaks ``x in session.<field>``.
+        """
+        for name in _CANONICAL_LIST_FIELDS:
+            if getattr(self, name, None) is None:
+                setattr(self, name, [])
+        for name in _CANONICAL_DICT_FIELDS:
+            if getattr(self, name, None) is None:
+                setattr(self, name, {})
 
     @property
     def timezone(self) -> Optional[str]:
