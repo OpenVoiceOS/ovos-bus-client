@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.4a1) (2026-07-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.3a1...2.6.4a1)
+
+**Merged pull requests:**
+
+- fix: always deserialize canonical Session list/dict fields to empty containers [\#257](https://github.com/OpenVoiceOS/ovos-bus-client/pull/257) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.6.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.3a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.2a2...2.6.3a1)
