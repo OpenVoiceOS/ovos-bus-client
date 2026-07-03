@@ -346,9 +346,11 @@ class TestInheritedCanonicalScalarFields(TestCase):
         self.assertEqual(back.fallback_handlers, ["skill.a", "skill.b"])
 
     def test_fallback_handlers_omitted_when_empty(self):
-        # §3.4 empty-list ≡ omission; parent to_dict() drops it
+        # §3.4 empty-list ≡ omission on the wire: parent to_dict() drops it.
+        # In-process the field stays an iterable empty container (never None),
+        # so membership tests on it cannot raise TypeError.
         s = Session("sid")
-        self.assertIsNone(s.fallback_handlers)
+        self.assertEqual(s.fallback_handlers, [])
         self.assertNotIn("fallback_handlers", SpecSession.to_dict(s))
 
     def test_fallback_handlers_is_inherited_not_overridden(self):
