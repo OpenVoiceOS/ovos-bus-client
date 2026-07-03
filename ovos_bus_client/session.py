@@ -8,6 +8,7 @@ from ovos_config.config import Configuration
 from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang, SpecMessage
+from ovos_spec_tools.context import resolve_key
 from ovos_spec_tools.session import (Session as _SpecSession,
                                      SessionManager as _SpecSessionManager,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
@@ -782,6 +783,74 @@ class Session(_SpecSession):
     def clear_response_mode(self, skill_id: Optional[str] = None):
         super().clear_response_mode(skill_id)
         self.touch()
+
+    # ------------------------------------------------------------------
+    # OVOS-CONTEXT-1 §2/§3.1 intent-context mutators — the CANONICAL write
+    # path into ``intent_context``. Every entry lands on the flat §2 map at
+    # its §3.1 resolved stored key; the legacy ``Session.context`` frame stack
+    # (``_IntentContextView``) is a derived read/fold view over this same map,
+    # never a parallel store. All three mutate the map in place so the
+    # singleton Session — and the map object other views hold — keep identity.
+    # ------------------------------------------------------------------
+    def set_intent_context(self, key: str, value: Any = None, *,
+                           scope: str = "private",
+                           owner_id: Optional[str] = None,
+                           expires_at: Optional[float] = None,
+                           turns_remaining: Optional[int] = None):
+        """Write/replace one OVOS-CONTEXT-1 §2 intent-context entry.
+
+        The caller-chosen ``key`` is resolved to its stored form per §3.1
+        (``private`` -> ``<owner_id>:<key>``, ``shared`` -> the bare ``<key>``)
+        and mapped to the §2 entry ``{value, expires_at?, turns_remaining?}``
+        (the optional decay fields are omitted when unset, per §2). A private
+        write with no ``owner_id`` cannot resolve a key and is a no-op.
+
+        @param key: the caller-chosen sub-key (unprefixed).
+        @param value: the entry value; ``None`` marks a valueless gate (§6).
+        @param scope: ``"private"`` (default) or ``"shared"``.
+        @param owner_id: the declaring ``skill_id`` / ``pipeline_id``;
+            required for private scope.
+        @param expires_at: optional §2/§4 wall-clock expiry.
+        @param turns_remaining: optional §2/§4 turn-count decay budget.
+        """
+        stored = resolve_key(key, scope, owner_id)
+        if stored is None:
+            LOG.warning(f"cannot set private intent_context '{key}' without "
+                        f"an owner_id; ignoring")
+            return
+        entry: Dict[str, Any] = {"value": value}
+        if expires_at is not None:
+            entry["expires_at"] = expires_at
+        if turns_remaining is not None:
+            entry["turns_remaining"] = turns_remaining
+        if self.intent_context is None:
+            self.intent_context = {}
+        self.intent_context[stored] = entry
+        self.touch()
+
+    def remove_intent_context(self, key: str, *,
+                              scope: str = "private",
+                              owner_id: Optional[str] = None):
+        """Drop one OVOS-CONTEXT-1 intent-context entry by its declaration.
+
+        The ``key`` is resolved per §3.1 and popped from the canonical map; a
+        missing key (or an unresolvable private lookup) is a silent no-op.
+        """
+        stored = resolve_key(key, scope, owner_id)
+        if stored is None or not self.intent_context:
+            return
+        if self.intent_context.pop(stored, None) is not None:
+            self.touch()
+
+    def clear_intent_context(self):
+        """Empty the whole OVOS-CONTEXT-1 intent-context map.
+
+        Cleared in place so the field stays an empty container (SESSION-1 §2.1
+        in-process normalization), never ``None``.
+        """
+        if self.intent_context:
+            self.intent_context.clear()
+            self.touch()
 
     # ------------------------------------------------------------------
     # Back-compat projections — legacy readers across the ecosystem still
