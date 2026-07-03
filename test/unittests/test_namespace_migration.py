@@ -12,14 +12,16 @@ import unittest
 from threading import Event
 from unittest.mock import MagicMock, patch
 
+from pyee import EventEmitter
+
 from ovos_bus_client.client.client import MessageBusClient, _bus_flag
 from ovos_bus_client.message import Message
 from ovos_spec_tools import NamespaceTranslator
 
 
-def _client(modernize=True, emit_legacy=True):
+def _client(modernize=True, emit_legacy=True, emitter=None):
     c = MessageBusClient.__new__(MessageBusClient)
-    c.emitter = MagicMock()
+    c.emitter = emitter if emitter is not None else MagicMock()
     c.client = MagicMock()
     c._translator = NamespaceTranslator(modernize=modernize, emit_legacy=emit_legacy)
     c._handler_guards = {}
@@ -30,6 +32,13 @@ def _client(modernize=True, emit_legacy=True):
     c.started_running = True
     c.session_id = "default"
     return c
+
+
+def _recv_client(modernize=True, emit_legacy=True):
+    """A client wired to a real synchronous emitter so on_message dispatch
+    (the receive-side namespace bridge) can be observed deterministically."""
+    return _client(modernize=modernize, emit_legacy=emit_legacy,
+                   emitter=EventEmitter())
 
 
 def _sent_types(c):
@@ -60,19 +69,23 @@ class TestDefaultsOn(unittest.TestCase):
             self.assertFalse(_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
 
 
-class TestEmitTranslation(unittest.TestCase):
-    def test_legacy_emit_adds_spec(self):
+class TestEmitSendsOnce(unittest.TestCase):
+    """A single logical emit puts exactly ONE message on the wire regardless of
+    the migration flags. The counterpart is bridged on the receive side, never as
+    a second wire copy (which the broadcast server would echo back and double in
+    the capture firehose)."""
+
+    def test_legacy_emit_sends_once(self):
         c = _client()
         c.emit(Message("speak", {"utterance": "hi"}))
-        self.assertEqual(_sent_types(c), ["speak", "ovos.utterance.speak"])
+        self.assertEqual(_sent_types(c), ["speak"])
 
-    def test_spec_emit_adds_legacy(self):
+    def test_spec_emit_sends_once(self):
         c = _client()
         c.emit(Message("ovos.utterance.handle", {"utterances": ["hi"]}))
-        self.assertEqual(_sent_types(c),
-                         ["ovos.utterance.handle", "recognizer_loop:utterance"])
+        self.assertEqual(_sent_types(c), ["ovos.utterance.handle"])
 
-    def test_unmapped_never_translated(self):
+    def test_unmapped_sends_once(self):
         c = _client()
         c.emit(Message("some.topic", {"x": 1}))
         self.assertEqual(_sent_types(c), ["some.topic"])
@@ -83,46 +96,88 @@ class TestEmitTranslation(unittest.TestCase):
         self.assertEqual(_sent_types(c), ["speak"])
 
 
-class TestEmitPayloadTranslation(unittest.TestCase):
-    """The mirrored emission carries the counterpart topic's PAYLOAD shape,
-    not a verbatim copy of the producer's payload (translate_payload bridge)."""
+class TestReceiveSideBridge(unittest.TestCase):
+    """on_message dispatches the received topic AND its namespace counterpart to
+    LOCAL listeners, firing the 'message' capture firehose exactly once."""
+
+    def _firehose(self, c):
+        seen = []
+        c.emitter.on("message", lambda m: seen.append(m))
+        return seen
+
+    def test_one_wire_message_one_firehose_entry(self):
+        c = _recv_client()
+        firehose = self._firehose(c)
+        c.on_message(Message("ovos.utterance.speak", {"utterance": "hi"}).serialize())
+        self.assertEqual(len(firehose), 1)
+
+    def test_spec_wire_reaches_legacy_listener(self):
+        c = _recv_client()
+        legacy_seen = []
+        c.on("speak", lambda m: legacy_seen.append(m))
+        c.on_message(Message("ovos.utterance.speak", {"utterance": "hi"}).serialize())
+        self.assertEqual(len(legacy_seen), 1)
+        self.assertEqual(legacy_seen[0].msg_type, "speak")
+        self.assertEqual(legacy_seen[0].data["utterance"], "hi")
+
+    def test_legacy_wire_reaches_spec_listener(self):
+        c = _recv_client()
+        spec_seen = []
+        c.on("ovos.utterance.handle", lambda m: spec_seen.append(m))
+        c.on_message(Message("recognizer_loop:utterance",
+                             {"utterances": ["hi"]}).serialize())
+        self.assertEqual(len(spec_seen), 1)
+        self.assertEqual(spec_seen[0].data["utterances"], ["hi"])
+
+    def test_counterpart_not_re_sent_on_wire(self):
+        # bridging the counterpart to local listeners must not put it back on
+        # the wire (that would re-broadcast and double the firehose everywhere)
+        c = _recv_client()
+        c.on_message(Message("ovos.utterance.speak", {"utterance": "hi"}).serialize())
+        c.client.send.assert_not_called()
+
+
+class TestReceiveSidePayloadTranslation(unittest.TestCase):
+    """The locally-dispatched counterpart carries the counterpart topic's PAYLOAD
+    shape, not a verbatim copy (translate_payload bridge)."""
+
+    def _capture(self, c, topic):
+        seen = []
+        c.on(topic, lambda m: seen.append(m))
+        return seen
 
     def test_shape_changing_legacy_to_spec_reshapes_payload(self):
-        c = _client()
+        c = _recv_client()
+        spec_seen = self._capture(c, "ovos.intent.deregister")
         # legacy detach_intent payload shape: {"intent_name": "<skill_id>:<name>"}
-        c.emit(Message("detach_intent", {"intent_name": "skill.foo:HelloIntent"}))
-        sent = _sent(c)
-        # original on the legacy topic is verbatim
-        self.assertEqual(sent[0], ("detach_intent",
-                                   {"intent_name": "skill.foo:HelloIntent"}))
-        # mirror on the spec topic is RESHAPED into the spec shape
-        # ({"skill_id", "intent_name"}), NOT the verbatim legacy munged form
-        spec_topic, spec_data = sent[1]
-        self.assertEqual(spec_topic, "ovos.intent.deregister")
-        self.assertEqual(spec_data, {"skill_id": "skill.foo",
-                                     "intent_name": "HelloIntent"})
-        self.assertNotIn("handler", spec_data)  # not verbatim
+        c.on_message(Message("detach_intent",
+                             {"intent_name": "skill.foo:HelloIntent"}).serialize())
+        self.assertEqual(len(spec_seen), 1)
+        self.assertEqual(spec_seen[0].msg_type, "ovos.intent.deregister")
+        # reshaped into the spec shape ({"skill_id", "intent_name"})
+        self.assertEqual(spec_seen[0].data,
+                         {"skill_id": "skill.foo", "intent_name": "HelloIntent"})
 
     def test_shape_changing_spec_to_legacy_reshapes_payload(self):
-        c = _client()
-        # spec deregister payload shape: {"skill_id", "intent_name"}
-        c.emit(Message("ovos.intent.deregister",
-                       {"skill_id": "skill.foo", "intent_name": "HelloIntent"}))
-        sent = _sent(c)
-        self.assertEqual(sent[0][0], "ovos.intent.deregister")
-        legacy_topic, legacy_data = sent[1]
-        self.assertEqual(legacy_topic, "detach_intent")
+        c = _recv_client()
+        legacy_seen = self._capture(c, "detach_intent")
+        c.on_message(Message("ovos.intent.deregister",
+                             {"skill_id": "skill.foo",
+                              "intent_name": "HelloIntent"}).serialize())
+        self.assertEqual(len(legacy_seen), 1)
+        self.assertEqual(legacy_seen[0].msg_type, "detach_intent")
         # reshaped to the legacy munged form -> "<skill_id>:<intent_name>"
-        self.assertEqual(legacy_data, {"intent_name": "skill.foo:HelloIntent"})
+        self.assertEqual(legacy_seen[0].data,
+                         {"intent_name": "skill.foo:HelloIntent"})
 
     def test_payload_compatible_rename_stays_equivalent(self):
-        c = _client()
+        c = _recv_client()
+        spec_seen = self._capture(c, "ovos.utterance.speak")
         data = {"utterance": "hi", "lang": "en-us"}
-        c.emit(Message("speak", dict(data)))
-        sent = _sent(c)
-        self.assertEqual(sent[0], ("speak", data))
-        # payload-compatible rename: mirror carries equivalent (identity) data
-        self.assertEqual(sent[1], ("ovos.utterance.speak", data))
+        c.on_message(Message("speak", dict(data)).serialize())
+        self.assertEqual(len(spec_seen), 1)
+        # payload-compatible rename: counterpart carries equivalent (identity) data
+        self.assertEqual(spec_seen[0].data, data)
 
 
 class TestHandlerDedup(unittest.TestCase):

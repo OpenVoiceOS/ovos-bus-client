@@ -263,6 +263,19 @@ class MessageBusClient:
             SessionManager.update(sess)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
+        # namespace migration bridge: also dispatch the counterpart topic(s) to
+        # LOCAL listeners so a handler on either namespace receives the event
+        # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
+        # convenience, not a second logical bus message: the counterpart is NOT put
+        # back on the wire and does NOT re-fire the 'message' firehose, so one
+        # logical emit yields exactly one captured message. The mirrored payload is
+        # reshaped into the counterpart topic's shape (identity for payload-compatible
+        # renames, a per-topic transform for shape-changing ones).
+        for topic in self._translator.counterpart_topics(parsed_message.msg_type):
+            translated = self._translator.translate_payload(
+                from_topic=parsed_message.msg_type, to_topic=topic,
+                data=parsed_message.data)
+            self.emitter.emit(topic, parsed_message.forward(topic, translated))
 
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
@@ -288,16 +301,12 @@ class MessageBusClient:
                    Session(self.session_id)
             message.context["session"] = sess.serialize()
 
+        # a single logical emit puts exactly ONE message on the wire. The
+        # namespace counterpart is bridged to listeners on the RECEIVE side
+        # (see on_message) in every process, so both namespaces are delivered
+        # without a second wire copy that the broadcast server would echo back
+        # and double in the capture firehose.
         self._send(message)
-
-        # also put the namespace counterpart(s) on the wire (per the flags); the
-        # mirrored payload is reshaped into the counterpart topic's shape (identity
-        # for payload-compatible renames, a per-topic transform for shape-changing
-        # ones) so a consumer on the counterpart topic receives it in *its* shape.
-        for topic in self._translator.counterpart_topics(message.msg_type):
-            translated = self._translator.translate_payload(
-                from_topic=message.msg_type, to_topic=topic, data=message.data)
-            self._send(message.forward(topic, translated))
 
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
