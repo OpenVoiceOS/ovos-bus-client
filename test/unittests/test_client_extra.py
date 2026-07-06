@@ -5,6 +5,8 @@ import unittest
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, patch
 
+from websocket import WebSocketConnectionClosedException
+
 from ovos_bus_client.client.client import (GUIWebsocketClient,
                                            MessageBusClient)
 from ovos_bus_client.message import GUIMessage, Message
@@ -79,6 +81,29 @@ class TestEmit(TestCase):
         decoded = json.loads(payload)
         self.assertEqual(decoded["type"], "test.message")
         self.assertEqual(decoded["data"]["utterance"], "hi")
+
+    def test_emit_uses_send_lock(self):
+        class _Lock:
+            entered = False
+
+            def __enter__(self):
+                self.entered = True
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        lock = _Lock()
+        self.client._send_lock = lock
+
+        self.client.emit(Message("test.message"))
+
+        self.assertTrue(lock.entered)
+
+    def test_emit_checked_raises_send_failures(self):
+        self.client.client.send.side_effect = WebSocketConnectionClosedException()
+
+        with self.assertRaises(WebSocketConnectionClosedException):
+            self.client.emit_checked(Message("test.message"))
 
 
 class TestWaitForMessage(TestCase):
