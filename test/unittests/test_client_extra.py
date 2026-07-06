@@ -3,7 +3,7 @@ handler/emit/wait helpers and GUIWebsocketClient construction."""
 import json
 import unittest
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock
 
 from websocket import WebSocketConnectionClosedException
 
@@ -50,7 +50,9 @@ class TestHandlerRegistration(TestCase):
         self.assertEqual(len(called), 1)
 
     def test_remove_normal_handler(self):
-        cb = lambda m: None
+        def cb(message):
+            return None
+
         self.client.on("evt", cb)
         self.client.remove("evt", cb)
         # second remove should not raise

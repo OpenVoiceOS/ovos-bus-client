@@ -338,7 +338,7 @@ class MessageBusClient:
                         'has been closed')
             if raise_errors:
                 raise
-        except Exception as e:
+        except Exception:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
             if raise_errors:
                 raise
