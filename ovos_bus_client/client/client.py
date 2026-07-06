@@ -4,7 +4,7 @@ import time
 from ovos_utils import json_dumps
 
 from os import getpid
-from threading import Event, Thread
+from threading import Event, RLock, Thread
 from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
 
@@ -141,6 +141,7 @@ class MessageBusClient:
         self.retry = 5
         self.connected_event = Event()
         self.started_running = False
+        self._send_lock = RLock()
         self.wrapped_funcs = {}
         # namespace translation on emit (orthogonal, both ON by default during
         # the migration window so every migrated event travels on BOTH the
@@ -286,6 +287,12 @@ class MessageBusClient:
         SessionManager.update(sess)
         LOG.debug("synced default_session")
 
+    def _ensure_session(self, message: Message) -> None:
+        if "session" not in message.context:
+            sess = SessionManager.sessions.get(self.session_id) or \
+                   Session(self.session_id)
+            message.context["session"] = sess.serialize()
+
     def emit(self, message: Message):
         """
         Send a message onto the message bus.
@@ -296,10 +303,7 @@ class MessageBusClient:
         Args:
             message (Message): Message to send
         """
-        if "session" not in message.context:
-            sess = SessionManager.sessions.get(self.session_id) or \
-                   Session(self.session_id)
-            message.context["session"] = sess.serialize()
+        self._ensure_session(message)
 
         # a single logical emit puts exactly ONE message on the wire. The
         # namespace counterpart is bridged to listeners on the RECEIVE side
@@ -308,7 +312,12 @@ class MessageBusClient:
         # and double in the capture firehose.
         self._send(message)
 
-    def _send(self, message: Message):
+    def emit_checked(self, message: Message):
+        """Emit a message and raise websocket send failures to the caller."""
+        self._ensure_session(message)
+        self._send(message, raise_errors=True)
+
+    def _send(self, message: Message, raise_errors: bool = False):
         """Serialize and send a single message over the websocket."""
         if not self.connected_event.wait(10):
             if not self.started_running:
@@ -322,12 +331,17 @@ class MessageBusClient:
             msg = json_dumps(message.__dict__)
         msg = _maybe_encrypt(msg)
         try:
-            self.client.send(msg)
+            with self._send_lock:
+                self.client.send(msg)
         except WebSocketConnectionClosedException:
             LOG.warning(f'Could not send {message.msg_type} message because connection '
                         'has been closed')
+            if raise_errors:
+                raise
         except Exception as e:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
+            if raise_errors:
+                raise
 
     def collect_responses(self, message: Message,
                           min_timeout: Union[int, float] = 0.2,
@@ -572,14 +586,7 @@ class GUIWebsocketClient(MessageBusClient):
                                  'before emitting messages')
             self.connected_event.wait()
 
-        try:
-            if hasattr(message, 'serialize'):
-                self.client.send(_maybe_encrypt(message.serialize()))
-            else:
-                self.client.send(_maybe_encrypt(json_dumps(message.__dict__)))
-        except WebSocketConnectionClosedException:
-            LOG.warning('Could not send %s message because connection '
-                        'has been closed', message.msg_type)
+        self._send(message)
 
     def on_open(self, *args):
         super().on_open(*args)
