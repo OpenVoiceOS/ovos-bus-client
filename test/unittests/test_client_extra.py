@@ -259,9 +259,11 @@ class TestLifecycle(TestCase):
     def test_on_close_emits_close_event(self):
         client = MessageBusClient()
         seen = []
+        client.connected_event.set()
         client.emitter.on("close", lambda *_: seen.append(True))
         client.on_close()
         self.assertEqual(seen, [True])
+        self.assertFalse(client.connected_event.is_set())
 
 
 class TestGUIWebsocketClient(TestCase):
