@@ -333,8 +333,12 @@ class MessageBusClient:
             msg = json_dumps(message.__dict__)
         msg = _maybe_encrypt(msg)
         try:
-            with self._send_lock:
+            lock = getattr(self, "_send_lock", None)
+            if lock is None:
                 self.client.send(msg)
+            else:
+                with lock:
+                    self.client.send(msg)
         except WebSocketConnectionClosedException:
             LOG.warning(f'Could not send {message.msg_type} message because connection '
                         'has been closed')
