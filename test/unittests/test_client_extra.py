@@ -3,7 +3,7 @@ handler/emit/wait helpers and GUIWebsocketClient construction."""
 import json
 import unittest
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock
 
 from websocket import WebSocketConnectionClosedException
 
@@ -50,7 +50,9 @@ class TestHandlerRegistration(TestCase):
         self.assertEqual(len(called), 1)
 
     def test_remove_normal_handler(self):
-        cb = lambda m: None
+        def cb(_message):
+            return None
+
         self.client.on("evt", cb)
         self.client.remove("evt", cb)
         # second remove should not raise
@@ -104,6 +106,49 @@ class TestEmit(TestCase):
 
         with self.assertRaises(WebSocketConnectionClosedException):
             self.client.emit_checked(Message("test.message"))
+
+    def test_concurrent_emit_serializes_websocket_sends(self):
+        from threading import Event, Lock, Thread
+        import time
+
+        start = Event()
+        state_lock = Lock()
+        active_sends = 0
+        max_active_sends = 0
+        sent_types = []
+        errors = []
+
+        def fake_send(raw):
+            nonlocal active_sends, max_active_sends
+            with state_lock:
+                active_sends += 1
+                max_active_sends = max(max_active_sends, active_sends)
+                sent_types.append(json.loads(raw)["type"])
+            time.sleep(0.05)
+            with state_lock:
+                active_sends -= 1
+
+        def emit(name):
+            start.wait(timeout=1)
+            try:
+                self.client.emit(Message(name))
+            except Exception as exc:
+                errors.append(exc)
+
+        self.client.client.send.side_effect = fake_send
+        threads = [
+            Thread(target=emit, args=(f"test.message.{idx}",), daemon=True)
+            for idx in range(2)
+        ]
+        for thread in threads:
+            thread.start()
+        start.set()
+        for thread in threads:
+            thread.join(timeout=1)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(max_active_sends, 1)
+        self.assertCountEqual(sent_types, ["test.message.0", "test.message.1"])
 
 
 class TestWaitForMessage(TestCase):
