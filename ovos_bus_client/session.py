@@ -457,10 +457,15 @@ class _IntentContextView(IntentContextManager):
                 "origin": key}
 
     def _write(self, payload: Dict[str, Any]):
-        """Fold ``payload`` (CONTEXT-1 set/null-delete) into intent_context."""
-        target = dict(self._session.intent_context or {})
-        SessionManager.merge_intent_context(target, payload)
-        self._session.intent_context = target or None
+        """Fold ``payload`` (CONTEXT-1 set/null-delete) into intent_context.
+
+        Merged in place, like the canonical mutators: the map keeps its object
+        identity so a holder of the dict sees the write, and it stays an empty
+        container rather than becoming ``None`` when the last entry is removed.
+        """
+        if self._session.intent_context is None:
+            self._session.intent_context = {}
+        SessionManager.merge_intent_context(self._session.intent_context, payload)
         self._session.touch()
 
     # --- derived frame stack (read path for the inherited get_context) ---
@@ -519,7 +524,10 @@ class _IntentContextView(IntentContextManager):
         self._write({context_id: None})
 
     def clear_context(self):
-        self._session.intent_context = None
+        # cleared in place, mirroring Session.clear_intent_context: the field
+        # stays an empty container, never ``None``.
+        if self._session.intent_context:
+            self._session.intent_context.clear()
         self._session.touch()
 
 

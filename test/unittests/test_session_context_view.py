@@ -215,6 +215,34 @@ class TestLegacyWireRoundTrip(unittest.TestCase):
         b = Session.deserialize(a).serialize()
         self.assertEqual(a["intent_context"], b["intent_context"])
 
+    def test_legacy_write_preserves_intent_context_identity(self):
+        from ovos_bus_client.session import Session
+        session = Session("identity-1")
+        session.set_intent_context("person", "Bob")
+        held = session.intent_context
+        # adapt entity shape: data[0] is (value, key)
+        session.context.inject_context({"key": "pet",
+                                        "data": [["cat", "pet"]]})
+        self.assertIs(session.intent_context, held)
+        self.assertIn("pet", held)
+
+    def test_legacy_clear_context_leaves_empty_dict_not_none(self):
+        from ovos_bus_client.session import Session
+        session = Session("clear-1")
+        session.set_intent_context("person", "Bob")
+        session.context.clear_context()
+        self.assertEqual(session.intent_context, {})
+        # membership on the cleared map must not raise
+        self.assertNotIn("person", session.intent_context)
+
+    def test_legacy_remove_last_entry_leaves_empty_dict_not_none(self):
+        from ovos_bus_client.session import Session
+        session = Session("remove-1")
+        session.set_intent_context("person", "Bob")
+        session.context.remove_context("person")
+        self.assertEqual(session.intent_context, {})
+        self.assertNotIn("person", session.intent_context)
+
 
 if __name__ == "__main__":
     unittest.main()
