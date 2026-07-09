@@ -26,6 +26,22 @@ Each `Session` holds:
 
 Sessions serialize to/from plain dicts via `Session.serialize()` / `Session.deserialize()` — `ovos_bus_client/session.py:441,493`. They are carried inside `message.context["session"]` on every bus message.
 
+### Omitted and empty override fields
+
+On the list-valued override fields — `pipeline`, the three `blacklisted_*`, and the
+`*_transformers` chains — an empty list is wire-equivalent to an absent key
+(OVOS-SESSION-1 §3.4). Both mean *"let the orchestrator decide"*, and a consumer
+resolves them to its own deployment default from `ovos-config`. An explicit `null` is
+malformed and is treated as absent. So `blacklisted_intents: []` does not assert
+"this session blacklists nothing"; to do that, the deployment default must itself be
+empty.
+
+§3.4 states the omit-when-empty rule as a SHOULD, not a MUST — emitting a field that
+already holds the deployment default is conformant, and consumers must tolerate it.
+`Session.serialize()` therefore always emits `pipeline`, `blacklisted_skills` and
+`blacklisted_intents` carrying their config-resolved values, so readers indexing the
+raw dict always find a concrete list rather than having to re-derive the default.
+
 ### Session.from_message
 
 `Session.from_message(message)` — `ovos_bus_client/session.py:537`
