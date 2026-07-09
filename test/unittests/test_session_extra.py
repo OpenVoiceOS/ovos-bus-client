@@ -208,9 +208,7 @@ class TestSessionSerialization(TestCase):
         _reset_session_manager()
 
     def test_serialize_includes_all_keys(self):
-        s = Session("sid", lang="pt-pt", site_id="kitchen", persona_id="p1",
-                    blacklisted_skills=["bad.skill"],
-                    blacklisted_intents=["bad:intent"])
+        s = Session("sid", lang="pt-pt", site_id="kitchen", persona_id="p1")
         d = s.serialize()
         for key in ["active_skills", "utterance_states", "session_id",
                     "persona_id", "lang", "context", "site_id", "pipeline",
@@ -221,17 +219,6 @@ class TestSessionSerialization(TestCase):
         self.assertEqual(d["session_id"], "sid")
         self.assertEqual(d["persona_id"], "p1")
         self.assertEqual(d["site_id"], "kitchen")
-
-    def test_serialize_omits_empty_blacklists(self):
-        # SESSION-1 §2.1 omission-not-null: empty blacklists are absent from the
-        # wire, never forced to ``[]``.
-        s = Session("sid")
-        # set post-construction to bypass the config-default fallback
-        s.blacklisted_skills = []
-        s.blacklisted_intents = []
-        d = s.serialize()
-        self.assertNotIn("blacklisted_skills", d)
-        self.assertNotIn("blacklisted_intents", d)
 
     def test_deserialize_roundtrip(self):
         s = Session("sid", lang="en-us", site_id="lab")

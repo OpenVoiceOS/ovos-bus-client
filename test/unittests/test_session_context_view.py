@@ -120,17 +120,19 @@ class TestSerializeOmissionNotNull(unittest.TestCase):
         entity_types = [f[0]["entities"][0]["data"][0][1] for f in frames]
         self.assertIn("person", entity_types)
 
-    def test_serialize_omits_empty_blacklists_and_pipeline(self):
+    def test_serialize_emits_empty_blacklists_and_pipeline(self):
         from ovos_bus_client.session import Session
         session = Session("ctx-omit-test")
         session.blacklisted_skills = []
         session.blacklisted_intents = []
         session.pipeline = []
         data = session.serialize()
-        # SESSION-1 §2.1 omission-not-null: empty lists are absent, never []
-        self.assertNotIn("blacklisted_skills", data)
-        self.assertNotIn("blacklisted_intents", data)
-        self.assertNotIn("pipeline", data)
+        # SESSION-1 §3.4 makes omit-when-empty a SHOULD, not a MUST. These fields
+        # are emitted carrying their config-resolved value so readers always find
+        # a concrete list; with no configured default that value is [].
+        self.assertEqual(data["blacklisted_skills"], [])
+        self.assertEqual(data["blacklisted_intents"], [])
+        self.assertEqual(data["pipeline"], [])
 
 
 class TestLegacyWireRoundTrip(unittest.TestCase):
