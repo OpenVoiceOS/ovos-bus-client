@@ -1,5 +1,6 @@
 """More client.py coverage — on_error variants, on_default_session_update,
 two-arg dispatchers, GUIWebsocketClient on_open / on_message."""
+import json
 import unittest
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
