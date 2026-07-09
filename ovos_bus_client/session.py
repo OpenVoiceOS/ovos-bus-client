@@ -1,5 +1,6 @@
 import enum
 import time
+from os import environ
 from threading import Event
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
@@ -60,6 +61,38 @@ _CANONICAL_LIST_FIELDS = (
 _CANONICAL_DICT_FIELDS = (
     "intent_context",
 )
+
+# SESSION-1 §3.4: on these list-valued override fields an empty array is
+# wire-equivalent to omission, and a producer SHOULD NOT restate a value the
+# consumer would compute as the deployment default anyway. They are dropped when
+# empty so the session does not add wire weight to every Message.
+_DEFERRABLE_LIST_FIELDS = (
+    "blacklisted_skills",
+    "blacklisted_intents",
+    "pipeline",
+)
+
+
+def _emit_session_defaults() -> bool:
+    """Whether serialize() should spell out deferrable fields it may omit.
+
+    Off by default: §3.4's omit rule is a SHOULD, so a lean wire shape is the
+    conformant default. Turning this on makes every Message carry the resolved
+    deployment defaults instead of deferring them to the consumer -- redundant
+    but still conformant (§3.4: "non-optimal but conformant"), and useful when
+    inspecting or replaying a bus where the reader has no access to the
+    producer's config.
+
+    ``OVOS_SESSION_EMIT_DEFAULTS`` wins when set; otherwise the
+    ``session.emit_defaults`` config key is read.
+    """
+    val = environ.get("OVOS_SESSION_EMIT_DEFAULTS")
+    if val is not None:
+        return val.strip().lower() in ("1", "true", "yes", "on")
+    try:
+        return bool(Configuration().get("session", {}).get("emit_defaults", False))
+    except Exception:
+        return False
 
 
 class UtteranceState(str, enum.Enum):
@@ -1067,6 +1100,14 @@ class Session(_SpecSession):
         # omission-not-null — empty values are absent, never serialized as null
         # or forced ``[]``.
         data = super().to_dict()
+
+        # Opt-in: spell out the deferrable fields the parent dropped, carrying
+        # the value already resolved from ovos-config. Redundant on the wire but
+        # conformant, and it lets a reader that cannot see the producer's config
+        # (a bus monitor, a replay) observe what the session actually resolved to.
+        if _emit_session_defaults():
+            for _name in _DEFERRABLE_LIST_FIELDS:
+                data[_name] = list(getattr(self, _name) or [])
 
         # Legacy back-compat wire keys, DERIVED from the canonical state (never a
         # parallel store) so old ecosystem readers parsing the raw dict keep

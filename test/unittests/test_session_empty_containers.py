@@ -11,9 +11,12 @@ makes ``[]`` wire-equivalent to omission — both resolve to the deployment
 default at the consumer.
 """
 import unittest
+from unittest.mock import patch
 
+import ovos_bus_client.session as session_module
 from ovos_bus_client.session import (Session, _CANONICAL_LIST_FIELDS,
-                                      _CANONICAL_DICT_FIELDS)
+                                      _CANONICAL_DICT_FIELDS,
+                                      _DEFERRABLE_LIST_FIELDS)
 
 
 class TestEmptyContainerNormalization(unittest.TestCase):
@@ -79,6 +82,67 @@ class TestEmptyContainerNormalization(unittest.TestCase):
         for name in _CANONICAL_LIST_FIELDS:
             self.assertIsInstance(getattr(sess, name), list, name)
             self.assertNotIn("x", getattr(sess, name))
+
+
+class TestEmitSessionDefaultsOptIn(unittest.TestCase):
+    """Lean wire by default; opt in to spell out the deferrable fields."""
+
+    @staticmethod
+    def _empty_session():
+        sess = Session("emit-defaults")
+        for name in _DEFERRABLE_LIST_FIELDS:
+            setattr(sess, name, [])
+        return sess
+
+    def test_default_is_lean(self):
+        with patch.dict("os.environ", {}, clear=False):
+            data = self._empty_session().serialize()
+        for name in _DEFERRABLE_LIST_FIELDS:
+            self.assertNotIn(name, data)
+
+    def test_env_var_opts_in(self):
+        with patch.dict("os.environ", {"OVOS_SESSION_EMIT_DEFAULTS": "true"}):
+            data = self._empty_session().serialize()
+        for name in _DEFERRABLE_LIST_FIELDS:
+            self.assertEqual(data[name], [], name)
+
+    def test_env_var_off_value_stays_lean(self):
+        with patch.dict("os.environ", {"OVOS_SESSION_EMIT_DEFAULTS": "false"}):
+            data = self._empty_session().serialize()
+        for name in _DEFERRABLE_LIST_FIELDS:
+            self.assertNotIn(name, data)
+
+    def test_config_key_opts_in(self):
+        with patch.dict("os.environ", {}, clear=True), \
+                patch.object(session_module, "Configuration",
+                             lambda: {"session": {"emit_defaults": True}}):
+            data = self._empty_session().serialize()
+        for name in _DEFERRABLE_LIST_FIELDS:
+            self.assertEqual(data[name], [], name)
+
+    def test_env_var_overrides_config(self):
+        with patch.dict("os.environ", {"OVOS_SESSION_EMIT_DEFAULTS": "0"}), \
+                patch.object(session_module, "Configuration",
+                             lambda: {"session": {"emit_defaults": True}}):
+            data = self._empty_session().serialize()
+        for name in _DEFERRABLE_LIST_FIELDS:
+            self.assertNotIn(name, data)
+
+    def test_both_modes_deserialize_identically(self):
+        lean = self._empty_session().serialize()
+        with patch.dict("os.environ", {"OVOS_SESSION_EMIT_DEFAULTS": "1"}):
+            verbose = self._empty_session().serialize()
+        self.assertNotEqual(lean.keys(), verbose.keys())
+        for name in _DEFERRABLE_LIST_FIELDS:
+            self.assertEqual(getattr(Session.deserialize(lean), name),
+                             getattr(Session.deserialize(verbose), name), name)
+
+    def test_populated_values_emit_regardless(self):
+        sess = Session("diverging")
+        sess.blacklisted_intents = ["a.skill:some.intent"]
+        with patch.dict("os.environ", {}, clear=False):
+            data = sess.serialize()
+        self.assertEqual(data["blacklisted_intents"], ["a.skill:some.intent"])
 
 
 if __name__ == "__main__":

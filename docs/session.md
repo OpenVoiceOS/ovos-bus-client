@@ -42,6 +42,21 @@ session from adding hundreds of bytes to every `forward`, `reply`, and cross-pro
 hop. Read them off a deserialized `Session`, whose attributes are always concrete
 lists, rather than indexing the raw serialized dict, where an absent key is normal.
 
+#### Emitting the defaults anyway
+
+A lean wire shape is the default, but a deployment can ask for the resolved values to
+travel on every Message — useful when the reader cannot see the producer's config, as
+with a bus monitor or a captured replay. §3.4 calls this "non-optimal but conformant",
+and consumers must tolerate it either way.
+
+| | |
+|---|---|
+| Environment variable | `OVOS_SESSION_EMIT_DEFAULTS=true` |
+| Config key | `session.emit_defaults: true` |
+
+The environment variable wins when set. Both wire shapes deserialize to identical
+`Session` objects; only the number of bytes on the bus differs.
+
 ### Session.from_message
 
 `Session.from_message(message)` — `ovos_bus_client/session.py:537`
