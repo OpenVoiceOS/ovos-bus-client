@@ -29,9 +29,10 @@ _NEXT_MAJOR_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 # ``TypeError: argument of type 'NoneType' is not iterable``. These fields are
 # therefore folded back to their canonical empty container after construction
 # so they ALWAYS deserialize to ``[]`` / ``{}``, never ``None``. Serialization
-# omits them when empty (``to_dict`` drops falsy values), except for
-# _ALWAYS_EMIT_LIST_FIELDS below, which are emitted carrying their
-# config-resolved value. Scalar fields (``site_id``, ``persona_id``, the per-channel
+# omits them when empty (``to_dict`` drops falsy values), per SESSION-1 §3.4:
+# an empty list-valued override field is wire-equivalent to omission, and a
+# producer SHOULD NOT spend wire weight restating the deployment default on
+# every Message. Scalar fields (``site_id``, ``persona_id``, the per-channel
 # language overrides) and the single-object ``response_mode`` legitimately stay
 # ``None`` and are intentionally excluded.
 _CANONICAL_LIST_FIELDS = (
@@ -58,21 +59,6 @@ _CANONICAL_LIST_FIELDS = (
 )
 _CANONICAL_DICT_FIELDS = (
     "intent_context",
-)
-
-# SESSION-1 §3.4 states omit-when-wire-equivalent-to-omission as a SHOULD, not a
-# MUST: emitting a redundant default-valued field is non-optimal but conformant,
-# and a consumer MUST tolerate it. These three are already resolved from
-# ovos-config at construction, so emit the resolved value rather than drop the
-# key — a reader then always finds a concrete list instead of re-deriving the
-# deployment default itself, and legacy readers indexing the raw dict keep
-# working. Resolving an absent value is the reader's job (see the fold above);
-# handing it a populated one is ours. Fields with no config default
-# (``active_handlers``, ``converse_handlers``, …) keep the omit-when-empty shape.
-_ALWAYS_EMIT_LIST_FIELDS = (
-    "blacklisted_skills",
-    "blacklisted_intents",
-    "pipeline",
 )
 
 
@@ -1081,12 +1067,6 @@ class Session(_SpecSession):
         # omission-not-null — empty values are absent, never serialized as null
         # or forced ``[]``.
         data = super().to_dict()
-
-        # The canonical parent drops these when empty. Re-add them carrying their
-        # config-resolved value, so every reader gets a populated list rather than
-        # an absent key it must resolve itself (SESSION-1 §3.4 permits this).
-        for _name in _ALWAYS_EMIT_LIST_FIELDS:
-            data[_name] = list(getattr(self, _name) or [])
 
         # Legacy back-compat wire keys, DERIVED from the canonical state (never a
         # parallel store) so old ecosystem readers parsing the raw dict keep

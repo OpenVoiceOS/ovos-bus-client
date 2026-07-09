@@ -36,11 +36,11 @@ malformed and is treated as absent. So `blacklisted_intents: []` does not assert
 "this session blacklists nothing"; to do that, the deployment default must itself be
 empty.
 
-§3.4 states the omit-when-empty rule as a SHOULD, not a MUST — emitting a field that
-already holds the deployment default is conformant, and consumers must tolerate it.
-`Session.serialize()` therefore always emits `pipeline`, `blacklisted_skills` and
-`blacklisted_intents` carrying their config-resolved values, so readers indexing the
-raw dict always find a concrete list rather than having to re-derive the default.
+`Session.serialize()` therefore omits these fields when they are empty, rather than
+restating the deployment default on every Message — §3.4 exists precisely to keep the
+session from adding hundreds of bytes to every `forward`, `reply`, and cross-process
+hop. Read them off a deserialized `Session`, whose attributes are always concrete
+lists, rather than indexing the raw serialized dict, where an absent key is normal.
 
 ### Session.from_message
 

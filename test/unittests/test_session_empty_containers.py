@@ -1,11 +1,14 @@
-"""Canonical collection fields must always be iterable containers.
+"""Canonical collection fields must always be iterable containers in process.
 
 The canonical parent stores an empty list/dict field as ``None`` (SESSION-1
 §2.1 omit-when-empty). bus-client folds those back to ``[]`` / ``{}`` so a
 ``session.blacklisted_intents``-style membership test never raises
-``TypeError: argument of type 'NoneType' is not iterable``, honouring the
-bidirectional-wire contract: tolerate ``None`` inbound, always present a
-container outbound.
+``TypeError: argument of type 'NoneType' is not iterable``.
+
+This is an in-process guarantee about the *attribute*, not about the wire. On
+the wire an empty list-valued override field is omitted, because SESSION-1 §3.4
+makes ``[]`` wire-equivalent to omission — both resolve to the deployment
+default at the consumer.
 """
 import unittest
 
@@ -36,13 +39,14 @@ class TestEmptyContainerNormalization(unittest.TestCase):
         for name in _CANONICAL_DICT_FIELDS:
             self.assertIsInstance(getattr(sess, name), dict, name)
 
-    def test_serialize_emits_empty_list_for_blacklisted_intents(self):
+    def test_serialize_omits_empty_blacklisted_intents(self):
+        # SESSION-1 §3.4: [] is wire-equivalent to omission, so it is dropped
+        # rather than restated as the deployment default on every Message.
         data = Session(blacklisted_intents=[]).serialize()
-        self.assertEqual(data["blacklisted_intents"], [])
+        self.assertNotIn("blacklisted_intents", data)
 
     def test_deserialize_restores_empty_list_not_none(self):
         data = Session().serialize()
-        self.assertEqual(data["blacklisted_intents"], [])
         sess = Session.deserialize(data)
         self.assertEqual(sess.blacklisted_intents, [])
         self.assertNotIn("x", sess.blacklisted_intents)
