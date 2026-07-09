@@ -197,6 +197,7 @@ class MessageBusClient:
         Handle the "close" event from the websocket.
         A Basic message with the name "close" is forwarded to the emitter.
         """
+        self.connected_event.clear()
         self.emitter.emit("close")
 
     def on_error(self, *args):
@@ -217,6 +218,7 @@ class MessageBusClient:
             LOG.debug("ignoring non-exception websocket error callback: %r",
                       error)
             return
+        self.connected_event.clear()
         if isinstance(error, WebSocketConnectionClosedException):
             LOG.warning('Could not send message because connection has closed')
         elif isinstance(error, ConnectionRefusedError):

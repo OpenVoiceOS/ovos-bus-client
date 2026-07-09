@@ -29,6 +29,7 @@ class TestOnError(TestCase):
         bus.create_client = MagicMock(return_value=MagicMock())
         bus.run_forever = MagicMock(side_effect=WebSocketException())
         bus.on_error(WebSocketConnectionClosedException())
+        self.assertFalse(bus.connected_event.is_set())
 
     @patch("ovos_bus_client.client.client.time.sleep", MagicMock())
     def test_connection_refused(self):
