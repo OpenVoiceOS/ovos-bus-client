@@ -107,6 +107,13 @@ class _UtteranceStatesView(dict):
                         "be removed; use response_mode directly",
                         _NEXT_MAJOR_VERSION)
 
+    def _project(self) -> Dict:
+        """Project the canonical response_mode holder to the legacy mapping."""
+        mode = self._session.response_mode
+        if mode and mode.get("skill_id"):
+            return {mode["skill_id"]: UtteranceState.RESPONSE.value}
+        return {}
+
     def __setitem__(self, skill_id, state):
         self._warn()
         state_value = getattr(state, "value", state)
@@ -116,9 +123,11 @@ class _UtteranceStatesView(dict):
             self._session.disable_response_mode(skill_id)
         # rebuild from the canonical store so the view stays consistent with the
         # single-holder invariant rather than accumulating stale keys. Use the
-        # plain-dict ops (super()) here so we don't re-clear response_mode.
+        # plain-dict ops (super()) here so we don't re-clear response_mode, and
+        # project response_mode directly rather than re-reading the deprecated
+        # utterance_states property, which would emit a second warning.
         super().clear()
-        super().update(dict(self._session.utterance_states))
+        super().update(self._project())
 
     def __delitem__(self, skill_id):
         self._warn()

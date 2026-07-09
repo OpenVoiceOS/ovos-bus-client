@@ -104,8 +104,13 @@ class TestContextWarnOnAccess(unittest.TestCase):
         from ovos_bus_client.session import UtteranceState
         with patch("ovos_bus_client.session.log_deprecation") as dep:
             view = self.session.utterance_states
+            # the attribute access above warns on its own; drop those calls so
+            # this asserts the mutation path warns, not the accessor
+            dep.reset_mock()
             view["some.skill"] = UtteranceState.RESPONSE.value
-        self.assertTrue(dep.called)
+        # exactly once: the internal rebuild projects response_mode directly
+        # instead of re-reading the deprecated property
+        self.assertEqual(dep.call_count, 1)
 
 
 class TestSerializeOmissionNotNull(unittest.TestCase):
