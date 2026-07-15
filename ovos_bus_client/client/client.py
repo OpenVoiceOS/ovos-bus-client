@@ -22,6 +22,7 @@ from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, load_gui_message_bus_config
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
+                                     MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
@@ -259,7 +260,16 @@ class MessageBusClient:
             message = args[0]
         else:
             message = args[1]
-        parsed_message = Message.deserialize(_maybe_decrypt(message))
+        try:
+            parsed_message = Message.deserialize(_maybe_decrypt(message))
+        except MalformedMessage as e:
+            # A malformed frame is a per-message fault, not a transport fault:
+            # discard it and keep the connection. Letting it propagate would
+            # reach on_error, which tears the socket down and reconnects — so a
+            # single bad message (e.g. a non-conformant server greeting) would
+            # otherwise trigger an endless reconnect loop.
+            LOG.warning("discarding malformed bus message: %s", e)
+            return
         sess = Session.from_message(parsed_message)
         if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
@@ -601,5 +611,11 @@ class GUIWebsocketClient(MessageBusClient):
 
         self.emitter.emit('message', message)
 
-        parsed_message = GUIMessage.deserialize(_maybe_decrypt(message))
+        try:
+            parsed_message = GUIMessage.deserialize(_maybe_decrypt(message))
+        except MalformedMessage as e:
+            # Discard a malformed frame instead of letting it tear down the
+            # GUI websocket via on_error (see the core on_message handler).
+            LOG.warning("discarding malformed GUI message: %s", e)
+            return
         self.emitter.emit(parsed_message.msg_type, parsed_message)
