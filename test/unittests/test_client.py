@@ -11,7 +11,7 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import call, Mock, patch
+from unittest.mock import ANY, call, Mock, patch
 
 try:
     from pyee import ExecutorEventEmitter
@@ -57,6 +57,25 @@ class TestMessageBusClient(unittest.TestCase):
     def test_on_message(self):
         # TODO
         pass
+
+    def test_on_message_discards_malformed(self):
+        """A malformed frame (e.g. the non-conformant '{"msg_type": ...}'
+        greeting from the pure-Rust bus) must be discarded, not raised —
+        letting it propagate reaches on_error and tears the socket down."""
+        mock_emitter = Mock()
+        mc = MessageBusClient(emitter=mock_emitter)
+        greeting = ('{"msg_type": "connected", "data": {}, '
+                    '"context": {"session": {"session_id": "default"}}}')
+        # must not raise
+        mc.on_message(greeting)
+        # parse failed before any dispatch: no topic was emitted
+        mock_emitter.emit.assert_not_called()
+
+    def test_on_message_dispatches_valid(self):
+        mock_emitter = Mock()
+        mc = MessageBusClient(emitter=mock_emitter)
+        mc.on_message(Message("ovos.test").serialize())
+        mock_emitter.emit.assert_any_call("ovos.test", ANY)
 
     def test_emit(self):
         # TODO
@@ -141,6 +160,17 @@ class TestGuiWebsocketClient(unittest.TestCase):
     def test_on_message(self):
         # TODO
         pass
+
+    def test_on_message_discards_malformed(self):
+        """GUI websocket must also discard a malformed frame rather than
+        letting it tear down the connection via on_error."""
+        mock_emitter = Mock()
+        gc = GUIWebsocketClient(emitter=mock_emitter)
+        gc.on_message('{"not_a_valid": "gui frame"}')  # missing 'type'
+        # the 'message' firehose fires first, but no parsed topic is dispatched
+        # and no exception escapes
+        for c in mock_emitter.emit.call_args_list:
+            self.assertEqual(c.args[0], "message")
 
 
 class TestMessageWaiter:
