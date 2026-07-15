@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.6.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.5a1) (2026-07-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.4a1...2.6.5a1)
+
+**Merged pull requests:**
+
+- fix: discard malformed frames instead of tearing down the connection [\#264](https://github.com/OpenVoiceOS/ovos-bus-client/pull/264) ([JarbasAl](https://github.com/JarbasAl))
+- fix: Clear bus connected state on close/error [\#263](https://github.com/OpenVoiceOS/ovos-bus-client/pull/263) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [2.6.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.4a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.3a1...2.6.4a1)
