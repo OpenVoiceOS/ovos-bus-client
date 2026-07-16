@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.0a1) (2026-07-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.5a1...2.7.0a1)
+
+**Merged pull requests:**
+
+- feat: unify legacy Session.context onto canonical intent\_context [\#256](https://github.com/OpenVoiceOS/ovos-bus-client/pull/256) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.6.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.5a1) (2026-07-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.4a1...2.6.5a1)
