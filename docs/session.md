@@ -26,6 +26,40 @@ Each `Session` holds:
 
 Sessions serialize to/from plain dicts via `Session.serialize()` / `Session.deserialize()` — `ovos_bus_client/session.py:441,493`. They are carried inside `message.context["session"]` on every bus message.
 
+### Omitted and empty override fields
+
+On the list-valued override fields — `pipeline`, the three `blacklisted_*`, and the
+`*_transformers` chains — an empty list is wire-equivalent to an absent key
+(OVOS-SESSION-1 §3.4). Both mean *"let the orchestrator decide"*, and a consumer
+resolves them to its own deployment default from `ovos-config`. An explicit `null` is
+malformed and is treated as absent. So `blacklisted_intents: []` does not assert
+"this session blacklists nothing"; to do that, the deployment default must itself be
+empty.
+
+`Session.serialize()` therefore omits these fields when they are empty, rather than
+restating the deployment default on every Message — §3.4 exists precisely to keep the
+session from adding hundreds of bytes to every `forward`, `reply`, and cross-process
+hop. Read them off a deserialized `Session`, whose attributes are always concrete
+lists, rather than indexing the raw serialized dict, where an absent key is normal.
+
+### Intent-context removal tombstones
+
+`Session.remove_intent_context()` / `clear_intent_context()` (and the legacy
+`Session.context` view's `remove_context` / `clear_context`) do not pop entries from
+`session.intent_context` — they replace them **in place** with a `null` **tombstone**.
+OVOS-CONTEXT-1 §5.3 propagates deletions as null entries in the `ovos.session.sync`
+payload, and a popped key would simply be *absent* from the payload, which §5.3
+defines as "unchanged" — the orchestrator would keep the entry alive. The tombstone
+keeps the deletion visible in every serialized snapshot of the session until it is
+applied.
+
+A tombstone is never *live* (§2): CONTEXT-1 gating, §7 slot fill, and the legacy
+frame-stack projection all treat it as absent, the receiving `ovos.session.sync`
+merge deletes the key, and the orchestrator's §4 pre-match prune reaps it locally.
+Consequence for readers: test an entry for **liveness** (`ovos_spec_tools.context.is_live`)
+or truthiness, never bare key membership — `"person" in session.intent_context` is
+`True` while a removal is still propagating.
+
 ### Session.from_message
 
 `Session.from_message(message)` — `ovos_bus_client/session.py:537`
