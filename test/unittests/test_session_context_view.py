@@ -50,16 +50,66 @@ class TestContextUnifiedStore(unittest.TestCase):
         pairs = [e["data"][0] for e in ctx]
         self.assertIn(("Bob", "person"), pairs)
 
-    def test_legacy_remove_context_deletes_canonical_entry(self):
+    def test_legacy_remove_context_tombstones_canonical_entry(self):
         self.session.intent_context = {"person": {"value": "Bob"}}
         self.session.context.remove_context("person")
-        self.assertNotIn("person", self.session.intent_context or {})
+        # removed = tombstoned (null entry, CONTEXT-1 §5.3), so the deletion
+        # propagates in the sync payload; a tombstone is never live
+        self.assertIsNone(self.session.intent_context["person"])
+        self.assertFalse(gate_satisfied(self.session.intent_context,
+                                        requires=[{"key": "person",
+                                                   "scope": "shared"}],
+                                        excludes=None, owner_id="x"))
+        self.assertEqual(self.session.context.get_context(), [])
 
-    def test_legacy_clear_context_empties_canonical_store(self):
+    def test_legacy_remove_missing_key_is_noop(self):
+        self.session.intent_context = {"person": {"value": "Bob"}}
+        self.session.context.remove_context("nope")
+        self.assertNotIn("nope", self.session.intent_context)
+
+    def test_legacy_clear_context_tombstones_canonical_store(self):
         self.session.intent_context = {"person": {"value": "Bob"},
                                        "room": {"value": "kitchen"}}
         self.session.context.clear_context()
-        self.assertFalse(self.session.intent_context)
+        # every entry becomes a §5.3 tombstone: dead for gating/projection,
+        # but the deletion is carried in the serialized map
+        self.assertEqual(self.session.intent_context,
+                         {"person": None, "room": None})
+        self.assertEqual(self.session.context.frame_stack, [])
+
+    def test_frame_stack_assignment_replaces(self):
+        # legacy callers prune the stack by assigning a filtered list, so
+        # assignment must carry removal semantics for the projected keys
+        view = self.session.context
+        view.inject_context(_adapt_entity("Bob", "person"))
+        view.inject_context(_adapt_entity("kitchen", "room"))
+        kept = [(frame, ts) for frame, ts in view.frame_stack
+                if frame.entities[0]["data"][0][1] == "room"]
+        view.frame_stack = kept
+        self.assertIsNone(self.session.intent_context["person"])  # tombstoned
+        self.assertEqual(self.session.intent_context["room"]["value"],
+                         "kitchen")
+
+    def test_frame_stack_assignment_leaves_unprojectable_entries(self):
+        # entries the legacy stack cannot represent (null flags, non-string
+        # values) are invisible to the view; assignment says nothing about them
+        view = self.session.context
+        view.inject_context(_adapt_entity("Bob", "person"))
+        self.session.intent_context["skill.a:flag"] = {"value": None}
+        view.frame_stack = []
+        self.assertIsNone(self.session.intent_context["person"])
+        self.assertEqual(self.session.intent_context["skill.a:flag"],
+                         {"value": None})
+
+    def test_non_string_value_not_projected_to_frame_stack(self):
+        # only a non-null STRING value is a taggable surface form (§7); flags
+        # and numeric presence markers gate via intent_context only (§6)
+        self.session.intent_context = {"count": {"value": 3},
+                                       "flag": {"value": None},
+                                       "person": {"value": "Bob"}}
+        keys = [frame.entities[0]["origin"]
+                for frame, _ in self.session.context.frame_stack]
+        self.assertEqual(keys, ["person"])
 
     def test_update_context_greedy_writes_canonical(self):
         # greedy mode injects every scanned entity
@@ -222,7 +272,7 @@ class TestLegacyWireRoundTrip(unittest.TestCase):
     def test_legacy_write_preserves_intent_context_identity(self):
         from ovos_bus_client.session import Session
         session = Session("identity-1")
-        session.set_intent_context("person", "Bob")
+        session.set_intent_context("person", "Bob", scope="shared")
         held = session.intent_context
         # adapt entity shape: data[0] is (value, key)
         session.context.inject_context({"key": "pet",
@@ -230,22 +280,56 @@ class TestLegacyWireRoundTrip(unittest.TestCase):
         self.assertIs(session.intent_context, held)
         self.assertIn("pet", held)
 
-    def test_legacy_clear_context_leaves_empty_dict_not_none(self):
+    def test_legacy_clear_context_keeps_dict_and_identity(self):
         from ovos_bus_client.session import Session
         session = Session("clear-1")
-        session.set_intent_context("person", "Bob")
+        session.set_intent_context("person", "Bob", scope="shared")
+        held = session.intent_context
         session.context.clear_context()
-        self.assertEqual(session.intent_context, {})
-        # membership on the cleared map must not raise
-        self.assertNotIn("person", session.intent_context)
+        # cleared in place: same object, still a dict, entry tombstoned
+        self.assertIs(session.intent_context, held)
+        self.assertEqual(session.intent_context, {"person": None})
+        self.assertEqual(session.context.frame_stack, [])
 
-    def test_legacy_remove_last_entry_leaves_empty_dict_not_none(self):
+    def test_legacy_remove_keeps_dict_and_identity(self):
         from ovos_bus_client.session import Session
         session = Session("remove-1")
-        session.set_intent_context("person", "Bob")
+        session.set_intent_context("person", "Bob", scope="shared")
+        held = session.intent_context
         session.context.remove_context("person")
-        self.assertEqual(session.intent_context, {})
-        self.assertNotIn("person", session.intent_context)
+        self.assertIs(session.intent_context, held)
+        self.assertEqual(session.intent_context, {"person": None})
+
+    def test_stale_legacy_frame_stays_dead_across_deserialize(self):
+        """A frame older than the legacy timeout is not resurrected."""
+        from ovos_bus_client.session import Session
+        now = time.time()
+        legacy = {
+            "session_id": "stale-1",
+            "context": {"timeout": 120,
+                        "frame_stack": [
+                            ({"entities": [_adapt_entity("Bob", "person")],
+                              "metadata": {}}, now - 10_000),
+                            ({"entities": [_adapt_entity("kitchen", "room")],
+                              "metadata": {}}, now),
+                        ]},
+        }
+        sess = Session.deserialize(legacy)
+        self.assertNotIn("person", sess.intent_context)
+        # the live frame folds with its own timestamp anchoring the expiry
+        entry = sess.intent_context["room"]
+        self.assertEqual(entry["value"], "kitchen")
+        self.assertAlmostEqual(entry["expires_at"], now + 120, delta=5)
+
+    def test_update_from_fold_keeps_intent_context_a_dict(self):
+        """Folding a snapshot onto the singleton never leaves None behind."""
+        from ovos_bus_client.session import Session
+        live = Session("fold-1")
+        live.set_intent_context("person", "Bob", scope="shared")
+        snapshot = Session.deserialize({"session_id": "fold-1"})
+        live.update_from(snapshot)
+        self.assertIsInstance(live.intent_context, dict)
+        self.assertNotIn("x", live.intent_context)  # membership never raises
 
 
 if __name__ == "__main__":

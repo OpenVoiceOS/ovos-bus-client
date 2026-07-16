@@ -1,7 +1,6 @@
 import enum
 import time
-from os import environ
-from threading import Event
+from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
 
@@ -62,37 +61,22 @@ _CANONICAL_DICT_FIELDS = (
     "intent_context",
 )
 
-# SESSION-1 §3.4: on these list-valued override fields an empty array is
-# wire-equivalent to omission, and a producer SHOULD NOT restate a value the
-# consumer would compute as the deployment default anyway. They are dropped when
-# empty so the session does not add wire weight to every Message.
-_DEFERRABLE_LIST_FIELDS = (
-    "blacklisted_skills",
-    "blacklisted_intents",
-    "pipeline",
-)
+# Guards every mutation of a Session's ``intent_context`` map (the canonical
+# mutators, the legacy view's write-through folds, and the §5.3 sync merge).
+# Bus handlers run on reader threads, so two writers — or a writer racing the
+# sync merge's iteration — are a real schedule. A single module-level lock is
+# deliberate: contention is negligible (mutations are tiny dict ops) and a
+# per-instance lock would be replaced whenever ``update_from`` swaps a
+# session's ``__dict__``, silently splitting the mutual exclusion.
+_CONTEXT_LOCK = RLock()
 
 
-def _emit_session_defaults() -> bool:
-    """Whether serialize() should spell out deferrable fields it may omit.
-
-    Off by default: §3.4's omit rule is a SHOULD, so a lean wire shape is the
-    conformant default. Turning this on makes every Message carry the resolved
-    deployment defaults instead of deferring them to the consumer -- redundant
-    but still conformant (§3.4: "non-optimal but conformant"), and useful when
-    inspecting or replaying a bus where the reader has no access to the
-    producer's config.
-
-    ``OVOS_SESSION_EMIT_DEFAULTS`` wins when set; otherwise the
-    ``session.emit_defaults`` config key is read.
-    """
-    val = environ.get("OVOS_SESSION_EMIT_DEFAULTS")
-    if val is not None:
-        return val.strip().lower() in ("1", "true", "yes", "on")
-    try:
-        return bool(Configuration().get("session", {}).get("emit_defaults", False))
-    except Exception:
-        return False
+def _warn_legacy_view(legacy: str, spec: str, canonical: str):
+    """Log the standard deprecation for a legacy back-compat view access."""
+    log_deprecation(f"Session.{legacy} is a legacy view of the canonical "
+                    f"{spec} {canonical} field and will be removed; "
+                    f"use {canonical} directly",
+                    _NEXT_MAJOR_VERSION)
 
 
 class UtteranceState(str, enum.Enum):
@@ -121,10 +105,7 @@ class _UtteranceStatesView(dict):
 
     @staticmethod
     def _warn():
-        log_deprecation("Session.utterance_states is a legacy view of the "
-                        "canonical OVOS-CONVERSE-1 response_mode field and will "
-                        "be removed; use response_mode directly",
-                        _NEXT_MAJOR_VERSION)
+        _warn_legacy_view("utterance_states", "OVOS-CONVERSE-1", "response_mode")
 
     def _project(self) -> Dict:
         """Project the canonical response_mode holder to the legacy mapping."""
@@ -485,15 +466,24 @@ class _IntentContextView(IntentContextManager):
                 "origin": key}
 
     def _write(self, payload: Dict[str, Any]):
-        """Fold ``payload`` (CONTEXT-1 set/null-delete) into intent_context.
+        """Fold ``payload`` into ``intent_context`` (writer-side semantics).
 
-        Merged in place, like the canonical mutators: the map keeps its object
+        Applied in place, like the canonical mutators: the map keeps its object
         identity so a holder of the dict sees the write, and it stays an empty
-        container rather than becoming ``None`` when the last entry is removed.
+        container rather than becoming ``None``.
+
+        A ``None`` payload value is stored as a **tombstone** (`key -> null`),
+        not popped: OVOS-CONTEXT-1 §5.3 propagates deletions as null entries in
+        the sync payload, so a removal must stay visible in the map this
+        session serializes. Receivers apply the null-delete when they merge
+        (:meth:`SessionManager.merge_intent_context`); a tombstone is never
+        live (§2), so gating, slot fill, and the frame-stack projection all
+        treat it as absent, and the orchestrator's §4 prune reaps it.
         """
-        if self._session.intent_context is None:
-            self._session.intent_context = {}
-        SessionManager.merge_intent_context(self._session.intent_context, payload)
+        with _CONTEXT_LOCK:
+            if self._session.intent_context is None:
+                self._session.intent_context = {}
+            self._session.intent_context.update(payload)
         self._session.touch()
 
     # --- derived frame stack (read path for the inherited get_context) ---
@@ -528,17 +518,45 @@ class _IntentContextView(IntentContextManager):
 
     @frame_stack.setter
     def frame_stack(self, value):
-        """Ingest a legacy frame stack back into ``intent_context``."""
-        self._write(self._frames_to_entries(value))
+        """Replace the legacy frame stack (assignment = replacement).
+
+        Legacy ``IntentContextManager`` callers prune the stack by assigning a
+        filtered list, so assignment must carry *removal* semantics: every key
+        currently projected into the stack that the new stack no longer
+        represents is tombstoned (null-delete, §5.3), and the new stack's
+        entities are folded in. Entries the legacy stack cannot represent
+        (null flags, non-string values) are untouched — they were never part
+        of the projected stack, so a stack assignment says nothing about them.
+        """
+        payload = self._frames_to_entries(value)
+        projected = {frame.entities[0]["origin"]
+                     for frame, _ts in self.frame_stack}
+        for key in projected:
+            if key not in payload:
+                payload[key] = None
+        self._write(payload)
 
     def _frames_to_entries(self, frames) -> Dict[str, Any]:
-        """Project a legacy ``[(frame, ts), ...]`` stack to CONTEXT-1 entries."""
+        """Project a legacy ``[(frame, ts), ...]`` stack to CONTEXT-1 entries.
+
+        The legacy liveness rule is ``now - ts < timeout``, so each frame's own
+        timestamp anchors the projected ``expires_at`` (``ts + timeout``) — a
+        stale frame that legacy ``get_context`` would already have filtered out
+        is **not** resurrected with a fresh window; it is skipped.
+        """
         payload: Dict[str, Any] = {}
-        for frame, _ts in (frames or []):
+        now = time.time()
+        for frame, ts in (frames or []):
             for entity in getattr(frame, "entities", []):
                 key, entry = self._entity_to_entry(entity)
-                if key:
-                    payload[key] = entry
+                if not key:
+                    continue
+                if self.timeout and self.timeout > 0:
+                    expires_at = (ts if ts is not None else now) + self.timeout
+                    if expires_at <= now:
+                        continue  # dead under legacy semantics — stays dead
+                    entry["expires_at"] = expires_at
+                payload[key] = entry
         return payload
 
     # --- write path overrides -------------------------------------------
@@ -549,13 +567,21 @@ class _IntentContextView(IntentContextManager):
         self._write({key: entry})
 
     def remove_context(self, context_id: str):
-        self._write({context_id: None})
+        # a tombstone (null entry, §5.3) rather than a pop, so the removal
+        # propagates when this session is serialized into a sync payload; a
+        # missing key is a silent no-op, matching the canonical remover.
+        if context_id in (self._session.intent_context or {}):
+            self._write({context_id: None})
 
     def clear_context(self):
-        # cleared in place, mirroring Session.clear_intent_context: the field
-        # stays an empty container, never ``None``.
-        if self._session.intent_context:
-            self._session.intent_context.clear()
+        # every entry becomes a tombstone, in place: the map keeps its object
+        # identity, stays a dict (never ``None``), and the clear propagates as
+        # §5.3 null-deletes when the session is serialized into a sync payload.
+        with _CONTEXT_LOCK:
+            ctx = self._session.intent_context
+            if ctx:
+                for key in ctx:
+                    ctx[key] = None
         self._session.touch()
 
 
@@ -744,8 +770,13 @@ class Session(_SpecSession):
         # construction, which the SessionManager fold re-enters via
         # deserialize(); touching here would recurse under the registry lock.
         if context is not None and not self.intent_context:
-            entries = _IntentContextView(self)._frames_to_entries(
-                getattr(context, "frame_stack", []))
+            # the fold honours the legacy manager's OWN timeout and each
+            # frame's timestamp, so entries expire exactly when the legacy
+            # ``get_context`` filter would have dropped them; frames already
+            # dead under that rule are not resurrected.
+            entries = _IntentContextView(
+                self, timeout=getattr(context, "timeout", None)
+            )._frames_to_entries(getattr(context, "frame_stack", []))
             if entries:
                 self.intent_context = entries
         # persona_id is an inherited canonical field (OVOS-PERSONA-1, registered
@@ -770,6 +801,20 @@ class Session(_SpecSession):
             if getattr(self, name, None) is None:
                 setattr(self, name, {})
 
+    def _context_view(self) -> "_IntentContextView":
+        """Return the (cached) adapt-style view over ``intent_context``.
+
+        The view holds no state of its own beyond config scalars, so one
+        instance per session suffices; it is rebuilt only when the cached
+        instance is bound to a different session object (``update_from``
+        swaps ``__dict__`` wholesale, carrying the cache across objects).
+        """
+        view = self.__dict__.get("_ctx_view")
+        if view is None or view._session is not self:
+            view = _IntentContextView(self)
+            self.__dict__["_ctx_view"] = view
+        return view
+
     @property
     def context(self) -> "_IntentContextView":
         """DEPRECATED adapt-style frame-stack view of ``intent_context``.
@@ -785,7 +830,7 @@ class Session(_SpecSession):
                         "OVOS-CONTEXT-1 session.intent_context map and will be "
                         "removed; use intent_context directly",
                         _NEXT_MAJOR_VERSION)
-        return _IntentContextView(self)
+        return self._context_view()
 
     @property
     def timezone(self) -> Optional[str]:
@@ -855,7 +900,8 @@ class Session(_SpecSession):
         (``private`` -> ``<owner_id>:<key>``, ``shared`` -> the bare ``<key>``)
         and mapped to the §2 entry ``{value, expires_at?, turns_remaining?}``
         (the optional decay fields are omitted when unset, per §2). A private
-        write with no ``owner_id`` cannot resolve a key and is a no-op.
+        write cannot resolve a stored key without an ``owner_id`` and raises
+        ``ValueError`` — a silently dropped context write is a debugging trap.
 
         @param key: the caller-chosen sub-key (unprefixed).
         @param value: the entry value; ``None`` marks a valueless gate (§6).
@@ -864,44 +910,69 @@ class Session(_SpecSession):
             required for private scope.
         @param expires_at: optional §2/§4 wall-clock expiry.
         @param turns_remaining: optional §2/§4 turn-count decay budget.
+        @raise ValueError: private scope with no ``owner_id``.
         """
         stored = resolve_key(key, scope, owner_id)
         if stored is None:
-            LOG.warning(f"cannot set private intent_context '{key}' without "
-                        f"an owner_id; ignoring")
-            return
+            raise ValueError(f"cannot set private intent_context '{key}' "
+                             f"without an owner_id; pass owner_id=<skill_id> "
+                             f"or scope='shared'")
         entry: Dict[str, Any] = {"value": value}
         if expires_at is not None:
             entry["expires_at"] = expires_at
         if turns_remaining is not None:
             entry["turns_remaining"] = turns_remaining
-        if self.intent_context is None:
-            self.intent_context = {}
-        self.intent_context[stored] = entry
+        with _CONTEXT_LOCK:
+            if self.intent_context is None:
+                self.intent_context = {}
+            self.intent_context[stored] = entry
         self.touch()
 
     def remove_intent_context(self, key: str, *,
                               scope: str = "private",
                               owner_id: Optional[str] = None):
-        """Drop one OVOS-CONTEXT-1 intent-context entry by its declaration.
+        """Remove one OVOS-CONTEXT-1 intent-context entry by its declaration.
 
-        The ``key`` is resolved per §3.1 and popped from the canonical map; a
-        missing key (or an unresolvable private lookup) is a silent no-op.
+        The ``key`` is resolved per §3.1 and **tombstoned** — replaced in
+        place by a ``null`` entry, not popped. §5.3 propagates deletions as
+        null entries in the sync payload, so the removal must stay visible in
+        the map this session serializes; a popped key would be *absent* from
+        the payload, which §5.3 defines as "unchanged", and the orchestrator
+        would keep the entry alive. A tombstone is never live (§2): gating,
+        slot fill, and the legacy frame-stack view treat it as absent, the
+        receiving merge (:meth:`SessionManager.merge_intent_context`) deletes
+        the key, and the orchestrator's §4 prune reaps it locally.
+
+        A missing key (or an unresolvable private lookup) is a silent no-op.
         """
         stored = resolve_key(key, scope, owner_id)
-        if stored is None or not self.intent_context:
-            return
-        if self.intent_context.pop(stored, None) is not None:
+        touched = False
+        with _CONTEXT_LOCK:
+            ctx = self.intent_context
+            if stored is not None and ctx and stored in ctx \
+                    and ctx[stored] is not None:
+                ctx[stored] = None
+                touched = True
+        if touched:
             self.touch()
 
     def clear_intent_context(self):
-        """Empty the whole OVOS-CONTEXT-1 intent-context map.
+        """Remove every OVOS-CONTEXT-1 intent-context entry.
 
-        Cleared in place so the field stays an empty container (SESSION-1 §2.1
-        in-process normalization), never ``None``.
+        Each entry becomes a §5.3 tombstone (see
+        :meth:`remove_intent_context`), applied in place so the field keeps
+        its object identity and stays a dict (SESSION-1 §2.1 in-process
+        normalization), never ``None``.
         """
-        if self.intent_context:
-            self.intent_context.clear()
+        touched = False
+        with _CONTEXT_LOCK:
+            ctx = self.intent_context
+            if ctx:
+                for key in ctx:
+                    if ctx[key] is not None:
+                        ctx[key] = None
+                        touched = True
+        if touched:
             self.touch()
 
     # ------------------------------------------------------------------
@@ -918,19 +989,13 @@ class Session(_SpecSession):
         Reads project the canonical `active_handlers` object list to the legacy
         pair shape, head-first.
         """
-        log_deprecation("Session.active_skills is a legacy view of the canonical "
-                        "OVOS-PIPELINE-1 active_handlers field and will be "
-                        "removed; use active_handlers directly",
-                        _NEXT_MAJOR_VERSION)
+        _warn_legacy_view("active_skills", "OVOS-PIPELINE-1", "active_handlers")
         return [[h["skill_id"], h["activated_at"]] for h in self.active_handlers]
 
     @active_skills.setter
     def active_skills(self, value: Optional[List[List[Union[str, float]]]]):
         """Assigning legacy pairs rewrites the canonical `active_handlers` store."""
-        log_deprecation("Session.active_skills is a legacy view of the canonical "
-                        "OVOS-PIPELINE-1 active_handlers field and will be "
-                        "removed; use active_handlers directly",
-                        _NEXT_MAJOR_VERSION)
+        _warn_legacy_view("active_skills", "OVOS-PIPELINE-1", "active_handlers")
         self.active_handlers = self._coerce_handlers(
             self._pairs_to_handler_objects(value))
 
@@ -973,10 +1038,7 @@ class Session(_SpecSession):
         structured `response_mode` store, preserving the pre-refactor behavior
         where `utterance_states` was a plain mutable dict.
         """
-        log_deprecation("Session.utterance_states is a legacy view of the "
-                        "canonical OVOS-CONVERSE-1 response_mode field and will "
-                        "be removed; use response_mode directly",
-                        _NEXT_MAJOR_VERSION)
+        _warn_legacy_view("utterance_states", "OVOS-CONVERSE-1", "response_mode")
         if self.response_mode and self.response_mode.get("skill_id"):
             projection = {self.response_mode["skill_id"]: UtteranceState.RESPONSE.value}
         else:
@@ -986,10 +1048,7 @@ class Session(_SpecSession):
     @utterance_states.setter
     def utterance_states(self, value: Optional[Dict]):
         """Assigning legacy utterance_states rewrites the structured `response_mode`."""
-        log_deprecation("Session.utterance_states is a legacy view of the "
-                        "canonical OVOS-CONVERSE-1 response_mode field and will "
-                        "be removed; use response_mode directly",
-                        _NEXT_MAJOR_VERSION)
+        _warn_legacy_view("utterance_states", "OVOS-CONVERSE-1", "response_mode")
         self.response_mode = None
         for skill_id, state in (value or {}).items():
             if state == UtteranceState.RESPONSE.value:
@@ -1101,14 +1160,6 @@ class Session(_SpecSession):
         # or forced ``[]``.
         data = super().to_dict()
 
-        # Opt-in: spell out the deferrable fields the parent dropped, carrying
-        # the value already resolved from ovos-config. Redundant on the wire but
-        # conformant, and it lets a reader that cannot see the producer's config
-        # (a bus monitor, a replay) observe what the session actually resolved to.
-        if _emit_session_defaults():
-            for _name in _DEFERRABLE_LIST_FIELDS:
-                data[_name] = list(getattr(self, _name) or [])
-
         # Legacy back-compat wire keys, DERIVED from the canonical state (never a
         # parallel store) so old ecosystem readers parsing the raw dict keep
         # working for one deprecation cycle:
@@ -1128,7 +1179,7 @@ class Session(_SpecSession):
             "active_skills": legacy_active,
             "utterance_states": legacy_states,
             "session_id": self.session_id,
-            "context": _IntentContextView(self).serialize(),
+            "context": self._context_view().serialize(),
             "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
@@ -1293,6 +1344,14 @@ class _BusSessionManagerMixin:
     bus = None
 
     @classmethod
+    def _broadcast_default_session(cls, message=None):
+        """Emit the legacy ``ovos.session.update_default`` default-session echo."""
+        if cls.bus:
+            message = message or Message(SpecMessage.SESSION_SYNC)
+            cls.bus.emit(message.reply("ovos.session.update_default",
+                                       {"session_data": cls.default_session.serialize()}))
+
+    @classmethod
     def sync(cls, message=None):
         """Broadcast the default session on the bus.
 
@@ -1304,10 +1363,7 @@ class _BusSessionManagerMixin:
                         "legacy; the default session propagates by value-passing "
                         "like any other session",
                         _NEXT_MAJOR_VERSION)
-        if cls.bus:
-            message = message or Message(SpecMessage.SESSION_SYNC)
-            cls.bus.emit(message.reply("ovos.session.update_default",
-                                       {"session_data": cls.default_session.serialize()}))
+        cls._broadcast_default_session(message)
 
     @classmethod
     def connect_to_bus(cls, bus):
@@ -1317,7 +1373,7 @@ class _BusSessionManagerMixin:
         cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
         cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
         cls.bus.on(SpecMessage.SESSION_SYNC, cls.handle_session_sync)
-        cls.sync()
+        cls._broadcast_default_session()
 
     @classmethod
     def prune_sessions(cls):
@@ -1366,6 +1422,8 @@ class _BusSessionManagerMixin:
             promote a session by setting its id to "default" instead.
         @return: the canonical (singleton) Session for ``sess.session_id``.
         """
+        if not sess:
+            raise ValueError("Expected Session and got None")
         if make_default:
             log_deprecation("'make_default' kwarg is deprecated and will be "
                             "removed; set session_id='default' on the session "
@@ -1375,8 +1433,6 @@ class _BusSessionManagerMixin:
             # this log is dangerous, session may contain things like passwords and access keys
             # this comment is here to avoid reintroducing it by accident
             # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
-        if not sess:
-            raise ValueError("Expected Session and got None")
         return cls._store(sess)
 
     @classmethod
@@ -1557,28 +1613,37 @@ class _BusSessionManagerMixin:
         singleton resolves the target session and merges the snapshot's
         ``intent_context`` entry-by-entry onto it (set + null-delete, §5.3),
         keeping the managed session the authoritative owner of intent
-        context. The legacy default-session echo is then preserved for
-        callers that emit a bare ``ovos.session.sync`` to *request* the
-        current default session.
+        context. The merge mutates the working map **in place**: the map
+        object every live view holds keeps its identity, and it stays a dict
+        — never ``None`` — per the in-process SESSION-1 §2.1 normalization.
+
+        The legacy default-session echo is emitted only for a **bare**
+        request (no session carrier on the message): a spec-conformant §5.3
+        sync is not a default-session request and triggers no echo.
         """
-        if message is not None:
-            # the session rides in ``message.context.session`` — resolve it
-            # via the canonical carrier rather than ``message.data``.
+        carried = message is not None and \
+            isinstance(getattr(message, "context", None), dict) and \
+            "session" in message.context
+        if carried:
             inbound = Session.from_message(message)
-            payload = inbound.intent_context if inbound else None
-            if payload is not None:
-                # merge onto the *managed* (authoritative) session if we
-                # already track it — the singleton owns the working map.
-                # A session we have never seen is adopted from the carrier.
-                sid = inbound.session_id
-                sess = cls.sessions.get(sid, inbound)
-                merged = cls.merge_intent_context(
-                    dict(sess.intent_context or {}), payload)
-                sess.intent_context = merged or None
-                cls.update(sess)
-                LOG.debug(f"merged intent_context sync for session "
-                          f"'{sess.session_id}': {list(payload.keys())}")
-        cls.sync(message)
+            if inbound:
+                sess = cls.sessions.get(inbound.session_id)
+                if sess is None:
+                    # a session we have never seen is adopted from the carrier
+                    sess = inbound
+                payload = inbound.intent_context
+                if sess is not inbound and payload:
+                    with _CONTEXT_LOCK:
+                        if sess.intent_context is None:
+                            sess.intent_context = {}
+                        cls.merge_intent_context(sess.intent_context, payload)
+                    LOG.debug(f"merged intent_context sync for session "
+                              f"'{sess.session_id}': {list(payload.keys())}")
+                sess.touch()
+        else:
+            # legacy: a bare ``ovos.session.sync`` *requests* the current
+            # default session; echo it back.
+            cls._broadcast_default_session(message)
 
     # legacy alias — ``ovos.session.sync`` historically routed here to echo
     # the default session; it now also performs the OVOS-CONTEXT-1 §5.3 merge

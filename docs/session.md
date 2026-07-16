@@ -42,20 +42,23 @@ session from adding hundreds of bytes to every `forward`, `reply`, and cross-pro
 hop. Read them off a deserialized `Session`, whose attributes are always concrete
 lists, rather than indexing the raw serialized dict, where an absent key is normal.
 
-#### Emitting the defaults anyway
+### Intent-context removal tombstones
 
-A lean wire shape is the default, but a deployment can ask for the resolved values to
-travel on every Message — useful when the reader cannot see the producer's config, as
-with a bus monitor or a captured replay. §3.4 calls this "non-optimal but conformant",
-and consumers must tolerate it either way.
+`Session.remove_intent_context()` / `clear_intent_context()` (and the legacy
+`Session.context` view's `remove_context` / `clear_context`) do not pop entries from
+`session.intent_context` — they replace them **in place** with a `null` **tombstone**.
+OVOS-CONTEXT-1 §5.3 propagates deletions as null entries in the `ovos.session.sync`
+payload, and a popped key would simply be *absent* from the payload, which §5.3
+defines as "unchanged" — the orchestrator would keep the entry alive. The tombstone
+keeps the deletion visible in every serialized snapshot of the session until it is
+applied.
 
-| | |
-|---|---|
-| Environment variable | `OVOS_SESSION_EMIT_DEFAULTS=true` |
-| Config key | `session.emit_defaults: true` |
-
-The environment variable wins when set. Both wire shapes deserialize to identical
-`Session` objects; only the number of bytes on the bus differs.
+A tombstone is never *live* (§2): CONTEXT-1 gating, §7 slot fill, and the legacy
+frame-stack projection all treat it as absent, the receiving `ovos.session.sync`
+merge deletes the key, and the orchestrator's §4 pre-match prune reaps it locally.
+Consequence for readers: test an entry for **liveness** (`ovos_spec_tools.context.is_live`)
+or truthiness, never bare key membership — `"person" in session.intent_context` is
+`True` while a removal is still propagating.
 
 ### Session.from_message
 
