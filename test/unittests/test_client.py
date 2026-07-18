@@ -71,6 +71,21 @@ class TestMessageBusClient(unittest.TestCase):
         # parse failed before any dispatch: no topic was emitted
         mock_emitter.emit.assert_not_called()
 
+    def test_on_message_discards_malformed_session(self):
+        """A well-formed frame carrying a non-object session (SESSION-1 §2.5)
+        must be dropped like a malformed frame — never raised. The raise would
+        reach on_error on the handler thread and tear the socket into a
+        reconnect loop, so one bad producer could hold the client offline."""
+        mock_emitter = Mock()
+        mc = MessageBusClient(emitter=mock_emitter)
+        bad = ('{"type": "ovos.test", "data": {}, '
+               '"context": {"session": "oops"}}')
+        # must not raise
+        mc.on_message(bad)
+        # rejected before dispatch: the topic was never emitted
+        for call in mock_emitter.emit.call_args_list:
+            self.assertNotEqual(call.args and call.args[0], "ovos.test")
+
     def test_on_message_dispatches_valid(self):
         mock_emitter = Mock()
         mc = MessageBusClient(emitter=mock_emitter)

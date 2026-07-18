@@ -24,7 +24,7 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
-from ovos_bus_client.session import SessionManager, Session
+from ovos_bus_client.session import SessionManager, Session, MalformedSession
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
@@ -270,7 +270,15 @@ class MessageBusClient:
             # otherwise trigger an endless reconnect loop.
             LOG.warning("discarding malformed bus message: %s", e)
             return
-        sess = Session.from_message(parsed_message)
+        try:
+            sess = Session.from_message(parsed_message)
+        except MalformedSession as e:
+            # A non-object session carrier is a per-message producer fault, not a
+            # transport fault (SESSION-1 §2.5): drop this one message and keep the
+            # connection. Letting it propagate would reach on_error and reconnect,
+            # so a single bad producer could hold the client in a reconnect loop.
+            LOG.warning("discarding bus message with malformed session: %s", e)
+            return
         if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
         self.emitter.emit('message', message)
