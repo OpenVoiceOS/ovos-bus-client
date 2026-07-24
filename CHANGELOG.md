@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.1a1) (2026-07-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.0a1...2.7.1a1)
+
+**Merged pull requests:**
+
+- fix: survive a malformed session on an inbound message [\#267](https://github.com/OpenVoiceOS/ovos-bus-client/pull/267) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.7.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.0a1) (2026-07-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.5a1...2.7.0a1)
