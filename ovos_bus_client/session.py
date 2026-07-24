@@ -13,6 +13,7 @@ from ovos_spec_tools.session import (Session as _SpecSession,
                                      SessionManager as _SpecSessionManager,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
                                      DEFAULT_SESSION_ID,
+                                     MalformedSession,
                                      SESSION1_REGISTERED_FIELDS)
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.version import VERSION_MAJOR
@@ -1268,31 +1269,38 @@ class Session(_SpecSession):
     @staticmethod
     def from_message(message: Message = None):
         """
-        Get a Session for the given message. If no session in message context,
-        SessionManager.default_session is returned.
-        If SessionManager.default_session is None, a default session is created
+        Get a Session for the given message.
+
+        An absent session (no ``session`` key, or an explicit ``null``) resolves
+        to the default session (SESSION-1 §2.1). A present-but-malformed session
+        carrier — anything that is not a JSON object — is a producer error: it is
+        rejected with :class:`MalformedSession` rather than silently defaulted, so
+        the consumer never processes a message under a fabricated session
+        identity (SESSION-1 §2.5). Callers on the inbound path drop the offending
+        message on this error instead of tearing down the connection.
+
         @param message: Message to get session for
         @return: Session object
+        @raises MalformedSession: the message carries a non-object session
         """
         message = message or dig_for_message()
-        if message and "session" in message.context:
-            lang = message.context.get("lang") or \
-                   message.data.get("lang")
-            sess = message.context["session"]
-            if lang and "lang" not in sess:
-                sess["lang"] = lang
-            sess = Session.deserialize(sess)
+        session = message.context.get("session") if message else None
+        if session is not None:
+            lang = message.context.get("lang") or message.data.get("lang")
+            # deserialize rejects a non-dict carrier with MalformedSession; only
+            # fold the context lang onto a well-formed (dict) carrier first.
+            if isinstance(session, dict) and lang and "lang" not in session:
+                session["lang"] = lang
+            return Session.deserialize(session)
+        if message:
+            LOG.warning(f"No session context in message:{message.msg_type}")
+            LOG.debug(f"Update ovos-bus-client or add `session` to "
+                      f"`message.context` where emitted. "
+                      f"context={message.context}")
         else:
-            if message:
-                LOG.warning(f"No session context in message:{message.msg_type}")
-                LOG.debug(f"Update ovos-bus-client or add `session` to "
-                          f"`message.context` where emitted. "
-                          f"context={message.context}")
-            else:
-                LOG.warning(f"No message found, using default session")
-            # no session on the message -> the default session
-            sess = SessionManager.get_default_session()
-        return sess
+            LOG.warning(f"No message found, using default session")
+        # no session on the message -> the default session
+        return SessionManager.get_default_session()
 
 
 class _BusSessionManagerMixin:

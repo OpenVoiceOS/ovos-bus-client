@@ -194,8 +194,46 @@ class TestSession(unittest.TestCase):
         self.assertIsInstance(serialized['context'], dict)
 
     def test_from_message(self):
-        # TODO
-        pass
+        from ovos_bus_client.session import (Session, SessionManager,
+                                             MalformedSession)
+        from ovos_bus_client.message import Message
+
+        # a well-formed session deserializes identically to a direct call
+        well_formed = Session("sid-wf", lang="pt-PT")
+        msg = Message("test", context={"session": well_formed.serialize()})
+        got = Session.from_message(msg)
+        self.assertIsInstance(got, Session)
+        self.assertEqual(got.session_id, "sid-wf")
+        self.assertEqual(got.lang, "pt-PT")
+
+        # SESSION-1 §2.5: a present-but-malformed (non-object) session carrier is
+        # a producer error — rejected with MalformedSession, never silently
+        # defaulted. The inbound handler catches this to drop the one message; it
+        # is a ValueError, so it never escapes as an unhandled TypeError that
+        # would tear the connection down.
+        for bad in ("oops", 42, ["a", "b"]):
+            msg = Message("test", context={"session": bad})
+            with self.assertRaises(MalformedSession):
+                Session.from_message(msg)
+
+        # an explicit null carrier is absence, not malformation (§2.1) -> default
+        msg = Message("test", context={"session": None})
+        got = Session.from_message(msg)
+        self.assertIsInstance(got, Session)
+        self.assertEqual(got.session_id,
+                         SessionManager.get_default_session().session_id)
+
+        # a dict missing every field is well-formed (all fields omissible):
+        # it deserializes without raising, the consumer filling its own
+        # deployment defaults (§2.1)
+        msg = Message("test", context={"session": {}})
+        got = Session.from_message(msg)
+        self.assertIsInstance(got, Session)
+        self.assertTrue(got.session_id)
+
+        # no session key at all -> default session
+        got = Session.from_message(Message("test", context={}))
+        self.assertIsInstance(got, Session)
 
 
 class TestSessionManager(unittest.TestCase):
