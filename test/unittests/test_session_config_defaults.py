@@ -21,9 +21,11 @@ import ovos_bus_client.session as session_module
 from ovos_bus_client.session import Session
 
 _CUSTOM_PIPELINE = ["adapt_high", "fallback_low"]
+_CUSTOM_BLACKLISTED_PIPELINES = ["adapt_low"]
 _CONFIG = {
     "lang": "en-us",
-    "intents": {"pipeline": list(_CUSTOM_PIPELINE)},
+    "intents": {"pipeline": list(_CUSTOM_PIPELINE),
+                "blacklisted_pipelines": list(_CUSTOM_BLACKLISTED_PIPELINES)},
 }
 
 
@@ -57,6 +59,23 @@ class TestConfigBackedDefaultsOnDeserialize(unittest.TestCase):
         # empty deployment default: no config-backed value to substitute.
         sess = self._deserialize({"session_id": "abc"})
         self.assertEqual(sess.blacklisted_intents, [])
+
+    def test_omitted_blacklisted_pipelines_resolves_to_configured_default(self):
+        # OVOS-SESSION-1 §2.1 / OVOS-PIPELINE-1 §5.2: deployment default for
+        # blacklisted_pipelines is seeded from config, same as
+        # blacklisted_skills / blacklisted_intents, NOT hardcoded to [].
+        sess = self._deserialize({"session_id": "abc"})
+        self.assertEqual(sess.blacklisted_pipelines, _CUSTOM_BLACKLISTED_PIPELINES)
+
+    def test_explicit_blacklisted_pipelines_kwarg_wins_over_config(self):
+        with patch.object(session_module, "Configuration", return_value=_CONFIG):
+            sess = Session(blacklisted_pipelines=["stop_high"])
+        self.assertEqual(sess.blacklisted_pipelines, ["stop_high"])
+
+    def test_blacklisted_pipelines_defaults_to_empty_list_absent_config(self):
+        with patch.object(session_module, "Configuration", return_value={}):
+            sess = Session()
+        self.assertEqual(sess.blacklisted_pipelines, [])
 
     def test_omitted_transformer_lists_fold_to_empty_list(self):
         # the six active *_transformers are override lists whose empty value

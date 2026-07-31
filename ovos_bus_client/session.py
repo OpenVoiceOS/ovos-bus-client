@@ -620,6 +620,7 @@ class Session(_SpecSession):
                  is_recording: bool = False,
                  blacklisted_intents: Optional[List[str]] = None,
                  blacklisted_skills: Optional[List[str]] = None,
+                 blacklisted_pipelines: Optional[List[str]] = None,
                  persona_id: Optional[str] = None,
                  fallback_handlers: Optional[List[str]] = None,
                  **canonical_kwargs):
@@ -657,13 +658,14 @@ class Session(_SpecSession):
             is_recording (bool): Initial recording state flag.
             blacklisted_intents (Optional[List[str]]): Intents to ignore for this session.
             blacklisted_skills (Optional[List[str]]): Skills to ignore for this session.
+            blacklisted_pipelines (Optional[List[str]]): Pipeline stages to ignore for this session.
             persona_id (Optional[str]): Optional persona identifier associated with this session.
             fallback_handlers (Optional[List[str]]): OVOS-FALLBACK-1 §4 registered session field —
                 ordered skill-id strings. Inherited canonical field; forwarded to the parent.
             **canonical_kwargs: Every remaining canonical ``ovos_spec_tools.Session``
                 SESSION-1 field — ``secondary_langs``, ``output_lang``, ``stt_lang``,
                 ``request_lang``, ``detected_lang``, ``intent_context``,
-                ``blacklisted_pipelines``, the six ``*_transformers`` lists, the six
+                the six ``*_transformers`` lists, the six
                 ``blacklisted_*_transformers`` lists, and ``extras`` — is accepted here
                 and forwarded verbatim to the parent so the full registered field set
                 round-trips. Unknown keys raise (the parent ``__init__`` rejects them),
@@ -680,6 +682,8 @@ class Session(_SpecSession):
                               Configuration().get("skills", {}).get("blacklisted_skills", []))
         blacklisted_intents = (blacklisted_intents or
                                Configuration().get("intents", {}).get("blacklisted_intents", []))
+        blacklisted_pipelines = (blacklisted_pipelines or
+                                 Configuration().get("intents", {}).get("blacklisted_pipelines", []))
         lang = standardize_lang(lang or get_default_lang())
         # OVOS-BRIDGE-1 §3.3: site_id is the opaque group identifier. A deployer
         # MAY configure one (the bridge's own determination, step 1), but an
@@ -729,6 +733,7 @@ class Session(_SpecSession):
                          pipeline=pipeline,
                          blacklisted_skills=blacklisted_skills,
                          blacklisted_intents=blacklisted_intents,
+                         blacklisted_pipelines=blacklisted_pipelines,
                          active_handlers=active_handlers,
                          converse_handlers=converse_handlers,
                          response_mode=response_mode,
