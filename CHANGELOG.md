@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.2a1) (2026-07-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.1a1...2.7.2a1)
+
+**Merged pull requests:**
+
+- fix: seed blacklisted\_pipelines deployment default from config [\#269](https://github.com/OpenVoiceOS/ovos-bus-client/pull/269) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.7.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.1a1) (2026-07-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.0a1...2.7.1a1)
