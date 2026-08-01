@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.3a1) (2026-08-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.2a1...2.7.3a1)
+
+**Merged pull requests:**
+
+- fix: bus CLIs hang forever when the messagebus is unreachable [\#274](https://github.com/OpenVoiceOS/ovos-bus-client/pull/274) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.7.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.2a1) (2026-07-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.1a1...2.7.2a1)
