@@ -1,4 +1,5 @@
 
+import json
 import time
 
 from ovos_utils import json_dumps
@@ -35,23 +36,52 @@ from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 # ``<skill_id>:food.order.intent``. Current workshop is spec-pure and
 # registers the canonical ``<skill_id>:food.order`` (OVOS-MSG-1 §2.1.1).
 #
+# Both halves of the version skew are real, so the bridge runs in both
+# directions (old/new skill x old/new core):
+#
+# * a NEW core dispatches the canonical topic, and an OLD skill container -
+#   its own bus-client too old to hold this bridge - listens on the suffixed
+#   topic. Only the WIRE can reach it, so the twin is sent over the wire from
+#   the emitting process. This is the primary path.
+# * an OLD core dispatches the suffixed topic, and a NEW skill listens on the
+#   canonical one. The receiving client modernizes on arrival.
+# * both processes new: the canonical dispatch and its wire twin both arrive.
+#   Delivery is deduplicated per dispatch so each local handler runs once.
+#
 # ``ovos_spec_tools.intent_topics`` is the whole compat surface for that gap.
 # It is newer than the spec-tools floor this client declares, so the import is
 # guarded: against an older spec-tools the bridge behaves exactly as before and
-# no intent twin is ever mirrored.
+# no intent twin is ever sent or mirrored.
 try:
     from ovos_spec_tools.intent_topics import (IntentAliasRegistry,
+                                               canonical_intent_topic,
+                                               is_intent_topic,
                                                legacy_reemit_targets)
     _HAS_INTENT_TOPICS = True
 except ImportError:  # spec-tools without OVOS-INTENT-4 compat helpers
     IntentAliasRegistry = None
+    canonical_intent_topic = None
+    is_intent_topic = None
     legacy_reemit_targets = None
     _HAS_INTENT_TOPICS = False
 
-#: Context flag stamped on a mirrored intent dispatch. A message carrying it is
-#: already a twin, so it is never mirrored again — the same ping-pong guard the
-#: namespace bridge gets from keeping its mirror off the wire.
+#: Context flag stamped on a twin intent dispatch, on the wire and locally. A
+#: message carrying it is a twin of a dispatch that also exists in its
+#: canonical spelling, so the receiver may drop it as a duplicate once the
+#: handlers it targets have already run.
 INTENT_REEMIT_CONTEXT_KEY = "__legacy_intent_reemit__"
+
+#: Intent registration topics an old skill container puts on the wire, mapped
+#: to the payload field naming the intent. The old adapt / padatious topics
+#: carry the fully qualified ``<skill_id>:<name>`` the skill will also listen
+#: on - the suffix leaks here first, which is what makes the wire a usable
+#: alias source. The OVOS-INTENT-4 family names the parts separately.
+_INTENT_REGISTRATION_TOPICS = {
+    "padatious:register_intent": "name",
+    "register_intent": "name",
+    "ovos.intent.register.keyword": "intent_name",
+    "ovos.intent.register.template": "intent_name",
+}
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -181,16 +211,28 @@ class MessageBusClient:
         self._handler_guards = {}        # func -> shared mirror-guard
         self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
         # legacy intent-topic bridge, gated by the SAME emit_legacy flag above.
-        # The alias table is owned by the client and filled from its own on() /
-        # once() calls: a process only mirrors the suffixed twin of an intent
-        # that a handler IN THAT PROCESS asked for by its suffixed name, so the
-        # bus invents no topic nobody listens on. There is deliberately no
-        # global registry - two clients in one process have separate listener
-        # sets and must not re-emit on each other's behalf.
+        # The alias table is owned by the client and filled from two sources:
+        #  * the intent REGISTRATIONS this client sees on the wire - an old
+        #    skill container announces its intents under the suffixed name, so
+        #    the emitting process learns which twins a real listener wants;
+        #  * this client's own on() / once() calls, which cover an old-style
+        #    listener living in this very process.
+        # Nothing else feeds it, so the bus invents no topic nobody asked for.
+        # There is deliberately no global registry - two clients in one process
+        # have separate listener sets and must not re-emit on each other's
+        # behalf.
         self._intent_aliases = IntentAliasRegistry() if _HAS_INTENT_TOPICS else None
-        # blanket mode mirrors EVERY intent dispatch, registered alias or not,
+        # canonical topics whose alias came from the wire. remove() must not
+        # drop those: no local listener owns them.
+        self._wire_intent_aliases = set()
+        # per-dispatch delivery record, fingerprint -> (topics, timestamp).
+        # Bounds the window in which the canonical dispatch and its twin count
+        # as one event, so each local handler runs once however many spellings
+        # of the dispatch reach this client.
+        self._intent_delivered = {}
+        # blanket mode twins EVERY intent dispatch, registered alias or not,
         # for pure-bus listeners that subscribe without registering. It doubles
-        # intent traffic, so it is off unless asked for.
+        # intent traffic on the wire, so it is off unless asked for.
         self._intent_reemit_blanket = _bus_flag("OVOS_BUS_INTENT_REEMIT_BLANKET",
                                                 "intent_reemit_blanket",
                                                 default=False)
@@ -321,6 +363,13 @@ class MessageBusClient:
             return
         if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
+        self._observe_intent_registration(parsed_message)
+        if self._intent_bridge_active() and is_intent_topic(parsed_message.msg_type):
+            delivered = self._intent_delivery_record(parsed_message)
+            if (parsed_message.context.get(INTENT_REEMIT_CONTEXT_KEY)
+                    and self._twin_is_redundant(parsed_message, delivered)):
+                return
+            delivered.add(parsed_message.msg_type)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
         # namespace migration bridge: also dispatch the counterpart topic(s) to
@@ -336,32 +385,134 @@ class MessageBusClient:
                 from_topic=parsed_message.msg_type, to_topic=topic,
                 data=parsed_message.data)
             self.emitter.emit(topic, parsed_message.forward(topic, translated))
-        self._reemit_legacy_intent(parsed_message)
+        self._bridge_intent_topics(parsed_message)
 
-    def _reemit_legacy_intent(self, message: Message):
-        """Mirror an intent dispatch onto its legacy ``.intent``-suffixed twin.
+    # ------------------------------------------------------------------
+    # legacy intent-topic bridge
+    # ------------------------------------------------------------------
 
-        Runs at the same place as the namespace bridge above — receive side,
-        LOCAL listeners only. Every process that consumes the dispatch runs its
-        own copy of this hook, so a handler bound to the suffixed name is
-        reached wherever it lives, and the twin is never put back on the wire
-        for the broadcast server to echo and double.
+    def _intent_bridge_active(self) -> bool:
+        """Whether the intent-topic compat runs at all in this client."""
+        return self._intent_aliases is not None and self._translator.emit_legacy
 
-        The mirror carries the same data and context as the dispatch, plus
-        :data:`INTENT_REEMIT_CONTEXT_KEY`, and fires at most once: the twin is
-        already the suffixed spelling, which ``legacy_reemit_targets`` never
-        mirrors again.
+    def _intent_fingerprint(self, message: Message) -> str:
+        """Identify the DISPATCH a message carries, whichever spelling it uses.
+
+        The canonical topic plus the payload and context, minus the twin marker
+        - so a dispatch and its twin fingerprint the same and the delivery
+        record can collapse them.
         """
-        if self._intent_aliases is None or not self._translator.emit_legacy:
+        context = {key: value for key, value in (message.context or {}).items()
+                   if key != INTENT_REEMIT_CONTEXT_KEY}
+        return json.dumps([canonical_intent_topic(message.msg_type),
+                           message.data, context], sort_keys=True, default=str)
+
+    def _intent_delivery_record(self, message: Message) -> set:
+        """The set of topics this dispatch was already delivered under.
+
+        Entries older than the translator's mirror window are dropped first, so
+        two deliberate dispatches of one intent spaced apart are two events -
+        only a near-simultaneous canonical/twin pair collapses.
+        """
+        now = time.monotonic()
+        window = self._translator.window
+        for key in [k for k, (_, ts) in self._intent_delivered.items()
+                    if now - ts >= window]:
+            self._intent_delivered.pop(key, None)
+        fingerprint = self._intent_fingerprint(message)
+        topics = self._intent_delivered.get(fingerprint, (set(), now))[0]
+        self._intent_delivered[fingerprint] = (topics, now)
+        return topics
+
+    def _twin_is_redundant(self, message: Message, delivered: set) -> bool:
+        """Whether an incoming twin adds nothing this client has not done.
+
+        A new core puts both spellings of an aliased dispatch on the wire, for
+        the sake of processes that cannot bridge. A process that CAN bridge
+        must not run a handler twice, so the twin is dropped when:
+
+        * this client already delivered the same spelling itself - the local
+          mirror got there first; or
+        * the canonical spelling was delivered and nothing here listens on the
+          suffixed one - the twin would only duplicate the ``message``
+          firehose.
+
+        Anything else is kept: an unbridged listener on the suffixed topic is
+        exactly who the twin was sent for.
+        """
+        if message.msg_type in delivered:
+            return True
+        return (canonical_intent_topic(message.msg_type) in delivered
+                and not self.emitter.listeners(message.msg_type))
+
+    def _bridge_intent_topics(self, message: Message):
+        """Deliver an intent dispatch to LOCAL listeners under both spellings.
+
+        Two directions, each the counterpart of one wire producer:
+
+        * a suffixed dispatch (old core) is modernized onto its canonical
+          topic, so a spec-pure skill in this process is reached;
+        * a canonical dispatch is mirrored onto the suffixed twin of an intent
+          this client recorded an alias for, covering an old-style listener
+          living in this very process. The WIRE twin sent by :meth:`emit` is
+          what reaches an old listener in another process; this half is the
+          in-process secondary.
+
+        Nothing here goes back on the wire, so the broadcast server never
+        echoes a bridged copy. A topic already in the delivery record is
+        skipped, so the pair produced by a new core on both spellings does not
+        run a handler twice.
+        """
+        if not self._intent_bridge_active() or not is_intent_topic(message.msg_type):
             return
-        if message.context.get(INTENT_REEMIT_CONTEXT_KEY):
-            return
-        for topic in legacy_reemit_targets(message.msg_type,
-                                           registry=self._intent_aliases,
-                                           blanket=self._intent_reemit_blanket):
+        canonical = canonical_intent_topic(message.msg_type)
+        if canonical != message.msg_type:
+            targets = [canonical]
+        else:
+            targets = legacy_reemit_targets(message.msg_type,
+                                            registry=self._intent_aliases,
+                                            blanket=self._intent_reemit_blanket)
+        delivered = self._intent_delivery_record(message)
+        for topic in targets:
+            if topic in delivered:
+                continue
             twin = message.forward(topic, message.data)
             twin.context[INTENT_REEMIT_CONTEXT_KEY] = True
+            delivered.add(topic)
             self.emitter.emit(topic, twin)
+
+    def _observe_intent_registration(self, message: Message):
+        """Learn a legacy alias from an intent registration seen on the wire.
+
+        An old skill container registers its intents under the name it will
+        also listen on, so a registration carrying the ``.intent`` suffix is
+        proof that a real consumer wants the suffixed twin. This is what lets
+        the EMITTING process - which has no such listener of its own - know
+        which dispatches to twin onto the wire.
+
+        Canonical registrations teach nothing and are ignored: the twin is only
+        ever sent for an intent somebody announced by its suffixed name.
+        """
+        if self._intent_aliases is None:
+            return
+        field = _INTENT_REGISTRATION_TOPICS.get(message.msg_type)
+        if field is None:
+            return
+        name = (message.data or {}).get(field)
+        if not isinstance(name, str) or not name:
+            return
+        if ":" not in name:
+            # OVOS-INTENT-4 names the parts separately; the old topics carry
+            # the qualified name already.
+            skill_id = (message.data.get("skill_id")
+                        or (message.context or {}).get("skill_id"))
+            if not isinstance(skill_id, str) or not skill_id:
+                return
+            name = f"{skill_id}:{name}"
+        if not is_intent_topic(name) or canonical_intent_topic(name) == name:
+            return
+        self._intent_aliases.register(name)
+        self._wire_intent_aliases.add(canonical_intent_topic(name))
 
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
@@ -393,6 +544,37 @@ class MessageBusClient:
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
         self._send(message)
+        # ... with ONE exception: the legacy intent twin, which must reach a
+        # process whose bus-client is too old to bridge anything. It goes after
+        # the canonical dispatch, so a receiver that bridges both spellings
+        # sees the canonical one first and drops the twin as the duplicate.
+        self._send_legacy_intent_twin(message)
+
+    def _send_legacy_intent_twin(self, message: Message):
+        """Put the ``.intent``-suffixed twin of an intent dispatch on the wire.
+
+        The PRIMARY compat path. An outdated standalone skill container runs an
+        old bus-client and an old workshop: it holds no bridge of its own and
+        listens only on the suffixed topic, so nothing but a real wire frame
+        reaches it. The twin carries the same payload and context plus
+        :data:`INTENT_REEMIT_CONTEXT_KEY`, which marks it as the duplicate for
+        any receiver new enough to have bridged the canonical dispatch itself.
+
+        Only intents with a recorded alias are twinned (or all of them under
+        blanket mode), so wire traffic doubles for those intents alone. An
+        already-suffixed dispatch is never twinned, so the mirror cannot
+        cascade.
+        """
+        if not self._intent_bridge_active():
+            return
+        if message.context.get(INTENT_REEMIT_CONTEXT_KEY):
+            return
+        for topic in legacy_reemit_targets(message.msg_type,
+                                           registry=self._intent_aliases,
+                                           blanket=self._intent_reemit_blanket):
+            twin = message.forward(topic, message.data)
+            twin.context[INTENT_REEMIT_CONTEXT_KEY] = True
+            self._send(twin)
 
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
@@ -572,6 +754,10 @@ class MessageBusClient:
             return
         alias = self._intent_aliases.legacy_alias(event_name)
         if alias is None:
+            return
+        if canonical_intent_topic(event_name) in self._wire_intent_aliases:
+            # learned from a registration on the wire: the listener that wants
+            # it lives in another process, so a local remove() says nothing.
             return
         if not self.emitter.listeners(alias):
             self._intent_aliases.deregister(event_name)

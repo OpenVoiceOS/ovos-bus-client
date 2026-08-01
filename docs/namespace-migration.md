@@ -45,26 +45,45 @@ wire: a skill with `food.order.intent` registered and listened on
 `<skill_id>:food.order.intent`. Current workshop is spec-pure and uses
 `<skill_id>:food.order`.
 
-When `emit_legacy` is on, the client mirrors an intent dispatch onto the
-suffixed twin, so a handler written against the old spelling still runs. The
-rules come from `ovos_spec_tools.intent_topics`:
+Both spellings are live in the field, and a skill container upgrades
+independently of the core it talks to. When `emit_legacy` is on, the client
+bridges the four pairings:
 
-- the mirror is **alias-driven** — it fires only for an intent that a handler
-  in this process subscribed to by its suffixed name (`bus.on()` / `bus.once()`
-  fill the client's `IntentAliasRegistry`). No listener, no mirror, so the bus
-  invents no topic;
-- the twin carries the same data and context plus `__legacy_intent_reemit__`,
-  and is never mirrored again;
-- it is delivered to **local listeners only**, like the namespace bridge above,
-  and never goes back on the wire.
+| | old core (dispatches `X:Y.intent`) | new core (dispatches `X:Y`) |
+|---|---|---|
+| **old skill** (listens `X:Y.intent`) | works today, untouched | new core sends the **wire twin** |
+| **new skill** (listens `X:Y`) | receiving client **modernizes** on arrival | works today, untouched |
+
+The rules come from `ovos_spec_tools.intent_topics`:
+
+- **wire twin (primary).** `emit()` sends the suffixed twin as a second frame,
+  after the canonical dispatch. An outdated standalone skill container runs an
+  old bus-client with no bridge in it, so only a real frame reaches it;
+- **alias-driven.** The twin is sent only for an intent with a recorded alias,
+  so wire traffic doubles for those intents alone. The client's
+  `IntentAliasRegistry` is filled from the intent **registrations it sees on
+  the wire** — an old container announces its intents under the suffixed name —
+  and from its own `bus.on()` / `bus.once()` calls, which cover an old-style
+  listener in the same process. Nothing else feeds it, so the bus invents no
+  topic;
+- **modernize on receive.** A suffixed dispatch off the wire is also delivered
+  locally under its canonical topic, so a spec-pure skill hears an old core;
+- **local mirror (secondary).** A canonical dispatch is also delivered locally
+  under a recorded suffixed alias, covering an old-style listener in this
+  process. Nothing bridged goes back on the wire;
+- **delivered once.** Every twin carries `__legacy_intent_reemit__`, and each
+  client keeps a short per-dispatch record of the spellings it already
+  delivered. When a new core puts both spellings on the wire, a client that
+  bridges them itself drops the twin, so no handler runs twice.
 
 | Flag | env | config (`websocket`) | Effect |
 |---|---|---|---|
-| `intent_reemit_blanket` | `OVOS_BUS_INTENT_REEMIT_BLANKET` | `intent_reemit_blanket` | mirror **every** intent dispatch, registered alias or not (default **off**) |
+| `intent_reemit_blanket` | `OVOS_BUS_INTENT_REEMIT_BLANKET` | `intent_reemit_blanket` | twin **every** intent dispatch, on the wire and locally, registered alias or not (default **off**) |
 
-Blanket mode exists for pure-bus listeners that subscribe without registering.
-It doubles intent traffic and any handler bound to both spellings then needs its
-own dedup, so leave it off unless such a listener is known to be present.
+Blanket mode exists for pure-bus listeners that subscribe without ever
+registering. It invents topics nobody may listen on and doubles all intent
+traffic on the wire, so leave it off unless such a listener is known to be
+present.
 
 Nothing here is normative: no specification mandates the suffixed topic. New
 code must produce and consume canonical topics only.
