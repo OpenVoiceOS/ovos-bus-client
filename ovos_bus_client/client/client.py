@@ -25,33 +25,22 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session, MalformedSession
-from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
+from ovos_spec_tools.messages import SpecMessage
 
-# --- legacy intent-topic compat (non-normative migration tooling) ----------
+# --- the legacy wire bridge is GONE -----------------------------------------
 #
-# Old ovos-workshop releases built the per-intent dispatch topic from the
-# padatious resource FILENAME, so the ``.intent`` extension leaked onto the
-# wire: a skill with ``food.order.intent`` listened on
-# ``<skill_id>:food.order.intent``. Current workshop is spec-pure and
-# registers the canonical ``<skill_id>:food.order`` (OVOS-MSG-1 §2.1.1).
+# This client used to run two migration bridges on the receive side:
 #
-# ``ovos_spec_tools.intent_topics`` is the whole compat surface for that gap.
-# It is newer than the spec-tools floor this client declares, so the import is
-# guarded: against an older spec-tools the bridge behaves exactly as before and
-# no intent twin is ever mirrored.
-try:
-    from ovos_spec_tools.intent_topics import (IntentAliasRegistry,
-                                               legacy_reemit_targets)
-    _HAS_INTENT_TOPICS = True
-except ImportError:  # spec-tools without OVOS-INTENT-4 compat helpers
-    IntentAliasRegistry = None
-    legacy_reemit_targets = None
-    _HAS_INTENT_TOPICS = False
-
-#: Context flag stamped on a mirrored intent dispatch. A message carrying it is
-#: already a twin, so it is never mirrored again — the same ping-pong guard the
-#: namespace bridge gets from keeping its mirror off the wire.
-INTENT_REEMIT_CONTEXT_KEY = "__legacy_intent_reemit__"
+#  * the OVOS-MSG-1 namespace bridge — an ``ovos.*`` spec topic also reached
+#    listeners bound to the legacy topic it replaced, and the reverse;
+#  * the OVOS-INTENT-4 intent-topic bridge — a canonical
+#    ``<skill_id>:<intent>`` dispatch also reached listeners bound to the old
+#    ``<skill_id>:<intent>.intent`` spelling.
+#
+# Both are removed. Every producer and every consumer now speaks the spec
+# topic and nothing else. ``ovos_spec_tools`` keeps the pure helper functions
+# (``MIGRATION_MAP``, ``canonical_intent_topic`` and friends) for linters and
+# migration tooling — they are simply no longer wired into the bus.
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -81,6 +70,32 @@ def _bus_flag(env_var: str, config_key: str, default: bool = False) -> bool:
         return bool(Configuration().get("websocket", {}).get(config_key, default))
     except Exception:
         return default
+
+
+#: Bus flags that used to steer the legacy wire bridge. The bridge is gone, so
+#: a deployment that still asks for it gets a loud error instead of silently
+#: losing the legacy topics it depends on.
+_REMOVED_BRIDGE_FLAGS = (
+    ("OVOS_BUS_EMIT_LEGACY", "emit_legacy"),
+    ("OVOS_BUS_MODERNIZE", "modernize"),
+    ("OVOS_BUS_INTENT_REEMIT_BLANKET", "intent_reemit_blanket"),
+)
+
+
+def _reject_removed_bridge_flags():
+    """Raise when a removed legacy-bridge flag is explicitly turned on.
+
+    Silence would be the dangerous answer here: an operator who sets
+    ``emit_legacy`` believes the legacy topics still travel. They do not.
+    """
+    for env_var, config_key in _REMOVED_BRIDGE_FLAGS:
+        if _bus_flag(env_var, config_key, default=False):
+            raise RuntimeError(
+                f"'{config_key}' (env {env_var}) is enabled, but the legacy "
+                "wire bridge was removed from ovos-bus-client. Legacy bus "
+                "topics are no longer emitted or mirrored. Migrate the "
+                "producers and consumers to the OVOS-MSG-1 spec topics, then "
+                f"unset '{config_key}'.")
 
 
 def _encryption_keys():
@@ -169,31 +184,10 @@ class MessageBusClient:
         self.connected_event = Event()
         self.started_running = False
         self.wrapped_funcs = {}
-        # namespace translation on emit (orthogonal, both ON by default during
-        # the migration window so every migrated event travels on BOTH the
-        # legacy and the ovos.* topic — any repo can flip its emit OR its listen
-        # to ovos.* in any order, with no coordination):
-        #  emit_legacy: emitting an ovos.* spec topic also emits the legacy one.
-        #  modernize  : emitting a legacy topic also emits the ovos.* spec one.
-        self._translator = NamespaceTranslator(
-            modernize=_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True),
-            emit_legacy=_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
-        self._handler_guards = {}        # func -> shared mirror-guard
-        self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
-        # legacy intent-topic bridge, gated by the SAME emit_legacy flag above.
-        # The alias table is owned by the client and filled from its own on() /
-        # once() calls: a process only mirrors the suffixed twin of an intent
-        # that a handler IN THAT PROCESS asked for by its suffixed name, so the
-        # bus invents no topic nobody listens on. There is deliberately no
-        # global registry - two clients in one process have separate listener
-        # sets and must not re-emit on each other's behalf.
-        self._intent_aliases = IntentAliasRegistry() if _HAS_INTENT_TOPICS else None
-        # blanket mode mirrors EVERY intent dispatch, registered alias or not,
-        # for pure-bus listeners that subscribe without registering. It doubles
-        # intent traffic, so it is off unless asked for.
-        self._intent_reemit_blanket = _bus_flag("OVOS_BUS_INTENT_REEMIT_BLANKET",
-                                                "intent_reemit_blanket",
-                                                default=False)
+        # The migration window is over: no namespace bridge, no intent-topic
+        # twin, no mirror-guard. A deployment that still asks for the bridge is
+        # told so instead of losing its legacy topics in silence.
+        _reject_removed_bridge_flags()
         if session:
             SessionManager.update(session)
         else:
@@ -323,45 +317,6 @@ class MessageBusClient:
             SessionManager.update(sess)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
-        # namespace migration bridge: also dispatch the counterpart topic(s) to
-        # LOCAL listeners so a handler on either namespace receives the event
-        # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
-        # convenience, not a second logical bus message: the counterpart is NOT put
-        # back on the wire and does NOT re-fire the 'message' firehose, so one
-        # logical emit yields exactly one captured message. The mirrored payload is
-        # reshaped into the counterpart topic's shape (identity for payload-compatible
-        # renames, a per-topic transform for shape-changing ones).
-        for topic in self._translator.counterpart_topics(parsed_message.msg_type):
-            translated = self._translator.translate_payload(
-                from_topic=parsed_message.msg_type, to_topic=topic,
-                data=parsed_message.data)
-            self.emitter.emit(topic, parsed_message.forward(topic, translated))
-        self._reemit_legacy_intent(parsed_message)
-
-    def _reemit_legacy_intent(self, message: Message):
-        """Mirror an intent dispatch onto its legacy ``.intent``-suffixed twin.
-
-        Runs at the same place as the namespace bridge above — receive side,
-        LOCAL listeners only. Every process that consumes the dispatch runs its
-        own copy of this hook, so a handler bound to the suffixed name is
-        reached wherever it lives, and the twin is never put back on the wire
-        for the broadcast server to echo and double.
-
-        The mirror carries the same data and context as the dispatch, plus
-        :data:`INTENT_REEMIT_CONTEXT_KEY`, and fires at most once: the twin is
-        already the suffixed spelling, which ``legacy_reemit_targets`` never
-        mirrors again.
-        """
-        if self._intent_aliases is None or not self._translator.emit_legacy:
-            return
-        if message.context.get(INTENT_REEMIT_CONTEXT_KEY):
-            return
-        for topic in legacy_reemit_targets(message.msg_type,
-                                           registry=self._intent_aliases,
-                                           blanket=self._intent_reemit_blanket):
-            twin = message.forward(topic, message.data)
-            twin.context[INTENT_REEMIT_CONTEXT_KEY] = True
-            self.emitter.emit(topic, twin)
 
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
@@ -523,27 +478,6 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        self._record_intent_alias(event_name)
-        # Topics that participate in the namespace migration are wrapped with the
-        # shared mirror-guard so a handler subscribed to BOTH the legacy and the
-        # ovos.* topic runs once (the migration window's mirror is dropped).
-        # Everything else registers straight through.
-        if self._translator.is_migrated(event_name):
-            # one guard per handler, shared across its registrations, so its
-            # legacy on() and its ovos.* on() dedupe against each other.
-            guard = self._handler_guards.get(func)
-            if guard is None:
-                guard = self._translator.new_mirror_guard()
-                self._handler_guards[func] = guard
-
-            def wrapped(message=None):
-                if guard(message):
-                    return
-                return func(message)
-
-            self.emitter.on(event_name, wrapped)
-            self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
-            return
         self.emitter.on(event_name, func)
 
     def once(self, event_name: str, func: Callable[[Message], Any]):
@@ -553,28 +487,7 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        self._record_intent_alias(event_name)
         self.emitter.once(event_name, func)
-
-    def _record_intent_alias(self, event_name: str):
-        """Note that a handler subscribed to ``event_name``.
-
-        Only per-intent dispatch topics are recorded; the registry ignores
-        everything else. A subscription written with the legacy ``.intent``
-        suffix is what marks the canonical intent as needing the mirror.
-        """
-        if self._intent_aliases is not None:
-            self._intent_aliases.register(event_name)
-
-    def _forget_intent_alias(self, event_name: str):
-        """Drop the alias of ``event_name`` once nothing listens on it."""
-        if self._intent_aliases is None:
-            return
-        alias = self._intent_aliases.legacy_alias(event_name)
-        if alias is None:
-            return
-        if not self.emitter.listeners(alias):
-            self._intent_aliases.deregister(event_name)
 
     def remove(self, event_name: str, func: Callable[[Message], Any]):
         """Remove registered event.
@@ -583,26 +496,10 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
-        # on_collect() registers a collector wrapper (tracked in wrapped_funcs);
-        # resolve it so a migrated on_collect() subscription is also torn down at
-        # the dedup layer (whose registration is keyed by the collector wrapper,
-        # not the public func).
-        target = self.wrapped_funcs.get(func, func)
-        if target in self._dedup_registrations:
-            regs = self._dedup_registrations[target]
-            for ev, wrapped in [r for r in regs if r[0] == event_name]:
-                self._remove_normal(ev, wrapped)
-                regs.remove((ev, wrapped))
-            if not regs:
-                self._dedup_registrations.pop(target, None)
-                self._handler_guards.pop(target, None)
-                if target is not func:
-                    self.wrapped_funcs.pop(func, None)
-        elif func in self.wrapped_funcs:
+        if func in self.wrapped_funcs:
             self._remove_wrapped(event_name, func)
         else:
             self._remove_normal(event_name, func)
-        self._forget_intent_alias(event_name)
 
     def _remove_wrapped(self, event_name, external_func):
         """Remove a wrapped function."""
@@ -631,7 +528,6 @@ class MessageBusClient:
         if event_name is None:
             raise ValueError
         self.emitter.remove_all_listeners(event_name)
-        self._forget_intent_alias(event_name)
 
     def run_forever(self):
         """
