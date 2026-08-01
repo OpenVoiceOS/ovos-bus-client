@@ -192,5 +192,62 @@ class TestMarkerIsTheDedup(unittest.TestCase):
         self.assertEqual(len(got), 2)
 
 
+class TestMarkerDoesNotLeakToDescendants(unittest.TestCase):
+    """The twin marker must not ride forward()/reply() onto later messages.
+
+    Message.forward()/reply() deep-copy the whole context. If the marker
+    survived on a received twin, a handler that forwards that context to emit an
+    UNRELATED suffixed intent would brand the follow-up a twin, and RULE 2 would
+    silently drop its canonical spelling — exactly the old-emitter -> new-core
+    population the receive rule exists to serve.
+    """
+
+    UNRELATED_LEGACY = "other-skill.jarbas:unrelated.intent"
+    UNRELATED_CANON = "other-skill.jarbas:unrelated"
+
+    def test_received_twin_is_dispatched_with_an_unmarked_context(self):
+        # RULE 2 uses the marker to decide "skip", then pops it: the frame that
+        # reaches the legacy listener carries no marker.
+        c = _client()
+        got = _received(c, LEGACY)
+        _deliver(c, LEGACY, context={INTENT_COMPAT_TWIN_KEY: True})
+        self.assertEqual(len(got), 1)  # the twin still reaches its listener
+        self.assertNotIn(INTENT_COMPAT_TWIN_KEY, got[0].context)
+
+    def test_forward_off_a_twin_does_not_suppress_an_unrelated_intent(self):
+        c = _client()
+        got_twin = _received(c, LEGACY)
+        _deliver(c, LEGACY, context={INTENT_COMPAT_TWIN_KEY: True})
+        twin_msg = got_twin[0]
+        # a handler does the standard OVOS thing: forward this frame's context
+        # onward when emitting a follow-up for a totally unrelated intent.
+        followup = twin_msg.forward(self.UNRELATED_LEGACY, {})
+        self.assertNotIn(INTENT_COMPAT_TWIN_KEY, followup.context)
+        got_canon = _received(c, self.UNRELATED_CANON)
+        c.on_message(followup.serialize())
+        # the unrelated canonical topic IS modernized: the marker did not leak.
+        self.assertEqual(len(got_canon), 1)
+
+    def test_reply_off_a_twin_does_not_suppress_an_unrelated_intent(self):
+        c = _client()
+        got_twin = _received(c, LEGACY)
+        _deliver(c, LEGACY, context={INTENT_COMPAT_TWIN_KEY: True})
+        followup = got_twin[0].reply(self.UNRELATED_LEGACY, {})
+        got_canon = _received(c, self.UNRELATED_CANON)
+        c.on_message(followup.serialize())
+        self.assertEqual(len(got_canon), 1)
+
+    def test_marker_survives_on_the_wire_for_a_second_receiver(self):
+        # wire survival: a marked twin arriving at a second process is NOT
+        # re-modernized (its canonical companion was already sent by the origin).
+        c = _client()
+        got_canon = _received(c, CANONICAL)
+        got_legacy = _received(c, LEGACY)
+        _deliver(c, LEGACY, context={INTENT_COMPAT_TWIN_KEY: True})
+        self.assertEqual(len(got_legacy), 1)  # twin delivered to its listener
+        self.assertEqual(len(got_canon), 0)   # but not re-modernized
+        self.assertEqual(_sent(c), [])        # and nothing re-twinned onto wire
+
+
 if __name__ == "__main__":
     unittest.main()

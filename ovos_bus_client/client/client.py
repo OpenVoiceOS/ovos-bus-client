@@ -319,6 +319,13 @@ class MessageBusClient:
             return
         if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
+        # RULE 2 dedup marker: read it, then POP it before any local dispatch.
+        # The marker rode the wire (a different process's RULE 2 needs it to skip
+        # the twin), but once here it must not survive onto descendant frames:
+        # Message.forward()/reply() deep-copy the whole context, so a handler that
+        # forwards this frame's context to emit an UNRELATED suffixed intent would
+        # otherwise brand that frame a twin and silently suppress its modernization.
+        is_intent_twin = parsed_message.context.pop(INTENT_COMPAT_TWIN_KEY, False)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
         # namespace migration bridge: also dispatch the counterpart topic(s) to
@@ -334,13 +341,13 @@ class MessageBusClient:
                 from_topic=parsed_message.msg_type, to_topic=topic,
                 data=parsed_message.data)
             self.emitter.emit(topic, parsed_message.forward(topic, translated))
-        self._modernize_intent_topic(parsed_message)
+        self._modernize_intent_topic(parsed_message, is_twin=is_intent_twin)
 
     # ------------------------------------------------------------------
     # legacy intent-topic bridge -- RULE 2 (receive)
     # ------------------------------------------------------------------
 
-    def _modernize_intent_topic(self, message: Message):
+    def _modernize_intent_topic(self, message: Message, is_twin: bool = False):
         """Dispatch the canonical spelling of a suffixed intent frame.
 
         RULE 2. A suffixed frame WITHOUT the twin marker came from an emitter
@@ -350,12 +357,17 @@ class MessageBusClient:
         already accompanied by its canonical twin, which this client dispatched
         on arrival, so modernizing it again would run the handler twice.
 
+        ``is_twin`` carries the marker decision made in :meth:`on_message`, which
+        pops the marker off the context before dispatch so it cannot leak onto
+        descendant frames. The marker is therefore never read from ``context``
+        here — only the popped value is trusted.
+
         The canonical copy stays local: it is never put back on the wire, so
         the broadcast server has nothing to echo.
         """
         if not self._translator.emit_legacy:
             return
-        if message.context.get(INTENT_COMPAT_TWIN_KEY):
+        if is_twin:
             return
         if not is_intent_topic(message.msg_type):
             return
