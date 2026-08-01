@@ -54,36 +54,30 @@ bridges the four pairings:
 | **old skill** (listens `X:Y.intent`) | works today, untouched | new core sends the **wire twin** |
 | **new skill** (listens `X:Y`) | receiving client **modernizes** on arrival | works today, untouched |
 
-The rules come from `ovos_spec_tools.intent_topics`:
+The bridge is two stateless rules, both built on the two pure functions in
+`ovos_spec_tools.intent_topics`:
 
-- **wire twin (primary).** `emit()` sends the suffixed twin as a second frame,
-  after the canonical dispatch. An outdated standalone skill container runs an
-  old bus-client with no bridge in it, so only a real frame reaches it;
-- **alias-driven.** The twin is sent only for an intent with a recorded alias,
-  so wire traffic doubles for those intents alone. The client's
-  `IntentAliasRegistry` is filled from the intent **registrations it sees on
-  the wire** — an old container announces its intents under the suffixed name —
-  and from its own `bus.on()` / `bus.once()` calls, which cover an old-style
-  listener in the same process. Nothing else feeds it, so the bus invents no
-  topic;
-- **modernize on receive.** A suffixed dispatch off the wire is also delivered
-  locally under its canonical topic, so a spec-pure skill hears an old core;
-- **local mirror (secondary).** A canonical dispatch is also delivered locally
-  under a recorded suffixed alias, covering an old-style listener in this
-  process. Nothing bridged goes back on the wire;
-- **delivered once.** Every twin carries `__legacy_intent_reemit__`, and each
-  client keeps a short per-dispatch record of the spellings it already
-  delivered. When a new core puts both spellings on the wire, a client that
-  bridges them itself drops the twin, so no handler runs twice.
+1. **Send.** `emit()` sends the canonical frame, then sends
+   `legacy_intent_topic(msg_type)` as a second frame carrying the same payload
+   plus a `_intent_compat_twin` context marker. Every intent
+   dispatch is twinned: which listeners exist in which process is unknowable
+   from the emitter, and a twin nobody listens to is a few ignored bytes.
+2. **Receive.** A suffixed frame arriving **without** that marker is also
+   dispatched locally on `canonical_intent_topic(msg_type)`, so a spec-pure
+   skill hears an old core. Nothing bridged goes back on the wire.
 
-| Flag | env | config (`websocket`) | Effect |
-|---|---|---|---|
-| `intent_reemit_blanket` | `OVOS_BUS_INTENT_REEMIT_BLANKET` | `intent_reemit_blanket` | twin **every** intent dispatch, on the wire and locally, registered alias or not (default **off**) |
+The marker is the whole deduplication, and exactly-once holds by inspection:
 
-Blanket mode exists for pure-bus listeners that subscribe without ever
-registering. It invents topics nobody may listen on and doubles all intent
-traffic on the wire, so leave it off unless such a listener is known to be
-present.
+- a **new** emitter sends the pair, and rule 2 ignores the marked twin, so the
+  canonical handlers run once and suffixed handlers still receive the twin;
+- an **old** emitter sends one unmarked suffixed frame, and rule 2 modernizes
+  it once;
+- an **already-suffixed** emit is never re-twinned, so the mirror cannot
+  cascade.
+
+The bridge is gated by `emit_legacy` (`OVOS_BUS_EMIT_LEGACY`, `websocket`
+config key `emit_legacy`) — the same flag as the namespace bridge. Turning the
+compat off for good is deleting the two `if` blocks.
 
 Nothing here is normative: no specification mandates the suffixed topic. New
 code must produce and consume canonical topics only.
