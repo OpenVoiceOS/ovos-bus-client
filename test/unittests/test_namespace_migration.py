@@ -26,6 +26,8 @@ def _client(modernize=True, emit_legacy=True, emitter=None):
     c._translator = NamespaceTranslator(modernize=modernize, emit_legacy=emit_legacy)
     c._handler_guards = {}
     c._dedup_registrations = {}
+    c._intent_aliases = None
+    c._intent_reemit_blanket = False
     c.wrapped_funcs = {}
     c.connected_event = Event()
     c.connected_event.set()
