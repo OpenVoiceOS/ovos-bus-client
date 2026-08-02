@@ -1,46 +1,54 @@
-# Bus namespace migration
+# Bus namespace migration — completed
 
-OVOS is moving its bus topics to the canonical `ovos.*` namespace defined by the
-specifications (see `ovos_spec_tools.SpecMessage` and `MIGRATION_MAP`).
-`MessageBusClient` bridges the transition so a mixed fleet — services and
-HiveMind satellites that upgrade at different times — keeps working, and so
-**any repo can migrate its emit or its listen to `ovos.*` independently, in any
-order, with no coordination.**
+OVOS bus topics are the canonical `ovos.*` names defined by the specifications
+(see `ovos_spec_tools.SpecMessage` and `MIGRATION_MAP`). The migration is over:
+`MessageBusClient` speaks the spec topics and nothing else.
 
-## Two emit-side flags (both ON by default)
+## What was removed
 
-During the migration window both are on, so every migrated event travels on
-**both** the legacy and the `ovos.*` topic.
+Earlier releases carried two compat bridges on the receive side. Both are gone.
 
-| Flag | env | config (`websocket`) | Effect |
-|---|---|---|---|
-| `modernize` | `OVOS_BUS_MODERNIZE` | `modernize` | emitting a *legacy* topic also emits the `ovos.*` spec topic |
-| `emit_legacy` | `OVOS_BUS_EMIT_LEGACY` | `emit_legacy` | emitting an `ovos.*` spec topic also emits the legacy topic |
+| Removed | What it did |
+|---|---|
+| namespace bridge | delivered a migrated event to listeners on **both** the legacy and the `ovos.*` topic |
+| handler mirror-guard | dropped the mirror copy so a handler subscribed to both namespaces ran once |
+| intent-topic twin | mirrored a canonical `<skill_id>:<intent>` dispatch onto the old `<skill_id>:<intent>.intent` spelling |
 
-Only payload-compatible renames are translated (`MIGRATION_MAP`); topics whose
-payload shape also changes are never translated and must be migrated at the call
-site.
+With them go the flags that steered them: `emit_legacy`, `modernize` and
+`intent_reemit_blanket`, in both their `websocket` config and `OVOS_BUS_*`
+environment spellings.
 
-## Handler de-duplication
+## If you still set one of those flags
 
-Because both namespaces carry the event, a handler that is subscribed to **both**
-the legacy and the spec topic would otherwise run twice. The client wraps
-handlers on migrated topics so the **mirror** copy is dropped — the second
-delivery of the *same payload via the counterpart topic* within a short window is
-suppressed. This makes dual-listening safe (no need to coordinate which namespace
-a handler uses while migrating).
+The client raises a `RuntimeError` at construction. This is deliberate. Setting
+`emit_legacy` means you believe the legacy topics still travel; they do not, and
+a silent client would hand you a fleet that drops messages with no signal at all.
 
-It does **not** suppress two genuine events on the *same* topic: only a delivery
-via the counterpart topic is treated as a mirror. Dedup state is per handler,
-shared across its registrations, so two `bus.on(...)` calls for the same callback
-collapse correctly.
+To clear the error: migrate the producers and the consumers to the spec topics,
+then unset the flag.
 
-## Rollout
+## Migrating a component now
 
-1. **Now** — both flags on by default; every migrated event is on both
-   namespaces. Migrate each repo's emit and/or listen to `ovos.*` independently;
-   dual-listening callbacks are deduped, single-namespace callbacks are always
-   reached.
-2. **Later** — once services predominantly use `ovos.*`, reverse the defaults
-   (flags off) so the legacy copies stop.
-3. **Eventually** — drop the translation entirely; `ovos.*` only.
+1. Look the legacy topic up in `ovos_spec_tools.MIGRATION_MAP` to find the
+   `SpecMessage` that replaces it. `SPEC_TO_LEGACY` is the reverse index.
+2. Replace the literal string with the `SpecMessage` member, on the emit side
+   and on the listen side.
+3. For per-intent dispatch topics, use `<skill_id>:<intent_name>` — the
+   canonical form of OVOS-MSG-1 §2.1.1, with no `.intent` extension. The
+   authoring filename never belonged on the wire.
+
+The helpers in `ovos_spec_tools` — `MIGRATION_MAP`, `SPEC_TO_LEGACY`,
+`migration_counterpart` and `ovos_spec_tools.intent_topics` — remain. They are
+pure functions, used by the spec linter and by migration tooling. They are
+simply no longer wired into the bus.
+
+## Topics outside the map
+
+Two families were never bridged and are unaffected by this removal:
+
+- the PIPELINE-1 §8 handler-lifecycle trio, where the orchestrator emits the
+  spec `ovos.intent.handler.*` and the skill framework keeps
+  `mycroft.skill.handler.*` as a private done-signal;
+- the STOP-1 per-skill handshake placeholders `{skill_id}.stop.ping` and
+  `{skill_id}.stop`, which are runtime-assembled topics rather than static
+  strings.
