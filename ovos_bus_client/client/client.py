@@ -533,24 +533,36 @@ class MessageBusClient:
         # to the suffixed spelling is only ever served from this frame, RULE
         # 2 does not translate canonical -> suffixed) -- only the firehose
         # double-count is what this gate closes.
+        # namespace migration bridge: also dispatch the counterpart topic(s) to
+        # LOCAL listeners so a handler on either namespace receives the event
+        # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
+        # convenience, not a second logical bus message: the counterpart is NOT put
+        # back on the wire and does NOT re-fire the 'message' firehose, so one
+        # logical emit yields exactly one captured message. The mirrored payload is
+        # reshaped into the counterpart topic's shape (identity for payload-compatible
+        # renames, a per-topic transform for shape-changing ones).
+        #
+        # Every counterpart is built BEFORE ``parsed_message`` is dispatched. The
+        # default ExecutorEventEmitter runs handlers concurrently and handlers may
+        # mutate Message data/context, so deep-copying the original context inside
+        # ``Message.forward`` after dispatch can race a handler and raise
+        # ``RuntimeError: dictionary changed size during iteration``, which
+        # websocket-client then treats as a transport failure.
+        counterparts = []
+        if not is_namespace_twin:
+            for topic in self._translator.counterpart_topics(parsed_message.msg_type):
+                translated = self._translator.translate_payload(
+                    from_topic=parsed_message.msg_type, to_topic=topic,
+                    data=parsed_message.data)
+                counterparts.append((topic, parsed_message.forward(topic, translated)))
+
         try:
             if not is_namespace_twin and not is_intent_twin:
                 self.emitter.emit('message', message)
             if not is_namespace_twin:
                 self.emitter.emit(parsed_message.msg_type, parsed_message)
-                # namespace migration bridge: also dispatch the counterpart topic(s) to
-                # LOCAL listeners so a handler on either namespace receives the event
-                # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
-                # convenience, not a second logical bus message: the counterpart is NOT put
-                # back on the wire and does NOT re-fire the 'message' firehose, so one
-                # logical emit yields exactly one captured message. The mirrored payload is
-                # reshaped into the counterpart topic's shape (identity for payload-compatible
-                # renames, a per-topic transform for shape-changing ones).
-                for topic in self._translator.counterpart_topics(parsed_message.msg_type):
-                    translated = self._translator.translate_payload(
-                        from_topic=parsed_message.msg_type, to_topic=topic,
-                        data=parsed_message.data)
-                    self.emitter.emit(topic, parsed_message.forward(topic, translated))
+                for topic, counterpart in counterparts:
+                    self.emitter.emit(topic, counterpart)
             # else: a marked namespace twin is a REAL second wire frame that only
             # exists to reach an old pre-spec-tools client with no translator of
             # its own. A modern receiver already got both spellings delivered
