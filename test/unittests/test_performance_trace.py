@@ -22,7 +22,8 @@ def test_message_request_id_finds_nested_metadata():
     assert message_request_id(message) == "request-nested"
 
 
-def test_speech_emit_traces_before_single_wire_send(monkeypatch):
+@pytest.mark.parametrize("message_type", ("speak", "ovos.utterance.speak"))
+def test_speech_emit_traces_before_single_wire_send(monkeypatch, message_type):
     monkeypatch.setenv("OVOS_PERFORMANCE_TRACE", "true")
     monkeypatch.setattr(
         "ovos_bus_client.performance.time.time_ns",
@@ -39,7 +40,7 @@ def test_speech_emit_traces_before_single_wire_send(monkeypatch):
     )
 
     client.emit(Message(
-        "speak",
+        message_type,
         {"utterance": "Hello"},
         {"query_id": "request-speech"},
     ))
