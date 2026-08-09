@@ -24,6 +24,7 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
+from ovos_bus_client.performance import trace_skill_reply_emission
 from ovos_bus_client.session import SessionManager, Session, MalformedSession
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
@@ -326,6 +327,7 @@ class MessageBusClient:
         # (see on_message) in every process, so both namespaces are delivered
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
+        trace_skill_reply_emission(message)
         self._send(message)
 
     def _send(self, message: Message):

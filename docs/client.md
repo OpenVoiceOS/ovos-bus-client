@@ -213,3 +213,13 @@ worked example of a subclass that overrides `emit`, `on_open`, and
 If you find yourself reaching for deeper hooks, ask whether a transport plugin
 is what you actually want — that is what `hivemind-ovos-agent-plugin` and the
 GUI client are doing structurally.
+
+## Request-correlated performance tracing
+
+Set `OVOS_PERFORMANCE_TRACE=true` to emit structured `performance_trace`
+records for client-visible speech at the shared message-bus emission boundary.
+Each record contains a bounded explicit request ID, a wall-clock nanosecond
+timestamp, and the fixed stage name `skill_reply_emit`. Request IDs are written
+only to diagnostic logs and must never be used as Prometheus labels. Tracing is
+disabled by default; when disabled, ordinary bus emissions do not inspect the
+message for an ID.
