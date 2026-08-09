@@ -348,7 +348,7 @@ class MessageBusClient:
         except WebSocketConnectionClosedException:
             LOG.warning(f'Could not send {message.msg_type} message because connection '
                         'has been closed')
-        except Exception as e:
+        except Exception:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
 
     def collect_responses(self, message: Message,
