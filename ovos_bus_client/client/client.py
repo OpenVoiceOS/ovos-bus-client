@@ -1,5 +1,6 @@
 
 import time
+from copy import deepcopy
 
 from ovos_utils import json_dumps
 
@@ -26,6 +27,61 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import SessionManager, Session, MalformedSession
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
+
+# --- legacy intent-topic compat (non-normative migration tooling) ----------
+#
+# Old ovos-workshop releases built the per-intent dispatch topic from the
+# padatious resource FILENAME, so the ``.intent`` extension leaked onto the
+# wire: a skill with ``food.order.intent`` listened on
+# ``<skill_id>:food.order.intent``. Current workshop is spec-pure and
+# registers the canonical ``<skill_id>:food.order`` (OVOS-MSG-1 §2.1.1).
+#
+# Both halves of the version skew are real, so the bridge is two rules, each
+# stateless and each one ``if`` block:
+#
+#   RULE 1 (send)    -- every canonical intent topic emitted also goes out as
+#                       its ``.intent``-suffixed twin, marked as a twin. An old
+#                       skill container listens only on the suffixed topic and
+#                       runs a bus-client too old to bridge anything, so only a
+#                       real wire frame reaches it. The canonical frame is sent
+#                       first.
+#   RULE 2 (receive) -- every suffixed intent topic received WITHOUT the twin
+#                       marker is also dispatched locally under its canonical
+#                       spelling, so a spec-pure skill hears an old core.
+#
+# The marker is the whole deduplication. A canonical frame plus its marked twin
+# fires the canonical handlers exactly once, because rule 2 ignores marked
+# frames. Unmarked suffixed traffic comes from a genuinely old emitter and is
+# modernized. Nothing tracks who listens to what: a twin nobody listens to is a
+# few ignored bytes.
+#
+# Turning the bridge off is deleting the two ``if`` blocks. Until then it rides
+# the same ``emit_legacy`` flag as the namespace bridge.
+from ovos_spec_tools.intent_topics import (canonical_intent_topic,
+                                           intent_topic_counterpart,
+                                           is_intent_topic,
+                                           legacy_intent_topic)
+
+def _verbatim_copy(message: Message, topic: str) -> Message:
+    """Retopic ``message`` onto ``topic``, carrying its context byte-for-byte.
+
+    NOT :meth:`Message.forward`. ``forward()`` re-stamps the session through
+    ``SessionManager.sync_message_session``, and for the ``default`` session
+    that REPLACES the carried session with the emitting process's own — the
+    twin then leaves with a different ``lang`` and an emptied ``active_skills``
+    than the canonical frame it is supposed to mirror. A compat twin is the
+    same logical dispatch under a second spelling, so its routing, session and
+    language must be identical, and its fingerprint must match the canonical
+    frame's or the receive-side pair guard cannot pair them.
+    """
+    return Message(topic, data=deepcopy(message.data),
+                   context=deepcopy(message.context))
+
+
+#: Context flag stamped on a twin intent frame. Its presence means the
+#: canonical spelling of this dispatch was sent alongside it, so a receiver
+#: that understands the bridge must not modernize the twin a second time.
+INTENT_COMPAT_TWIN_KEY = "_intent_compat_twin"
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -154,6 +210,11 @@ class MessageBusClient:
             emit_legacy=_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
         self._handler_guards = {}        # func -> shared mirror-guard
         self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
+        # Intent-topic compat guards are keyed by the TOPIC PAIR, not by the
+        # handler: ovos-workshop binds a FRESH wrapper closure per spelling, so
+        # a per-handler guard never sees both frames of a dual-bound intent and
+        # the handler runs twice. See on().
+        self._intent_pair_guards = {}    # frozenset({canonical, suffixed}) -> guard
         if session:
             SessionManager.update(session)
         else:
@@ -281,6 +342,13 @@ class MessageBusClient:
             return
         if sess.session_id != "default": # 'default' can only be updated by core
             SessionManager.update(sess)
+        # RULE 2 dedup marker: read it, then POP it before any local dispatch.
+        # The marker rode the wire (a different process's RULE 2 needs it to skip
+        # the twin), but once here it must not survive onto descendant frames:
+        # Message.forward()/reply() deep-copy the whole context, so a handler that
+        # forwards this frame's context to emit an UNRELATED suffixed intent would
+        # otherwise brand that frame a twin and silently suppress its modernization.
+        is_intent_twin = parsed_message.context.pop(INTENT_COMPAT_TWIN_KEY, False)
         self.emitter.emit('message', message)
         self.emitter.emit(parsed_message.msg_type, parsed_message)
         # namespace migration bridge: also dispatch the counterpart topic(s) to
@@ -296,6 +364,40 @@ class MessageBusClient:
                 from_topic=parsed_message.msg_type, to_topic=topic,
                 data=parsed_message.data)
             self.emitter.emit(topic, parsed_message.forward(topic, translated))
+        self._modernize_intent_topic(parsed_message, is_twin=is_intent_twin)
+
+    # ------------------------------------------------------------------
+    # legacy intent-topic bridge -- RULE 2 (receive)
+    # ------------------------------------------------------------------
+
+    def _modernize_intent_topic(self, message: Message, is_twin: bool = False):
+        """Dispatch the canonical spelling of a suffixed intent frame.
+
+        RULE 2. A suffixed frame WITHOUT the twin marker came from an emitter
+        old enough to still put the authoring-file extension on the wire, so
+        nothing canonical was sent alongside it and a spec-pure handler in this
+        process would never hear the intent. A frame WITH the marker was
+        already accompanied by its canonical twin, which this client dispatched
+        on arrival, so modernizing it again would run the handler twice.
+
+        ``is_twin`` carries the marker decision made in :meth:`on_message`, which
+        pops the marker off the context before dispatch so it cannot leak onto
+        descendant frames. The marker is therefore never read from ``context``
+        here — only the popped value is trusted.
+
+        The canonical copy stays local: it is never put back on the wire, so
+        the broadcast server has nothing to echo.
+        """
+        if not self._translator.modernize:
+            return
+        if is_twin:
+            return
+        if not is_intent_topic(message.msg_type):
+            return
+        canonical = canonical_intent_topic(message.msg_type)
+        if canonical == message.msg_type:
+            return
+        self.emitter.emit(canonical, _verbatim_copy(message, canonical))
 
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
@@ -327,6 +429,38 @@ class MessageBusClient:
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
         self._send(message)
+        # ... with ONE exception: the legacy intent twin, which must reach a
+        # process whose bus-client is too old to bridge anything. It goes after
+        # the canonical dispatch, so a receiver that bridges both spellings
+        # sees the canonical one first and drops the twin as the duplicate.
+        self._send_legacy_intent_twin(message)
+
+    def _send_legacy_intent_twin(self, message: Message):
+        """Put the ``.intent``-suffixed twin of an intent dispatch on the wire.
+
+        RULE 1, and the primary compat path. An outdated standalone skill
+        container runs an old bus-client and an old workshop: it holds no
+        bridge of its own and listens only on the suffixed topic, so nothing
+        but a real wire frame reaches it. The twin carries the same payload and
+        context plus :data:`INTENT_COMPAT_TWIN_KEY`, which tells a receiver
+        that does understand the bridge that the canonical frame is already on
+        its way.
+
+        Every canonical intent dispatch is twinned. Which listeners exist in
+        which process is unknowable from here, and a twin nobody listens to is
+        a few ignored bytes. An already-suffixed dispatch is never twinned, so
+        the mirror cannot cascade.
+        """
+        if not self._translator.emit_legacy:
+            return
+        if not is_intent_topic(message.msg_type):
+            return
+        topic = legacy_intent_topic(message.msg_type)
+        if topic == message.msg_type:
+            return
+        twin = _verbatim_copy(message, topic)
+        twin.context[INTENT_COMPAT_TWIN_KEY] = True
+        self._send(twin)
 
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
@@ -461,14 +595,8 @@ class MessageBusClient:
         # shared mirror-guard so a handler subscribed to BOTH the legacy and the
         # ovos.* topic runs once (the migration window's mirror is dropped).
         # Everything else registers straight through.
-        if self._translator.is_migrated(event_name):
-            # one guard per handler, shared across its registrations, so its
-            # legacy on() and its ovos.* on() dedupe against each other.
-            guard = self._handler_guards.get(func)
-            if guard is None:
-                guard = self._translator.new_mirror_guard()
-                self._handler_guards[func] = guard
-
+        guard = self._mirror_guard_for(event_name, func)
+        if guard is not None:
             def wrapped(message=None):
                 if guard(message):
                     return
@@ -478,6 +606,56 @@ class MessageBusClient:
             self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
             return
         self.emitter.on(event_name, func)
+
+    def _mirror_guard_for(self, event_name: str, func: Callable) -> Optional[Callable]:
+        """The mirror guard a registration on ``event_name`` must wrap with.
+
+        Two bridges deliver one logical event twice, and each needs a different
+        guard SCOPE:
+
+        - **namespace migration** (legacy ↔ ``ovos.*``): the guard is per
+          HANDLER, shared across that handler's registrations, so its legacy
+          ``on()`` and its ``ovos.*`` ``on()`` dedupe against each other.
+        - **intent-topic compat** (canonical ↔ ``.intent``-suffixed): the guard
+          is per TOPIC PAIR, shared by every registration on either spelling.
+
+        The intent guard cannot be keyed by handler. ``ovos-workshop`` 9.3.2a1+
+        binds the same skill method to both spellings through a FRESH wrapper
+        closure per binding, so the two registrations are two distinct ``func``
+        objects and a per-handler guard would hand each its own private state —
+        the canonical frame runs one closure, the twin runs the other, and the
+        skill handler fires twice for a single dispatch. Keying on the pair
+        collapses them.
+
+        Sharing one guard across different handlers on the SAME spelling is
+        safe: the guard suppresses only a counterpart re-delivery, never a
+        repeat on the same topic, so two independent handlers on the canonical
+        topic each still run once per dispatch.
+
+        Sharing it across different handlers on DIFFERENT spellings is not
+        free. A process holding handler A on the canonical topic and an
+        unrelated handler B on the suffixed one starves B: A's canonical frame
+        arms the guard, and the twin B waits for is dropped as the mirror. This
+        is accepted. A skill container runs ONE workshop version, which binds
+        one spelling or both, so the mixed case is unreachable from a single
+        version; and the alternative — a per-handler guard — reintroduces the
+        double dispatch for the dual-binding case that is real and common.
+        """
+        counterpart = intent_topic_counterpart(event_name)
+        if counterpart is not None:
+            pair_key = frozenset({event_name, counterpart})
+            guard = self._intent_pair_guards.get(pair_key)
+            if guard is None:
+                guard = self._translator.new_mirror_guard()
+                self._intent_pair_guards[pair_key] = guard
+            return guard
+        if self._translator.is_migrated(event_name):
+            guard = self._handler_guards.get(func)
+            if guard is None:
+                guard = self._translator.new_mirror_guard()
+                self._handler_guards[func] = guard
+            return guard
+        return None
 
     def once(self, event_name: str, func: Callable[[Message], Any]):
         """Register callback with event emitter for a single call.
@@ -510,10 +688,28 @@ class MessageBusClient:
                 self._handler_guards.pop(target, None)
                 if target is not func:
                     self.wrapped_funcs.pop(func, None)
+            self._release_intent_pair_guard(event_name)
         elif func in self.wrapped_funcs:
             self._remove_wrapped(event_name, func)
         else:
             self._remove_normal(event_name, func)
+
+    def _release_intent_pair_guard(self, event_name: str):
+        """Drop the pair guard once nothing is registered on either spelling.
+
+        The guard is keyed by topic pair rather than by handler, so no single
+        handler's teardown owns it. It is released when the LAST registration
+        on either spelling goes away — otherwise a client that churns through
+        intent subscriptions accumulates one dead guard per intent it ever saw.
+        """
+        counterpart = intent_topic_counterpart(event_name)
+        if counterpart is None:
+            return
+        pair_key = frozenset({event_name, counterpart})
+        for regs in self._dedup_registrations.values():
+            if any(ev in pair_key for ev, _ in regs):
+                return
+        self._intent_pair_guards.pop(pair_key, None)
 
     def _remove_wrapped(self, event_name, external_func):
         """Remove a wrapped function."""
