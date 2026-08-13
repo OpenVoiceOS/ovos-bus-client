@@ -1592,8 +1592,9 @@ class _BusSessionManagerMixin:
     def handle_session_sync(cls, message=None):
         """OVOS-CONTEXT-1 §5.3 — handle an ``ovos.session.sync`` request.
 
-        The sync carries the emitter's updated session snapshot in
-        ``Message.context.session`` (the standard session carrier). The
+        The sync carries the emitter's updated session snapshot, preferring
+        ``Message.data.session`` (the OVOS-SESSION-2 §2.7 carrier) and
+        falling back to the legacy ``Message.context.session`` shape. The
         singleton resolves the target session and merges the snapshot's
         ``intent_context`` entry-by-entry onto it (set + null-delete, §5.3),
         keeping the managed session the authoritative owner of intent
@@ -1604,12 +1605,29 @@ class _BusSessionManagerMixin:
         The legacy default-session echo is emitted only for a **bare**
         request (no session carrier on the message): a spec-conformant §5.3
         sync is not a default-session request and triggers no echo.
+
+        OVOS-SESSION-2 §2.7: the snapshot rides ``Message.data.session`` — the
+        spec carrier. ``Message.context.session`` is accepted as a fallback
+        for one major (the legacy echo shape used it), preferring
+        ``data.session`` when both are present, so a fully conformant emitter
+        is never silently folded into the legacy echo branch below.
         """
-        carried = message is not None and \
-            isinstance(getattr(message, "context", None), dict) and \
-            "session" in message.context
+        _missing = object()
+        data = getattr(message, "data", None) if message is not None else None
+        context = getattr(message, "context", None) if message is not None else None
+        if isinstance(data, dict) and "session" in data:
+            session_payload = data.get("session")
+        elif isinstance(context, dict) and "session" in context:
+            session_payload = context.get("session")
+        else:
+            session_payload = _missing
+        carried = session_payload is not _missing
         if carried:
-            inbound = Session.from_message(message)
+            lang = (context.get("lang") if isinstance(context, dict) else None) or \
+                (data.get("lang") if isinstance(data, dict) else None)
+            if isinstance(session_payload, dict) and lang and "lang" not in session_payload:
+                session_payload["lang"] = lang
+            inbound = Session.deserialize(session_payload) if session_payload is not None else None
             if inbound:
                 # a session we have never seen is adopted from the carrier
                 sess = cls.sessions.get(inbound.session_id, inbound)

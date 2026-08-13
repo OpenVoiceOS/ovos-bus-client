@@ -104,6 +104,31 @@ class TestHandleSessionSync(unittest.TestCase):
              "intent_context": {"person": {"value": "Bob"}}}))
         SessionManager.bus.emit.assert_not_called()
 
+    def test_snapshot_carried_on_data_session_is_honoured(self):
+        """SESSION-2 §2.7: a conformant emitter rides the snapshot on
+        ``Message.data.session``. A conformant sync on ``data.session`` must
+        not be silently swallowed into the legacy default-session echo."""
+        SessionManager.bus = MagicMock()
+        sess = self._track("sync-data-1", {"person": {"value": "Bob"}})
+        msg = Message("ovos.session.sync",
+                     data={"session": {"session_id": "sync-data-1",
+                                       "intent_context": {"person": {"value": "Alice"}}}})
+        SessionManager.handle_session_sync(msg)
+        self.assertEqual(sess.intent_context, {"person": {"value": "Alice"}})
+        SessionManager.bus.emit.assert_not_called()
+
+    def test_data_session_preferred_over_context_session(self):
+        """When both carriers are present, ``data.session`` (the spec
+        carrier) wins over the legacy ``context.session`` echo shape."""
+        sess = self._track("sync-data-2", {"person": {"value": "Bob"}})
+        msg = Message("ovos.session.sync",
+                     context={"session": {"session_id": "sync-data-2",
+                                          "intent_context": {"person": {"value": "FromContext"}}}},
+                     data={"session": {"session_id": "sync-data-2",
+                                       "intent_context": {"person": {"value": "FromData"}}}})
+        SessionManager.handle_session_sync(msg)
+        self.assertEqual(sess.intent_context, {"person": {"value": "FromData"}})
+
     def test_bare_request_echoes_default_session(self):
         SessionManager.bus = MagicMock()
         SessionManager.get_default_session()
