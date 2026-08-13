@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.0a1) (2026-08-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.3a1...2.8.0a1)
+
+**Merged pull requests:**
+
+- feat: legacy intent-topic bridge — wire twin on emit, modernize on receive [\#271](https://github.com/OpenVoiceOS/ovos-bus-client/pull/271) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.7.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.3a1) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.2a1...2.7.3a1)
