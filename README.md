@@ -4,6 +4,8 @@ A Python client for the OVOS messagebus. Connect to OVOS, emit messages, and rea
 
 The OVOS messagebus is the **nervous system** of an OVOS install. Every component — STT, intent parsing, skills, TTS, audio, GUI — talks over it. This package is the Python client.
 
+> **[OVOS-MSG-1](https://github.com/OpenVoiceOS/architecture/blob/dev/msg-1.md) conformance.** `ovos_bus_client.Message` re-exports the [`ovos-spec-tools`](https://github.com/OpenVoiceOS/ovos-spec-tools) reference implementation directly, so the envelope (`type` / `data` / `context`), unknown-key tolerance, and the `forward` / `reply` / `response` derivations — including the routing-pair swap on `reply` — match the spec. Two divergences remain open, tracked in the [architecture appendix](https://github.com/OpenVoiceOS/architecture/blob/dev/appendix/divergences.md#53-prescriptive-shape-changes): `destination` still accepts an array (spec: single string only) and this package still ships the `ovos.session.sync` / `ovos.session.update_default` session-push topics the spec defines no home for (removal scope: [§5.5](https://github.com/OpenVoiceOS/architecture/blob/dev/appendix/divergences.md#removed-mechanisms--session-push-topics)). Poll correlation via `context.utterance_id` (OVOS-PIPELINE-1 §9.1.1) is not yet implemented. This package supplies the websocket transport, the session manager, and the high-level APIs on top of the spec.
+
 > ⚠️ **The bus is private.** It has **no authentication** — every connected client can issue any natural-language command, speak through the speakers, take over any subsystem, and read every other client's traffic. **Keep it bound to `127.0.0.1`** (the default), never expose it on a network interface, and never put it behind a reverse proxy. For remote access, use [HiveMind](https://github.com/JarbasHiveMind), which adds encryption, identity, and policy enforcement on top.
 
 ## Install
@@ -89,6 +91,8 @@ Full developer docs live in [`docs/`](docs/):
 
 ## Related
 
+- [**OVOS Architecture**](https://github.com/OpenVoiceOS/architecture) — formal, implementation-agnostic specifications for OVOS. The Message-Object spec ([OVOS-MSG-1](https://github.com/OpenVoiceOS/architecture/blob/dev/msg-1.md)) is the contract this client conforms to.
+- [**ovos-spec-tools**](https://github.com/OpenVoiceOS/ovos-spec-tools) — reference implementations of the architecture specs. `ovos_bus_client.Message` re-exports `ovos_spec_tools.message.Message`.
 - [**ovos-pydantic-models**](https://github.com/OpenVoiceOS/ovos-pydantic-models) — authoritative Pydantic v2 index of every OVOS bus message type. Opt-in validation layer for typing, docs generation, and integration tests. Browsable docs: <https://openvoiceos.github.io/ovos-pydantic-models/>.
 - [**HiveMind**](https://github.com/JarbasHiveMind) — external-access layer in front of the bus; the right tool for remote clients.
 

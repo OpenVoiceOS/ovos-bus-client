@@ -3,6 +3,23 @@
 What the OVOS bus actually is, what travels over it, and which pieces live in
 `ovos-bus-client`.
 
+> **Specification.** The Message envelope, routing keys, session carrier and
+> derivations described on this page are normatively defined by
+> [**OVOS-MSG-1**](https://github.com/OpenVoiceOS/architecture/blob/dev/msg-1.md)
+> in the [OVOS Architecture](https://github.com/OpenVoiceOS/architecture) repo.
+> `ovos_bus_client.Message` re-exports the reference implementation in
+> [`ovos-spec-tools`](https://github.com/OpenVoiceOS/ovos-spec-tools) directly,
+> so the envelope shape, unknown-key tolerance, and the `forward` / `reply` /
+> `response` derivations match the spec. The session-carrier wire shape is now
+> normatively owned by [**OVOS-SESSION-1**](https://github.com/OpenVoiceOS/architecture/blob/dev/session-1.md),
+> and the `IntentContextManager` sub-object by
+> [**OVOS-CONTEXT-1**](https://github.com/OpenVoiceOS/architecture/blob/dev/intent-context.md) —
+> both merged. Known divergences from full conformance are catalogued in the
+> [architecture appendix §5](https://github.com/OpenVoiceOS/architecture/blob/dev/appendix/divergences.md#5-where-the-specs-differ-from-the-reference-implementation):
+> `destination` still accepts an array, the `ovos.session.sync` /
+> `ovos.session.update_default` push topics are slated for V1 removal, and
+> `context.utterance_id` poll correlation is not yet implemented.
+
 ## The bus is OVOS's nervous system — and it is private
 
 Before anything else: **the OVOS bus is the nervous system of the assistant**.
