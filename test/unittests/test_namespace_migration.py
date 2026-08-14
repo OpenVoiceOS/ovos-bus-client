@@ -70,20 +70,28 @@ class TestDefaultsOn(unittest.TestCase):
 
 
 class TestEmitSendsOnce(unittest.TestCase):
-    """A single logical emit puts exactly ONE message on the wire regardless of
-    the migration flags. The counterpart is bridged on the receive side, never as
-    a second wire copy (which the broadcast server would echo back and double in
-    the capture firehose)."""
+    """A legacy emit puts exactly ONE message on the wire: its spec counterpart
+    is bridged on the receive side only, never as a second wire copy (which the
+    broadcast server would echo back and double in the capture firehose).
+
+    A CANONICAL (``ovos.*``) emit of a migrated topic is the asymmetric case
+    (bus-client wire-twin fix, RULE 1 of the namespace bridge, mirroring the
+    intent-topic bridge above): it puts a REAL second wire frame out on the
+    legacy spelling too, because an old pre-spec-tools client subscribed only
+    to the legacy topic has no translator of its own and a receive-side-only
+    bridge never reaches it. See test_namespace_wire_twin.py for the full
+    twin/dedup coverage."""
 
     def test_legacy_emit_sends_once(self):
         c = _client()
         c.emit(Message("speak", {"utterance": "hi"}))
         self.assertEqual(_sent_types(c), ["speak"])
 
-    def test_spec_emit_sends_once(self):
+    def test_spec_emit_sends_the_canonical_frame_and_its_legacy_twin(self):
         c = _client()
         c.emit(Message("ovos.utterance.handle", {"utterances": ["hi"]}))
-        self.assertEqual(_sent_types(c), ["ovos.utterance.handle"])
+        self.assertEqual(_sent_types(c),
+                         ["ovos.utterance.handle", "recognizer_loop:utterance"])
 
     def test_unmapped_sends_once(self):
         c = _client()
