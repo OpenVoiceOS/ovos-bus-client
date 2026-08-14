@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.3a1) (2026-08-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.2a1...2.8.3a1)
+
+**Merged pull requests:**
+
+- fix: legacy wire twin for every migrated namespace topic, not just intents [\#286](https://github.com/OpenVoiceOS/ovos-bus-client/pull/286) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.8.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.2a1) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.1a1...2.8.2a1)
@@ -456,10 +464,6 @@
 ## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0a1) (2024-12-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.1.0...1.2.0a1)
-
-**Merged pull requests:**
-
-- feat:face\_template [\#153](https://github.com/OpenVoiceOS/ovos-bus-client/pull/153) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.1.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.1.0) (2024-12-26)
 
