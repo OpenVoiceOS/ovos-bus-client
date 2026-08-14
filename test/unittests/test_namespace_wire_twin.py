@@ -27,12 +27,12 @@ of the twin was received.
 import json
 import unittest
 from threading import Event
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from pyee import EventEmitter
 
 from ovos_bus_client.client.client import (NAMESPACE_COMPAT_TWIN_KEY,
-                                           MessageBusClient)
+                                           MessageBusClient, _bus_flag)
 from ovos_bus_client.message import Message
 from ovos_spec_tools import NamespaceTranslator
 
@@ -40,12 +40,13 @@ LEGACY = "speak"
 CANONICAL = "ovos.utterance.speak"
 
 
-def _client(emit_legacy=True, modernize=True):
+def _client(emit_legacy=True, modernize=True, wire_legacy_twins=True):
     """A client on a real synchronous emitter so dispatch is observable."""
     c = MessageBusClient.__new__(MessageBusClient)
     c.emitter = EventEmitter()
     c.client = MagicMock()
     c._translator = NamespaceTranslator(modernize=modernize, emit_legacy=emit_legacy)
+    c._wire_legacy_twins = wire_legacy_twins
     c._handler_guards = {}
     c._intent_pair_guards = {}
     c._dedup_registrations = {}
@@ -251,6 +252,64 @@ class TestFlagGating(unittest.TestCase):
                 c = _client(emit_legacy=emit_legacy)
                 c.emit(Message("some.unmapped.topic", {"a": 1}))
                 self.assertEqual(_sent(c), ["some.unmapped.topic"])
+
+
+class TestWireLegacyTwinsFlagGating(unittest.TestCase):
+    """``OVOS_BUS_WIRE_LEGACY_TWINS`` is the escape hatch for the namespace
+    wire twin, DEFAULT TRUE (symmetric with ``OVOS_BUS_EMIT_LEGACY``): the
+    twin exists to reach a STABLE (<2.x) pre-spec-tools wire listener, the
+    supported compat target, so it stays on unless an operator explicitly
+    knows no such listener shares the bus.
+
+    A 2.2.0a1..2.8.2a1 receiver double-delivers while sharing a bus with a
+    2.8.3a1+ sender running the default -- that outdated-alpha window is not
+    a supported configuration and is resolved by updating the receiver, not
+    by this flag.
+    """
+
+    def test_flag_defaults_true(self):
+        # no env var and empty config -> the default (True) is returned,
+        # exercising _bus_flag() itself rather than the _client() test
+        # helper's own default.
+        env = {k: v for k, v in __import__("os").environ.items()
+               if k != "OVOS_BUS_WIRE_LEGACY_TWINS"}
+        with patch.dict("os.environ", env, clear=True), \
+                patch("ovos_config.Configuration", return_value={}):
+            self.assertTrue(_bus_flag("OVOS_BUS_WIRE_LEGACY_TWINS",
+                                      "wire_legacy_twins", default=True))
+
+    def test_env_can_disable(self):
+        with patch.dict("os.environ", {"OVOS_BUS_WIRE_LEGACY_TWINS": "false"}):
+            self.assertFalse(_bus_flag("OVOS_BUS_WIRE_LEGACY_TWINS",
+                                       "wire_legacy_twins", default=True))
+
+    def test_flag_explicitly_off_single_frame(self):
+        c = _client(wire_legacy_twins=False)
+        c.emit(Message(CANONICAL, {"utterance": "hi"}))
+        self.assertEqual(_sent(c), [CANONICAL])
+
+    def test_flag_explicitly_off_leaves_intent_twin_untouched(self):
+        # the namespace-twin flag must not affect the separate intent-topic
+        # bridge (RULE 1 of test_intent_legacy_reemit.py).
+        c = _client(wire_legacy_twins=False)
+        c.emit(Message("skill-food.jarbas:food.order", {"a": 1}))
+        self.assertEqual(_sent(c), ["skill-food.jarbas:food.order",
+                                    "skill-food.jarbas:food.order.intent"])
+
+    def test_flag_explicitly_off_receiver_still_dedups_a_twin_from_a_peer(self):
+        # marker-popping in on_message stays unconditional: a 2.8.4a1+
+        # receiver must dedup an incoming twin regardless of its OWN send
+        # flag, because the twin came from a peer that has it on.
+        c = _client(wire_legacy_twins=False)
+        canon_seen = _received(c, CANONICAL)
+        legacy_seen = _received(c, LEGACY)
+        _deliver(c, CANONICAL, {"utterance": "hi"})
+        self.assertEqual(len(canon_seen), 1)
+        self.assertEqual(len(legacy_seen), 1)  # via the receive-side bridge
+        _deliver(c, LEGACY, {"utterance": "hi"},
+                {NAMESPACE_COMPAT_TWIN_KEY: True})
+        self.assertEqual(len(canon_seen), 1)   # unchanged: twin deduped
+        self.assertEqual(len(legacy_seen), 1)  # unchanged: twin deduped
 
 
 class TestFirehoseIsNotDoubled(unittest.TestCase):

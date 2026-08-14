@@ -120,6 +120,36 @@ INTENT_COMPAT_TWIN_KEY = "_intent_compat_twin"
 # received. See on_message.
 NAMESPACE_COMPAT_TWIN_KEY = "_namespace_compat_twin"
 
+#: Escape-hatch flag (env var ``OVOS_BUS_WIRE_LEGACY_TWINS`` / config key
+#: ``websocket.wire_legacy_twins``) gating :meth:`MessageBusClient.
+#: _send_legacy_namespace_twin`. DEFAULT TRUE -- symmetric with
+#: ``OVOS_BUS_EMIT_LEGACY``.
+#:
+#: #286 made every canonical (``ovos.*``) emit of a :data:`MIGRATION_MAP`
+#: topic also put a real second wire frame on the legacy spelling. This is
+#: the compat path for the actual supported population: the latest STABLE
+#: ``ovos-bus-client`` release (1.5.0, pre-spec-tools) and anything older --
+#: those clients have no :class:`NamespaceTranslator` at all, so a
+#: canonical-only emit never reaches their legacy-spelled subscription
+#: without a real wire twin.
+#:
+#: A receiver in the 2.2.0a1..2.8.2a1 ALPHA window is not a supported
+#: configuration (only the latest prerelease is supported, per project
+#: policy): it already bridges both spellings locally from the canonical
+#: frame alone (RULE 2 above, via ``counterpart_topics()`` in
+#: ``on_message``), so it double-delivers every migrated topic while
+#: sharing a bus with a 2.8.3a1+ sender. That is a transient hazard of
+#: running an outdated alpha, resolved by updating the receiver to
+#: 2.8.3a1+ (which dedups the twin via :data:`NAMESPACE_COMPAT_TWIN_KEY`)
+#: -- it is documented here, not defended against.
+#:
+#: Set this flag to false only on a bus where the operator knows no
+#: pre-spec-tools (stable <2.x) wire listeners are present, to get the
+#: bandwidth of the second frame back. A relay/hub that knows its own
+#: satellite population (e.g. a HiveMind hub bridging to known-old
+#: satellites) is the recommended place to scope this translation instead
+#: of flipping it bus-wide.
+
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
 # OVOS-MSG-1 is transport-agnostic (§7 non-goals): the on-the-wire envelope
@@ -245,6 +275,9 @@ class MessageBusClient:
         self._translator = NamespaceTranslator(
             modernize=_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True),
             emit_legacy=_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
+        # escape hatch, default ON -- see the docstring above NAMESPACE_COMPAT_TWIN_KEY.
+        self._wire_legacy_twins = _bus_flag(
+            "OVOS_BUS_WIRE_LEGACY_TWINS", "wire_legacy_twins", default=True)
         self._handler_guards = {}        # func -> shared mirror-guard
         self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
         # Intent-topic compat guards are keyed by the TOPIC PAIR, not by the
@@ -540,6 +573,12 @@ class MessageBusClient:
         :meth:`_send_legacy_intent_twin` instead.
         """
         if not self._translator.emit_legacy:
+            return
+        if not self._wire_legacy_twins:
+            # escape hatch -- see OVOS_BUS_WIRE_LEGACY_TWINS. Default ON, for
+            # stable (<2.x) pre-spec-tools wire listeners, which are the
+            # supported compat target. Only flip this off when the operator
+            # knows no such listener is on the bus.
             return
         if message.msg_type in MIGRATION_MAP:
             # already a legacy-spelled emit -- nothing to twin forward with.

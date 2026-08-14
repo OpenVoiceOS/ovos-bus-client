@@ -19,11 +19,12 @@ from ovos_bus_client.message import Message
 from ovos_spec_tools import NamespaceTranslator
 
 
-def _client(modernize=True, emit_legacy=True, emitter=None):
+def _client(modernize=True, emit_legacy=True, emitter=None, wire_legacy_twins=True):
     c = MessageBusClient.__new__(MessageBusClient)
     c.emitter = emitter if emitter is not None else MagicMock()
     c.client = MagicMock()
     c._translator = NamespaceTranslator(modernize=modernize, emit_legacy=emit_legacy)
+    c._wire_legacy_twins = wire_legacy_twins
     c._handler_guards = {}
     c._dedup_registrations = {}
     c.wrapped_funcs = {}

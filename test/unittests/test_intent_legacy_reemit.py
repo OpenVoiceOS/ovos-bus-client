@@ -31,12 +31,13 @@ CANONICAL = "skill-food.jarbas:food.order"
 LEGACY = "skill-food.jarbas:food.order.intent"
 
 
-def _client(emit_legacy=True, modernize=True):
+def _client(emit_legacy=True, modernize=True, wire_legacy_twins=True):
     """A client on a real synchronous emitter so dispatch is observable."""
     c = MessageBusClient.__new__(MessageBusClient)
     c.emitter = EventEmitter()
     c.client = MagicMock()
     c._translator = NamespaceTranslator(modernize=modernize, emit_legacy=emit_legacy)
+    c._wire_legacy_twins = wire_legacy_twins
     c._handler_guards = {}
     c._intent_pair_guards = {}
     c._dedup_registrations = {}
