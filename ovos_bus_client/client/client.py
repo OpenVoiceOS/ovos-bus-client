@@ -597,6 +597,21 @@ class MessageBusClient:
         # Everything else registers straight through.
         guard = self._mirror_guard_for(event_name, func)
         if guard is not None:
+            # Re-registering the SAME (event_name, func) pair used to be
+            # harmless: pyee's EventEmitter keys its listener OrderedDict by
+            # the handler object, so an equal bound method collapsed onto
+            # the same slot instead of firing twice. Minting a fresh
+            # ``wrapped`` closure on every call broke that -- pyee saw a new,
+            # distinct object each time and fired both. Reuse the existing
+            # wrapper for this exact (event_name, func) pair so
+            # re-registering it re-adds the SAME closure pyee already knows,
+            # restoring the original idempotent-registration behaviour.
+            existing = self._dedup_registrations.get(func, [])
+            for ev, wrapped in existing:
+                if ev == event_name:
+                    self.emitter.on(event_name, wrapped)
+                    return
+
             def wrapped(message=None):
                 if guard(message):
                     return
@@ -664,7 +679,57 @@ class MessageBusClient:
             event_name (str): message type to map to the callback
             func (callable): callback function
         """
+        # Route once() through the same guard-selection as on() (see
+        # _mirror_guard_for): a handler that hears both spellings of a
+        # mirrored dispatch via once() must still fire exactly once, not
+        # twice.
+        guard = self._mirror_guard_for(event_name, func)
+        if guard is not None:
+            existing = self._dedup_registrations.get(func, [])
+            for ev, wrapped in existing:
+                if ev == event_name:
+                    # A once() re-registration of a still-pending
+                    # (event_name, func) pair reuses the SAME wrapper
+                    # pyee already knows -- same rationale as on()'s
+                    # reuse branch.
+                    self.emitter.once(event_name, wrapped)
+                    return
+
+            def wrapped(message=None):
+                # pyee's once() already removes this closure from the
+                # emitter the instant it fires (whether or not the guard
+                # below goes on to suppress the call), so drop our own
+                # bookkeeping for it here too -- otherwise a later on()/
+                # once() for this (event_name, func) pair would try to
+                # reuse a wrapper pyee no longer holds.
+                self._forget_dedup_entry(func, event_name, wrapped)
+                if guard(message):
+                    return
+                return func(message)
+
+            self.emitter.once(event_name, wrapped)
+            self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
+            return
         self.emitter.once(event_name, func)
+
+    def _forget_dedup_entry(self, func, event_name, wrapped):
+        """Drop one wrapper's bookkeeping after pyee auto-removes it (once()).
+
+        Mirrors the cleanup ``remove()`` does for an explicit teardown, so a
+        fired once() registration leaves no stale entry for a later on()/
+        once() call on the same (event_name, func) pair to (mis)reuse.
+        """
+        regs = self._dedup_registrations.get(func)
+        if not regs:
+            return
+        try:
+            regs.remove((event_name, wrapped))
+        except ValueError:
+            return
+        if not regs:
+            self._dedup_registrations.pop(func, None)
+            self._handler_guards.pop(func, None)
+        self._release_intent_pair_guard(event_name)
 
     def remove(self, event_name: str, func: Callable[[Message], Any]):
         """Remove registered event.
