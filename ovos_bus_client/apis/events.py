@@ -5,7 +5,7 @@ from typing import Callable, Optional, Union
 from ovos_utils.events import EventContainer, create_basic_wrapper
 from ovos_bus_client.message import Message, dig_for_message
 from ovos_utils.log import LOG
-from ovos_config.locale import get_default_tz
+from ovos_config.locale import get_config_tz
 from ovos_utils.time import now_local
 
 
@@ -79,7 +79,7 @@ class EventSchedulerInterface:
             # ensure correct timezone before conversion to unix timestamp
             # naive datetime objects method relies on the platform C mktime() function to perform the conversion
             # and may not match mycroft.conf
-            when = when.replace(tzinfo=get_default_tz())
+            when = when.replace(tzinfo=get_config_tz())
         if not name:
             name = self.skill_id + handler.__name__
         unique_name = self._create_unique_name(name)

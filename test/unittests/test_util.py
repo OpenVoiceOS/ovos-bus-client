@@ -2,7 +2,7 @@ import time
 import unittest
 
 from os.path import isfile
-from ovos_utils.messagebus import FakeBus
+from ovos_utils.fakebus import FakeBus
 
 
 class TestScheduler(unittest.TestCase):
