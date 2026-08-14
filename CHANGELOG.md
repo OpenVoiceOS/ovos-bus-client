@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.4a1) (2026-08-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.3a1...2.8.4a1)
+
+**Merged pull requests:**
+
+- fix: gate the namespace wire twin behind an escape-hatch flag [\#288](https://github.com/OpenVoiceOS/ovos-bus-client/pull/288) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.8.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.3a1) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.2a1...2.8.3a1)
@@ -456,10 +464,6 @@
 ## [1.2.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0) (2024-12-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.2.0a1...1.2.0)
-
-**Merged pull requests:**
-
-- Release 1.2.0a1 [\#154](https://github.com/OpenVoiceOS/ovos-bus-client/pull/154) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0a1) (2024-12-26)
 
