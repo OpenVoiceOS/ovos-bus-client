@@ -1,5 +1,6 @@
 import enum
 import time
+import warnings
 from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
@@ -21,6 +22,28 @@ from ovos_bus_client.version import VERSION_MAJOR
 # Deprecations are removed at the next major bump. Derive the version from
 # version.py so the warning text can never drift out of date.
 _NEXT_MAJOR_VERSION = f"{VERSION_MAJOR + 1}.0.0"
+
+
+def _get_default_lang() -> str:
+    """Read the runtime-configured default lang.
+
+    This is a hot path (every ``Session``/``Message`` without an explicit
+    lang goes through it), so it must not spam a DeprecationWarning on every
+    call. ``ovos_config.locale.get_default_lang()`` is deprecated in favor of
+    reading ``Configuration()`` directly -- but only in ovos-config releases
+    where the two are equivalent. Older ovos-config releases (still allowed
+    by this package's ``ovos-config<3.0.0`` floor) keep a private
+    ``_lang`` module-global set by ``setup_locale()``/``set_default_lang()``
+    that ``Configuration()`` does NOT see, and in those releases
+    ``get_default_lang()`` isn't deprecated at all. There is no public
+    accessor that is cache-aware on both release lines, so we keep calling
+    the real (possibly deprecated) function -- preserving behavior on every
+    supported ovos-config version -- and just swallow its own warning here.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning,
+                                message=".*ovos_config.Configuration.*")
+        return get_default_lang()
 
 # Bidirectional-wire back-compat: the canonical parent applies SESSION-1 §2.1
 # omit-when-empty semantics and stores an *empty* collection field as ``None``.
@@ -684,7 +707,7 @@ class Session(_SpecSession):
                                Configuration().get("intents", {}).get("blacklisted_intents", []))
         blacklisted_pipelines = (blacklisted_pipelines or
                                  Configuration().get("intents", {}).get("blacklisted_pipelines", []))
-        lang = standardize_lang(lang or get_default_lang())
+        lang = standardize_lang(lang or _get_default_lang())
         # OVOS-BRIDGE-1 §3.3: site_id is the opaque group identifier. A deployer
         # MAY configure one (the bridge's own determination, step 1), but an
         # unset site_id MUST stay absent — it is NOT fabricated as a sentinel

@@ -5,11 +5,17 @@ from datetime import timedelta
 from unittest import TestCase
 from unittest.mock import MagicMock
 
+import pytest
+
 from ovos_bus_client.apis.ocp import (ClassicAudioServiceInterface,
                                       OCPAudioServiceInterface, OCPInterface,
                                       OCPVideoServiceInterface,
                                       OCPWebServiceInterface)
 from ovos_bus_client.message import Message
+
+# ClassicAudioServiceInterface is a deprecated shim (use OCPInterface); this
+# module deliberately keeps exercising it for coverage, filtered per-test.
+pytestmark = pytest.mark.filterwarnings("ignore:use OCPInterface instead:DeprecationWarning")
 
 
 def _last(bus) -> Message:

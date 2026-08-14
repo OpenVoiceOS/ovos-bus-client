@@ -4,8 +4,17 @@ import warnings
 from unittest import TestCase
 from unittest.mock import MagicMock
 
+import pytest
+
 from ovos_bus_client.apis.enclosure import EnclosureAPI
 from ovos_bus_client.message import Message
+
+# EnclosureAPI itself is a deprecated shim (moved to ovos-gui-api-client).
+# This module deliberately keeps exercising it for coverage; the deprecation
+# noise is filtered per-test rather than globally.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:EnclosureAPI moved to ovos-gui-api-client:DeprecationWarning"
+)
 
 
 def _last_emitted(bus) -> Message:

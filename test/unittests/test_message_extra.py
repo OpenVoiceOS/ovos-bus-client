@@ -1,6 +1,7 @@
 """Coverage tests for ovos_bus_client.message — reply/forward/response/publish,
 CollectionMessage, GUIMessage, encryption helpers, dig_for_message edge cases."""
 import unittest
+import pytest
 from unittest import TestCase
 
 from ovos_bus_client.message import (CollectionMessage, GUIMessage, Message,
@@ -88,6 +89,7 @@ class TestResponse(TestCase):
         self.assertEqual(resp.context["source"], "D")
 
 
+@pytest.mark.filterwarnings("ignore:Message.publish is deprecated:DeprecationWarning")
 class TestPublish(TestCase):
     def test_publish_emits_deprecation_warning(self):
         """``publish`` is not part of OVOS-MSG-1 and is scheduled for

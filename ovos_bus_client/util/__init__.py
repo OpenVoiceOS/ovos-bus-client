@@ -18,12 +18,11 @@ Tools and constructs that are useful together with the messagebus.
 from ovos_utils import json_loads
 
 from ovos_config.config import read_mycroft_config
-from ovos_config.locale import get_default_lang
 from ovos_utils.json_helper import merge_dict
 from ovos_spec_tools import standardize_lang
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import dig_for_message, Message
-from ovos_bus_client.session import SessionManager
+from ovos_bus_client.session import SessionManager, _get_default_lang
 from ovos_bus_client.util.scheduler import EventScheduler
 
 
@@ -47,7 +46,7 @@ def get_message_lang(message=None):
         sess = SessionManager.get(message)
         return sess.lang
 
-    return standardize_lang(get_default_lang())
+    return standardize_lang(_get_default_lang())
 
 
 def get_websocket(host, port, route='/', ssl=False, threaded=True):

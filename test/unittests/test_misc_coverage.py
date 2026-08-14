@@ -7,12 +7,15 @@ from datetime import timedelta
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from ovos_bus_client.apis.enclosure import EnclosureAPI
 from ovos_bus_client.apis.events import EventSchedulerInterface
 from ovos_bus_client.apis.gui import GUIInterface
 from ovos_bus_client.message import Message
 
 
+@pytest.mark.filterwarnings("ignore:EnclosureAPI moved to ovos-gui-api-client:DeprecationWarning")
 class TestEnclosureExtra(TestCase):
     def setUp(self):
         self.bus = MagicMock()
