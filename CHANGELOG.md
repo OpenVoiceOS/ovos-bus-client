@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.4a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.4a2) (2026-08-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.4a1...2.8.4a2)
+
+**Merged pull requests:**
+
+- docs: prerelease-quirks changelog [\#290](https://github.com/OpenVoiceOS/ovos-bus-client/pull/290) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.8.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.4a1) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.3a1...2.8.4a1)
@@ -456,10 +464,6 @@
 ## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0a1) (2024-12-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.2.0...1.3.0a1)
-
-**Merged pull requests:**
-
-- feat:hivemind-plugin-manager [\#155](https://github.com/OpenVoiceOS/ovos-bus-client/pull/155) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.2.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0) (2024-12-26)
 
