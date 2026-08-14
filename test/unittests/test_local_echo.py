@@ -69,7 +69,7 @@ class TestLocalEchoOn(unittest.TestCase):
         time.sleep(0.05)
         self.assertEqual(got, [], "own echo must not double-deliver")
 
-    def test_foreign_echo_copy_dispatches_normally(self):
+    def test_foreign_echo_copy_dispatches_normally_without_marker(self):
         got = []
         self.c.on(ACK, got.append)
         msg = Message(ACK, {"n": 4}, {LOCAL_ECHO_SRC_KEY: "someone-else"})
@@ -78,6 +78,41 @@ class TestLocalEchoOn(unittest.TestCase):
         while not got and time.monotonic() < deadline:
             time.sleep(0.005)
         self.assertEqual(len(got), 1, "another process's ack must deliver")
+        self.assertNotIn(LOCAL_ECHO_SRC_KEY, got[0].context,
+                         "the marker must be POPPED before foreign dispatch")
+
+    def test_foreign_reply_reaches_the_originator(self):
+        """A(emit, marked) -> B(handler replies; context deep-copied) ->
+        A must DISPATCH the reply, not drop it as its own echo."""
+        a = self.c
+        b = _client([ACK])
+        # B receives A's marked wire frame and replies from it
+        wire_from_a = Message(ACK, {"q": 1},
+                              {LOCAL_ECHO_SRC_KEY: a._echo_source})
+        received_by_b = []
+        b.on(ACK, received_by_b.append)
+        b.on_message(None, wire_from_a.serialize())
+        deadline = time.monotonic() + 2
+        while not received_by_b and time.monotonic() < deadline:
+            time.sleep(0.005)
+        reply = received_by_b[0].reply("unit.test.response", {"a": 2})
+        # the popped marker must not have survived the deep-copied context
+        self.assertNotIn(LOCAL_ECHO_SRC_KEY, reply.context)
+        got_reply = []
+        a.on("unit.test.response", got_reply.append)
+        a.on_message(None, reply.serialize())
+        deadline = time.monotonic() + 2
+        while not got_reply and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertEqual(len(got_reply), 1,
+                         "the originator must not drop a foreign reply")
+        b.close()
+
+    def test_emit_does_not_mutate_caller_message(self):
+        msg = Message(ACK, {"n": 9})
+        self.c.emit(msg)
+        self.assertNotIn(LOCAL_ECHO_SRC_KEY, msg.context,
+                         "emit must stamp a wire clone, not the caller object")
 
     def test_unlisted_topics_unaffected(self):
         got = []

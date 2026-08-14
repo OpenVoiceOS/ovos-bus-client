@@ -424,8 +424,13 @@ class MessageBusClient:
             # otherwise trigger an endless reconnect loop.
             LOG.warning("discarding malformed bus message: %s", e)
             return
-        if (self._echo_source is not None
-                and parsed_message.context.get(LOCAL_ECHO_SRC_KEY) == self._echo_source):
+        # POP the echo marker (same discipline as the twin-dedup markers
+        # below): it rode the wire for OUR dedup decision only. Left in
+        # place, a foreign handler's reply()/forward() would deep-copy it
+        # onto the descendant frame and the originator would drop that
+        # valid response as its own echo.
+        _echo_src = parsed_message.context.pop(LOCAL_ECHO_SRC_KEY, None)
+        if self._echo_source is not None and _echo_src == self._echo_source:
             # our own local-echo wire copy coming back: listeners already
             # fired at emit time -- dispatching again would double-deliver
             return
@@ -543,25 +548,27 @@ class MessageBusClient:
                    Session(self.session_id)
             message.context["session"] = sess.serialize()
 
+        wire_message = message
         if message.msg_type in self._local_echo_topics:
-            # deliver to this process's listeners NOW; mark the wire copy so
-            # our own on_message drops it (other processes are unaffected).
-            # The local copy is serialized/deserialized so handler mutation
-            # cannot leak into the wire frame.
-            message.context[LOCAL_ECHO_SRC_KEY] = self._echo_source
+            # deliver to this process's listeners NOW; the WIRE copy (a clone
+            # -- the caller-owned message is never mutated, so reusing it
+            # later cannot leak a stale marker) carries the source marker and
+            # our own on_message drops it. Serialize/deserialize isolation on
+            # both copies keeps handler mutation out of the wire frame.
             try:
                 local_copy = Message.deserialize(message.serialize())
-                local_copy.context.pop(LOCAL_ECHO_SRC_KEY, None)
                 self.emitter.emit(local_copy.msg_type, local_copy)
             except Exception:
                 LOG.exception("local echo dispatch failed for %s",
                               message.msg_type)
+            wire_message = Message.deserialize(message.serialize())
+            wire_message.context[LOCAL_ECHO_SRC_KEY] = self._echo_source
         # a single logical emit puts exactly ONE message on the wire. The
         # namespace counterpart is bridged to listeners on the RECEIVE side
         # (see on_message) in every process, so both namespaces are delivered
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
-        self._send(message)
+        self._send(wire_message)
         # ... with TWO exceptions: the legacy intent twin and the legacy
         # namespace twin, which must reach a process whose bus-client is too
         # old to bridge anything. Both go after the canonical dispatch, so a
