@@ -520,36 +520,50 @@ class MessageBusClient:
         """Single-writer loop for the optional async sender.
 
         Mirrors the synchronous error handling: connection loss and send
-        failures are logged per frame and never kill the thread.
+        failures are logged per frame and never kill the thread. Holds a
+        LOCAL reference to the queue so a concurrent close() clearing the
+        attribute can never crash the loop mid-drain, and acknowledges each
+        frame via task_done() only after the socket write completed or
+        failed -- which is what flush() waits on.
         """
+        q = self._sender_queue
         while True:
-            item = self._sender_queue.get()
-            if item is self._SENDER_STOP:
-                return
-            msg, msg_type = item
+            item = q.get()
             try:
-                self.connected_event.wait(10)
-                self.client.send(msg)
-            except WebSocketConnectionClosedException:
-                LOG.warning(f'Could not send {msg_type} message because '
-                            'connection has been closed')
-            except Exception:
-                LOG.exception(f"failed to emit message {msg_type} "
-                              f"with len {len(msg)}")
+                if item is self._SENDER_STOP:
+                    return
+                msg, msg_type = item
+                try:
+                    self.connected_event.wait(10)
+                    self.client.send(msg)
+                except WebSocketConnectionClosedException:
+                    LOG.warning(f'Could not send {msg_type} message because '
+                                'connection has been closed')
+                except Exception:
+                    LOG.exception(f"failed to emit message {msg_type} "
+                                  f"with len {len(msg)}")
+            finally:
+                q.task_done()
 
     def flush(self, timeout: float = 5.0) -> bool:
-        """Block until queued outbound frames are handed to the socket.
+        """Block until queued outbound frames completed their socket write.
 
-        Returns True if the queue drained within ``timeout``. No-op (True)
-        for the default synchronous sender.
+        Waits on the queue's unfinished-task count (acknowledged by the
+        sender AFTER ``client.send()`` returns or fails), not on queue
+        emptiness -- a dequeued frame may still be inside the socket write.
+        Returns True if everything was acknowledged within ``timeout``.
+        No-op (True) for the default synchronous sender.
         """
-        if self._sender_queue is None:
+        q = self._sender_queue
+        if q is None:
             return True
         deadline = time.monotonic() + timeout
-        while not self._sender_queue.empty():
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.01)
+        with q.all_tasks_done:
+            while q.unfinished_tasks:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                q.all_tasks_done.wait(remaining)
         return True
 
     def collect_responses(self, message: Message,
@@ -884,10 +898,24 @@ class MessageBusClient:
         """
         Close the websocket connection.
         """
-        if self._sender_thread is not None:
+        sender = self._sender_thread
+        if sender is not None:
             self.flush(timeout=5.0)
-            self._sender_queue.put(self._SENDER_STOP)
-            self._sender_thread.join(timeout=2.0)
+            try:
+                # never block close() behind a full queue: the sender holds
+                # its own reference and drains regardless; a lost sentinel
+                # only means the daemon thread parks on get() until process
+                # exit instead of returning early
+                self._sender_queue.put_nowait(self._SENDER_STOP)
+            except _queue.Full:
+                LOG.warning("outbound bus queue still full at close(); "
+                            "sender thread will not be stopped explicitly")
+            sender.join(timeout=2.0)
+            if sender.is_alive():
+                LOG.warning("bus sender still draining at close(); "
+                            "leaving it to finish in the background")
+            # the drain loop keeps a local queue reference, so clearing the
+            # attributes is safe even if the thread is still finishing
             self._sender_thread = None
             self._sender_queue = None
         self.client.close()

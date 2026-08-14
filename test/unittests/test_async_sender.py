@@ -59,12 +59,36 @@ class TestAsyncSenderOn(TestCase):
         emit_ms = (time.monotonic() - t0) * 1000
         self.assertLess(emit_ms, 100, "emit must not block on the socket")
         self.assertEqual(sent, [])
+        # the frame is DEQUEUED but still inside client.send(): flush must
+        # NOT report success on queue emptiness alone
+        self.assertFalse(self.c.flush(0.3),
+                         "flush must wait for the socket write, not just "
+                         "queue emptiness")
         gate.set()
         self.assertTrue(self.c.flush(5))
-        deadline = time.monotonic() + 2
-        while not sent and time.monotonic() < deadline:
-            time.sleep(0.01)
-        self.assertEqual(len(sent), 1)
+        self.assertEqual(len(sent), 1,
+                         "flush success implies the write completed")
+
+    def test_close_survives_blocked_sender(self):
+        """close() must not crash the drain loop nor hang when the sender
+        is stuck inside a socket write."""
+        gate = threading.Event()
+        sent = []
+
+        def stuck_send(payload):
+            gate.wait(10)
+            sent.append(payload)
+        self.c.client.send.side_effect = stuck_send
+        self.c.emit(Message("unit.test", {"n": 1}))
+        sender = self.c._sender_thread
+        t0 = time.monotonic()
+        self.c.close()   # flush times out, join times out -- returns anyway
+        self.assertLess(time.monotonic() - t0, 10, "close() must not hang")
+        gate.set()
+        sender.join(timeout=5)
+        self.assertFalse(sender.is_alive())
+        self.assertEqual(len(sent), 1,
+                         "the in-flight frame still completes after close")
 
     def test_order_preserved_across_threads(self):
         sent = []
