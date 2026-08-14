@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.2a1) (2026-08-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.1a1...2.8.2a1)
+
+**Merged pull requests:**
+
+- fix: silence deprecation warning noise on hot path [\#282](https://github.com/OpenVoiceOS/ovos-bus-client/pull/282) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.8.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.1a1) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.0a1...2.8.1a1)
@@ -240,6 +248,678 @@
 **Breaking changes:**
 
 - remove!: hivemind agent protocol and messagebus solver [\#207](https://github.com/OpenVoiceOS/ovos-bus-client/pull/207) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.5.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.5.0) (2026-03-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0a4...1.5.0)
+
+**Merged pull requests:**
+
+- Release 1.4.0a4 [\#199](https://github.com/OpenVoiceOS/ovos-bus-client/pull/199) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.4.0a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a4) (2026-03-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0...1.4.0a4)
+
+**Merged pull requests:**
+
+- fix: better error handling [\#196](https://github.com/OpenVoiceOS/ovos-bus-client/pull/196) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.4.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0) (2026-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0a2...1.4.0)
+
+**Merged pull requests:**
+
+- Release 1.4.0a2 [\#195](https://github.com/OpenVoiceOS/ovos-bus-client/pull/195) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.4.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a2) (2026-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.4.0a1...1.4.0a2)
+
+## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.4.0a1) (2026-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a5...1.4.0a1)
+
+**Merged pull requests:**
+
+- feat: persona\_id [\#192](https://github.com/OpenVoiceOS/ovos-bus-client/pull/192) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.8a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a5) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a4...1.3.8a5)
+
+**Merged pull requests:**
+
+- chore\(deps\): update dependency python to 3.14 [\#181](https://github.com/OpenVoiceOS/ovos-bus-client/pull/181) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a4) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a3...1.3.8a4)
+
+**Merged pull requests:**
+
+- Release 1.3.8a4 [\#188](https://github.com/OpenVoiceOS/ovos-bus-client/pull/188) ([github-actions[bot]](https://github.com/apps/github-actions))
+- chore\(deps\): update actions/setup-python action to v6 [\#187](https://github.com/OpenVoiceOS/ovos-bus-client/pull/187) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a3) (2025-12-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a2...1.3.8a3)
+
+**Merged pull requests:**
+
+- Release 1.3.8a3 [\#186](https://github.com/OpenVoiceOS/ovos-bus-client/pull/186) ([github-actions[bot]](https://github.com/apps/github-actions))
+- chore\(deps\): update actions/checkout action to v6 [\#185](https://github.com/OpenVoiceOS/ovos-bus-client/pull/185) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a2) (2025-12-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.8a1...1.3.8a2)
+
+**Merged pull requests:**
+
+- Release 1.3.8a2 [\#184](https://github.com/OpenVoiceOS/ovos-bus-client/pull/184) ([github-actions[bot]](https://github.com/apps/github-actions))
+- chore: Configure Renovate [\#180](https://github.com/OpenVoiceOS/ovos-bus-client/pull/180) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [1.3.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.8a1) (2025-11-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.7...1.3.8a1)
+
+**Merged pull requests:**
+
+- Release 1.3.8a1 [\#179](https://github.com/OpenVoiceOS/ovos-bus-client/pull/179) ([github-actions[bot]](https://github.com/apps/github-actions))
+- refactor: migrate bus api client to ovos-bus-client package [\#177](https://github.com/OpenVoiceOS/ovos-bus-client/pull/177) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.7) (2025-11-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.7a1...1.3.7)
+
+**Merged pull requests:**
+
+- Release 1.3.7a1 [\#176](https://github.com/OpenVoiceOS/ovos-bus-client/pull/176) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.3.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.7a1) (2025-11-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a2...1.3.7a1)
+
+**Merged pull requests:**
+
+- fix: Update requirements.txt [\#175](https://github.com/OpenVoiceOS/ovos-bus-client/pull/175) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a2) (2025-11-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.6a1...1.3.6a2)
+
+**Merged pull requests:**
+
+- Release 1.3.6a2 [\#174](https://github.com/OpenVoiceOS/ovos-bus-client/pull/174) ([github-actions[bot]](https://github.com/apps/github-actions))
+- Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
+- feat\(EventScheduler\): list\_events API [\#172](https://github.com/OpenVoiceOS/ovos-bus-client/pull/172) ([mikejgray](https://github.com/mikejgray))
+
+## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.5a1...1.3.6a1)
+
+**Merged pull requests:**
+
+- Release 1.3.6a1 [\#171](https://github.com/OpenVoiceOS/ovos-bus-client/pull/171) ([github-actions[bot]](https://github.com/apps/github-actions))
+- fix: make orjson optional [\#169](https://github.com/OpenVoiceOS/ovos-bus-client/pull/169) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.5a1) (2025-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4...1.3.5a1)
+
+**Merged pull requests:**
+
+- Release 1.3.5a1 [\#168](https://github.com/OpenVoiceOS/ovos-bus-client/pull/168) ([github-actions[bot]](https://github.com/apps/github-actions))
+- Update ovos-config requirement from \<2.0.0,\>=0.0.12 to \>=0.0.12,\<3.0.0 [\#167](https://github.com/OpenVoiceOS/ovos-bus-client/pull/167) ([dependabot[bot]](https://github.com/apps/dependabot))
+
+## [1.3.4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4) (2025-04-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4a1...1.3.4)
+
+**Merged pull requests:**
+
+- Release 1.3.4a1 [\#166](https://github.com/OpenVoiceOS/ovos-bus-client/pull/166) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.3.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4a1) (2025-04-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.3a1...1.3.4a1)
+
+**Merged pull requests:**
+
+- fix: solver plugin session support [\#165](https://github.com/OpenVoiceOS/ovos-bus-client/pull/165) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.3a1) (2025-04-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.2...1.3.3a1)
+
+**Merged pull requests:**
+
+- Feat/solver plugin [\#163](https://github.com/OpenVoiceOS/ovos-bus-client/pull/163) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.2) (2025-01-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.2a1...1.3.2)
+
+**Merged pull requests:**
+
+- Release 1.3.2a1 [\#160](https://github.com/OpenVoiceOS/ovos-bus-client/pull/160) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.3.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.2a1) (2025-01-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.1...1.3.2a1)
+
+**Merged pull requests:**
+
+- chore: add warnings [\#159](https://github.com/OpenVoiceOS/ovos-bus-client/pull/159) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.1) (2024-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.1a1...1.3.1)
+
+**Merged pull requests:**
+
+- Release 1.3.1a1 [\#158](https://github.com/OpenVoiceOS/ovos-bus-client/pull/158) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.3.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.1a1) (2024-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.0...1.3.1a1)
+
+**Merged pull requests:**
+
+- fix: missing hivemind entrypoint in setup.py [\#157](https://github.com/OpenVoiceOS/ovos-bus-client/pull/157) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.3.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0) (2024-12-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.0a1...1.3.0)
+
+**Merged pull requests:**
+
+- Release 1.3.0a1 [\#156](https://github.com/OpenVoiceOS/ovos-bus-client/pull/156) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0a1) (2024-12-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.2.0...1.3.0a1)
+
+**Merged pull requests:**
+
+- feat:hivemind-plugin-manager [\#155](https://github.com/OpenVoiceOS/ovos-bus-client/pull/155) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.2.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0) (2024-12-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.2.0a1...1.2.0)
+
+**Merged pull requests:**
+
+- Release 1.2.0a1 [\#154](https://github.com/OpenVoiceOS/ovos-bus-client/pull/154) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.2.0a1) (2024-12-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.1.0...1.2.0a1)
+
+**Merged pull requests:**
+
+- feat:face\_template [\#153](https://github.com/OpenVoiceOS/ovos-bus-client/pull/153) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.1.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.1.0) (2024-12-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.1.0a1...1.1.0)
+
+## [1.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.1.0a1) (2024-12-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.7a1...1.1.0a1)
+
+## [1.0.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.7a1) (2024-12-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.6...1.0.7a1)
+
+## [1.0.6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.6) (2024-11-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.6a1...1.0.6)
+
+## [1.0.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.6a1) (2024-11-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.5a1...1.0.6a1)
+
+## [1.0.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.5a1) (2024-11-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.4...1.0.5a1)
+
+## [1.0.4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.4) (2024-11-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.4a1...1.0.4)
+
+## [1.0.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.4a1) (2024-11-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.3...1.0.4a1)
+
+## [1.0.3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.3) (2024-11-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.3a1...1.0.3)
+
+## [1.0.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.3a1) (2024-11-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.2...1.0.3a1)
+
+## [1.0.2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.2) (2024-11-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.2a1...1.0.2)
+
+## [1.0.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.2a1) (2024-11-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.1...1.0.2a1)
+
+## [1.0.1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.1) (2024-11-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.1a1...1.0.1)
+
+## [1.0.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.1a1) (2024-11-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.0...1.0.1a1)
+
+## [1.0.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.0) (2024-11-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.0.0a1...1.0.0)
+
+## [1.0.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.0.0a1) (2024-11-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.6...1.0.0a1)
+
+## [0.1.6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.6) (2024-10-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.6a1...0.1.6)
+
+## [0.1.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.6a1) (2024-10-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.5...0.1.6a1)
+
+## [0.1.5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.5) (2024-10-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.5a1...0.1.5)
+
+## [0.1.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.5a1) (2024-10-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.4...0.1.5a1)
+
+## [0.1.4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.4) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.4a1...0.1.4)
+
+## [0.1.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.4a1) (2024-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.3...0.1.4a1)
+
+## [0.1.3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.3) (2024-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.3a1...0.1.3)
+
+## [0.1.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.3a1) (2024-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.2a1...0.1.3a1)
+
+## [0.1.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.2a1) (2024-10-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.1...0.1.2a1)
+
+## [0.1.1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.1) (2024-09-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.1a1...0.1.1)
+
+## [0.1.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.1a1) (2024-09-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.0...0.1.1a1)
+
+## [0.1.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.0) (2024-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.1.0a1...0.1.0)
+
+## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.1.0a1) (2024-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.10...0.1.0a1)
+
+## [0.0.10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.10) (2024-09-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.9a2...0.0.10)
+
+## [0.0.9a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a2) (2024-09-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/0.0.9a1...0.0.9a2)
+
+## [0.0.9a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/0.0.9a1) (2024-09-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9...0.0.9a1)
+
+## [V0.0.9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9) (2024-09-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V...V0.0.9)
+
+## [V](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V) (2024-03-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a12...V)
+
+## [V0.0.9a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a12) (2024-02-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a11...V0.0.9a12)
+
+## [V0.0.9a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a11) (2024-02-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a10...V0.0.9a11)
+
+## [V0.0.9a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a10) (2024-01-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a9...V0.0.9a10)
+
+## [V0.0.9a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a9) (2024-01-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a8...V0.0.9a9)
+
+## [V0.0.9a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a8) (2024-01-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a7...V0.0.9a8)
+
+## [V0.0.9a7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a7) (2024-01-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a6...V0.0.9a7)
+
+## [V0.0.9a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a6) (2024-01-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a5...V0.0.9a6)
+
+## [V0.0.9a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a5) (2024-01-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a4...V0.0.9a5)
+
+## [V0.0.9a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a4) (2024-01-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a3...V0.0.9a4)
+
+## [V0.0.9a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a3) (2024-01-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a2...V0.0.9a3)
+
+## [V0.0.9a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a2) (2024-01-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.9a1...V0.0.9a2)
+
+## [V0.0.9a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.9a1) (2023-12-30)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.8...V0.0.9a1)
+
+## [V0.0.8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.8) (2023-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.8a2...V0.0.8)
+
+## [V0.0.8a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.8a2) (2023-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.8a1...V0.0.8a2)
+
+## [V0.0.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.8a1) (2023-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.7...V0.0.8a1)
+
+## [V0.0.7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.7) (2023-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.7a1...V0.0.7)
+
+## [V0.0.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.7a1) (2023-12-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a24...V0.0.7a1)
+
+## [V0.0.6a24](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a24) (2023-12-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a23...V0.0.6a24)
+
+## [V0.0.6a23](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a23) (2023-12-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a22...V0.0.6a23)
+
+## [V0.0.6a22](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a22) (2023-12-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a21...V0.0.6a22)
+
+## [V0.0.6a21](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a21) (2023-12-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a20...V0.0.6a21)
+
+## [V0.0.6a20](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a20) (2023-12-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a19...V0.0.6a20)
+
+## [V0.0.6a19](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a19) (2023-10-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a18...V0.0.6a19)
+
+## [V0.0.6a18](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a18) (2023-10-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a17...V0.0.6a18)
+
+## [V0.0.6a17](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a17) (2023-10-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a16...V0.0.6a17)
+
+## [V0.0.6a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a16) (2023-10-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a15...V0.0.6a16)
+
+## [V0.0.6a15](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a15) (2023-10-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a14...V0.0.6a15)
+
+## [V0.0.6a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a14) (2023-10-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a13...V0.0.6a14)
+
+## [V0.0.6a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a13) (2023-10-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a12...V0.0.6a13)
+
+## [V0.0.6a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a12) (2023-10-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a11...V0.0.6a12)
+
+## [V0.0.6a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a11) (2023-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a10...V0.0.6a11)
+
+## [V0.0.6a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a10) (2023-10-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a9...V0.0.6a10)
+
+## [V0.0.6a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a9) (2023-09-30)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a8...V0.0.6a9)
+
+## [V0.0.6a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a8) (2023-09-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a7...V0.0.6a8)
+
+## [V0.0.6a7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a7) (2023-09-22)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a6...V0.0.6a7)
+
+## [V0.0.6a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a6) (2023-09-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a5...V0.0.6a6)
+
+## [V0.0.6a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a5) (2023-09-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a4...V0.0.6a5)
+
+## [V0.0.6a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a4) (2023-08-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a3...V0.0.6a4)
+
+## [V0.0.6a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a3) (2023-08-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a2...V0.0.6a3)
+
+## [V0.0.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a2) (2023-08-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.6a1...V0.0.6a2)
+
+## [V0.0.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.6a1) (2023-08-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.5...V0.0.6a1)
+
+## [V0.0.5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.5) (2023-07-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.5a2...V0.0.5)
+
+## [V0.0.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.5a2) (2023-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.5a1...V0.0.5a2)
+
+## [V0.0.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.5a1) (2023-06-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4...V0.0.5a1)
+
+## [V0.0.4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4) (2023-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a17...V0.0.4)
+
+## [V0.0.4a17](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a17) (2023-06-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a16...V0.0.4a17)
+
+## [V0.0.4a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a16) (2023-06-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a15...V0.0.4a16)
+
+## [V0.0.4a15](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a15) (2023-06-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a14...V0.0.4a15)
+
+## [V0.0.4a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a14) (2023-06-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a13...V0.0.4a14)
+
+## [V0.0.4a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a13) (2023-06-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a12...V0.0.4a13)
+
+## [V0.0.4a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a12) (2023-05-21)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a11...V0.0.4a12)
+
+## [V0.0.4a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a11) (2023-05-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a10...V0.0.4a11)
+
+## [V0.0.4a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a10) (2023-05-10)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a9...V0.0.4a10)
+
+## [V0.0.4a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a9) (2023-05-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a8...V0.0.4a9)
+
+## [V0.0.4a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a8) (2023-05-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a7...V0.0.4a8)
+
+## [V0.0.4a7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a7) (2023-05-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a6...V0.0.4a7)
+
+## [V0.0.4a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a6) (2023-04-30)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a5...V0.0.4a6)
+
+## [V0.0.4a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a5) (2023-04-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a4...V0.0.4a5)
+
+## [V0.0.4a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a4) (2023-04-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a3...V0.0.4a4)
+
+## [V0.0.4a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a3) (2023-04-22)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a2...V0.0.4a3)
+
+## [V0.0.4a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a2) (2023-04-22)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.4a1...V0.0.4a2)
+
+## [V0.0.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.4a1) (2023-04-22)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3...V0.0.4a1)
+
+## [V0.0.3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3) (2023-04-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a22...V0.0.3)
+
+## [V0.0.3a22](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a22) (2023-04-19)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a21...V0.0.3a22)
+
+## [V0.0.3a21](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a21) (2023-04-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a19...V0.0.3a21)
+
+## [V0.0.3a19](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a19) (2023-04-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a18...V0.0.3a19)
+
+## [V0.0.3a18](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a18) (2023-04-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a17...V0.0.3a18)
+
+## [V0.0.3a17](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a17) (2023-04-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a16...V0.0.3a17)
+
+## [V0.0.3a16](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a16) (2023-04-09)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a15...V0.0.3a16)
+
+## [V0.0.3a15](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a15) (2023-04-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a14...V0.0.3a15)
+
+## [V0.0.3a14](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a14) (2023-04-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a13...V0.0.3a14)
+
+## [V0.0.3a13](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a13) (2023-04-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a12...V0.0.3a13)
+
+## [V0.0.3a12](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a12) (2023-04-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a11...V0.0.3a12)
+
+## [V0.0.3a11](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a11) (2023-04-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a10...V0.0.3a11)
+
+## [V0.0.3a10](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a10) (2023-04-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a9...V0.0.3a10)
+
+## [V0.0.3a9](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a9) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a8...V0.0.3a9)
+
+## [V0.0.3a8](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a8) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a7...V0.0.3a8)
+
+## [V0.0.3a7](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a7) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a6...V0.0.3a7)
+
+## [V0.0.3a6](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a6) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a5...V0.0.3a6)
+
+## [V0.0.3a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a5) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/V0.0.3a4...V0.0.3a5)
+
+## [V0.0.3a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/V0.0.3a4) (2023-04-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/240929a2eb70a305f6622070e6c953ec32986565...V0.0.3a4)
 
 
 
