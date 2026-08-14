@@ -83,6 +83,7 @@ def _verbatim_copy(message: Message, topic: str) -> Message:
 #: canonical spelling of this dispatch was sent alongside it, so a receiver
 #: that understands the bridge must not modernize the twin a second time.
 INTENT_COMPAT_TWIN_KEY = "_intent_compat_twin"
+LOCAL_ECHO_SRC_KEY = "__local_echo_src"
 
 # --- legacy namespace-migration compat (non-normative migration tooling) ---
 #
@@ -247,6 +248,10 @@ class MessageBusClient:
     """
     # minimize reading of the .conf
     _config_cache = None
+    # class-level defaults so instances built without __init__ (tests,
+    # partial constructions) skip local echo entirely
+    _local_echo_topics = frozenset()
+    _echo_source = None
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
                  emitter=None, cache=False, session=None):
@@ -275,6 +280,24 @@ class MessageBusClient:
         self._translator = NamespaceTranslator(
             modernize=_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True),
             emit_legacy=_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
+        # Opt-in same-process fast delivery (``websocket.local_echo_topics``):
+        # for the listed message types, emit() dispatches to THIS process's
+        # own listeners immediately (microseconds) while the frame still goes
+        # out on the wire for every other process. The wire copy carries a
+        # source marker and on_message drops it here, so local listeners fire
+        # exactly once. Motivation: ovos-core's intent dispatcher waits on
+        # handler acks that skills in the SAME process emit -- without echo
+        # each ack pays a full bus round-trip (measured ~20-60ms under load)
+        # to arrive back where it started.
+        try:
+            from ovos_config import Configuration
+            _echo_cfg = Configuration().get("websocket", {}).get("local_echo_topics") or []
+        except Exception:
+            _echo_cfg = []
+        self._local_echo_topics = frozenset(str(x) for x in _echo_cfg)
+        if self._local_echo_topics:
+            from uuid import uuid4
+            self._echo_source = uuid4().hex
         # escape hatch, default ON -- see the docstring above NAMESPACE_COMPAT_TWIN_KEY.
         self._wire_legacy_twins = _bus_flag(
             "OVOS_BUS_WIRE_LEGACY_TWINS", "wire_legacy_twins", default=True)
@@ -401,6 +424,16 @@ class MessageBusClient:
             # otherwise trigger an endless reconnect loop.
             LOG.warning("discarding malformed bus message: %s", e)
             return
+        # POP the echo marker (same discipline as the twin-dedup markers
+        # below): it rode the wire for OUR dedup decision only. Left in
+        # place, a foreign handler's reply()/forward() would deep-copy it
+        # onto the descendant frame and the originator would drop that
+        # valid response as its own echo.
+        _echo_src = parsed_message.context.pop(LOCAL_ECHO_SRC_KEY, None)
+        if self._echo_source is not None and _echo_src == self._echo_source:
+            # our own local-echo wire copy coming back: listeners already
+            # fired at emit time -- dispatching again would double-deliver
+            return
         try:
             sess = Session.from_message(parsed_message)
         except MalformedSession as e:
@@ -515,12 +548,27 @@ class MessageBusClient:
                    Session(self.session_id)
             message.context["session"] = sess.serialize()
 
+        wire_message = message
+        if message.msg_type in self._local_echo_topics:
+            # deliver to this process's listeners NOW; the WIRE copy (a clone
+            # -- the caller-owned message is never mutated, so reusing it
+            # later cannot leak a stale marker) carries the source marker and
+            # our own on_message drops it. Serialize/deserialize isolation on
+            # both copies keeps handler mutation out of the wire frame.
+            try:
+                local_copy = Message.deserialize(message.serialize())
+                self.emitter.emit(local_copy.msg_type, local_copy)
+            except Exception:
+                LOG.exception("local echo dispatch failed for %s",
+                              message.msg_type)
+            wire_message = Message.deserialize(message.serialize())
+            wire_message.context[LOCAL_ECHO_SRC_KEY] = self._echo_source
         # a single logical emit puts exactly ONE message on the wire. The
         # namespace counterpart is bridged to listeners on the RECEIVE side
         # (see on_message) in every process, so both namespaces are delivered
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
-        self._send(message)
+        self._send(wire_message)
         # ... with TWO exceptions: the legacy intent twin and the legacy
         # namespace twin, which must reach a process whose bus-client is too
         # old to bridge anything. Both go after the canonical dispatch, so a
