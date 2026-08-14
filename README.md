@@ -84,6 +84,7 @@ Full developer docs live in [`docs/`](docs/):
 - [Common patterns](docs/patterns.md) — recipes for everyday use
 - [Testing](docs/testing.md) — `FakeBus`, isolating tests
 - [Migration from 1.x](docs/migration.md) — what moved out in 2.0
+- [Prerelease quirks](docs/prerelease-quirks.md) — what changed since the last stable release
 - [Development](docs/development.md) — repo layout, releases
 - [Glossary](docs/glossary.md) — terms
 

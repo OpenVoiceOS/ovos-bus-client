@@ -144,6 +144,29 @@ closes the gap immediately.
 Nothing here is normative: no specification mandates the suffixed topic. New
 code must produce and consume canonical topics only.
 
+## Wire twin for non-intent namespace topics
+
+RULE 1/RULE 2 above cover intent-dispatch topics specifically. The same
+send-side rule also applies to every other topic in `MIGRATION_MAP`: a
+canonical (`ovos.*`) emit puts a real second wire frame on the legacy
+spelling (RULE 1), marked with the `_namespace_compat_twin` context key. The
+reverse direction needs no second wire frame — a legacy emit is already
+bridged to local canonical listeners on receive (RULE 2, via
+`counterpart_topics()`).
+
+This is gated by an escape-hatch flag: `OVOS_BUS_WIRE_LEGACY_TWINS` (env
+var) or `websocket.wire_legacy_twins` (config key), default `True`. Turn it
+off only when no listener on the bus still needs the real legacy-spelled
+wire frame. The supported target for this twin is stable `ovos-bus-client`
+1.5.0 (pre-`spec-tools`) and anything older, which has no
+`NamespaceTranslator` and cannot bridge a canonical-only emit itself.
+
+A receiver running an alpha in the 2.2.0a1..2.8.2a1 window is not a
+supported configuration (only the latest prerelease is supported): it
+already bridges both spellings locally from the canonical frame alone, so
+it double-delivers every migrated topic once the wire twin is also on the
+wire. Upgrade any such receiver.
+
 ## Rollout
 
 1. **Now** — both flags on by default; every migrated event is on both
