@@ -457,6 +457,13 @@ class TestNarrowPredicate(unittest.TestCase):
 
     def test_one_emit_one_frame(self):
         for topic in self.NOT_INTENTS:
+            if topic == "skill-food.jarbas:stop":
+                # this one IS a migrated namespace topic (the computed
+                # <skill_id>:stop <-> <skill_id>.stop pair) -- it correctly
+                # gets a namespace twin now (see test_namespace_migration.py
+                # TestEmitSendsOnce.test_spec_stop_dispatch_is_twinned). What
+                # this test protects is that it is NOT twinned as an INTENT.
+                continue
             with self.subTest(topic=topic):
                 c = _client()
                 c.emit(Message(topic, {"a": 1}))

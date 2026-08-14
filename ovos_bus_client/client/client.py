@@ -61,6 +61,7 @@ from ovos_spec_tools.intent_topics import (canonical_intent_topic,
                                            intent_topic_counterpart,
                                            is_intent_topic,
                                            legacy_intent_topic)
+from ovos_spec_tools.messages import MIGRATION_MAP
 
 def _verbatim_copy(message: Message, topic: str) -> Message:
     """Retopic ``message`` onto ``topic``, carrying its context byte-for-byte.
@@ -82,6 +83,42 @@ def _verbatim_copy(message: Message, topic: str) -> Message:
 #: canonical spelling of this dispatch was sent alongside it, so a receiver
 #: that understands the bridge must not modernize the twin a second time.
 INTENT_COMPAT_TWIN_KEY = "_intent_compat_twin"
+
+# --- legacy namespace-migration compat (non-normative migration tooling) ---
+#
+# ``NamespaceTranslator.counterpart_topics()`` already tells a RECEIVING
+# client to also dispatch the counterpart of an arriving frame to LOCAL
+# listeners (see on_message below) -- that is enough for two processes that
+# both run a modern bus-client, because either one delivers both spellings
+# from a single wire frame. It is NOT enough for an old pre-spec-tools
+# client: it has no translator, so it only ever hears a msg_type it is
+# literally subscribed to, and a canonical-only emit never reaches its
+# legacy-spelled subscription.
+#
+# This mirrors RULE 1 of the intent-topic bridge above, generalised from
+# intent topics to every :data:`MIGRATION_MAP` topic:
+#
+#   RULE 1 (send)    -- every canonical (``ovos.*``) emit of a migrated topic
+#                       also goes out as a REAL second wire frame on its
+#                       legacy spelling, marked as a twin, payload reshaped
+#                       for the legacy side. An old satellite listening only
+#                       on the legacy topic runs a bus-client too old to
+#                       bridge anything, so only a real wire frame reaches it.
+#   RULE 2 (receive) -- a legacy emit is already bridged to local canonical
+#                       listeners by the existing receive-side
+#                       ``counterpart_topics()`` loop; that direction never
+#                       needed a second wire frame and still doesn't, so it is
+#                       untouched here.
+#
+# The marker is again the whole deduplication, but the namespace bridge has
+# an extra receive-side hazard the intent bridge does not: unlike a suffixed
+# intent topic, a legacy namespace topic (e.g. ``speak``) routinely DOES have
+# local listeners in a modern process too. So a marked twin is not just
+# skipped for re-modernization -- it must skip its OWN direct dispatch and
+# the receive-side counterpart loop entirely, because both spellings were
+# already delivered locally when the canonical frame that came before it was
+# received. See on_message.
+NAMESPACE_COMPAT_TWIN_KEY = "_namespace_compat_twin"
 
 # --- Layer-2 encryption at the transport edge (deprecated) -----------------
 #
@@ -349,21 +386,43 @@ class MessageBusClient:
         # forwards this frame's context to emit an UNRELATED suffixed intent would
         # otherwise brand that frame a twin and silently suppress its modernization.
         is_intent_twin = parsed_message.context.pop(INTENT_COMPAT_TWIN_KEY, False)
-        self.emitter.emit('message', message)
-        self.emitter.emit(parsed_message.msg_type, parsed_message)
-        # namespace migration bridge: also dispatch the counterpart topic(s) to
-        # LOCAL listeners so a handler on either namespace receives the event
-        # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
-        # convenience, not a second logical bus message: the counterpart is NOT put
-        # back on the wire and does NOT re-fire the 'message' firehose, so one
-        # logical emit yields exactly one captured message. The mirrored payload is
-        # reshaped into the counterpart topic's shape (identity for payload-compatible
-        # renames, a per-topic transform for shape-changing ones).
-        for topic in self._translator.counterpart_topics(parsed_message.msg_type):
-            translated = self._translator.translate_payload(
-                from_topic=parsed_message.msg_type, to_topic=topic,
-                data=parsed_message.data)
-            self.emitter.emit(topic, parsed_message.forward(topic, translated))
+        # RULE 1 dedup marker for the namespace bridge: pop it the same way,
+        # for the same reason (must not survive onto descendant frames via
+        # forward()/reply()).
+        is_namespace_twin = parsed_message.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
+        # The 'message' firehose is the raw wire-capture stream a modern
+        # receiver's wildcard/logging listeners see. A marked NAMESPACE twin
+        # is the SAME logical dispatch as the canonical frame that preceded
+        # it on the wire -- firing the firehose for it too would double-count
+        # every migrated topic for any modern listener bound to it, breaking
+        # the one-frame-per-logical-emit invariant conformance captures
+        # (ovoscope/busmon) rely on. An old client has no notion of "twin"
+        # and legitimately sees both raw frames off the wire -- that
+        # asymmetry is inherent to wire visibility, and is already true
+        # (and accepted) for the pre-existing intent-topic twin, which this
+        # gate deliberately leaves untouched to stay within this fix's scope.
+        if not is_namespace_twin:
+            self.emitter.emit('message', message)
+            self.emitter.emit(parsed_message.msg_type, parsed_message)
+            # namespace migration bridge: also dispatch the counterpart topic(s) to
+            # LOCAL listeners so a handler on either namespace receives the event
+            # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
+            # convenience, not a second logical bus message: the counterpart is NOT put
+            # back on the wire and does NOT re-fire the 'message' firehose, so one
+            # logical emit yields exactly one captured message. The mirrored payload is
+            # reshaped into the counterpart topic's shape (identity for payload-compatible
+            # renames, a per-topic transform for shape-changing ones).
+            for topic in self._translator.counterpart_topics(parsed_message.msg_type):
+                translated = self._translator.translate_payload(
+                    from_topic=parsed_message.msg_type, to_topic=topic,
+                    data=parsed_message.data)
+                self.emitter.emit(topic, parsed_message.forward(topic, translated))
+        # else: a marked namespace twin is a REAL second wire frame that only
+        # exists to reach an old pre-spec-tools client with no translator of
+        # its own. A modern receiver already got both spellings delivered
+        # locally from the canonical frame this twin follows (the loop
+        # above), so re-running direct dispatch and/or the counterpart loop
+        # for the twin itself would deliver both spellings a SECOND time.
         self._modernize_intent_topic(parsed_message, is_twin=is_intent_twin)
 
     # ------------------------------------------------------------------
@@ -429,11 +488,13 @@ class MessageBusClient:
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
         self._send(message)
-        # ... with ONE exception: the legacy intent twin, which must reach a
-        # process whose bus-client is too old to bridge anything. It goes after
-        # the canonical dispatch, so a receiver that bridges both spellings
-        # sees the canonical one first and drops the twin as the duplicate.
+        # ... with TWO exceptions: the legacy intent twin and the legacy
+        # namespace twin, which must reach a process whose bus-client is too
+        # old to bridge anything. Both go after the canonical dispatch, so a
+        # receiver that bridges both spellings sees the canonical one first
+        # and drops the twin as the duplicate.
         self._send_legacy_intent_twin(message)
+        self._send_legacy_namespace_twin(message)
 
     def _send_legacy_intent_twin(self, message: Message):
         """Put the ``.intent``-suffixed twin of an intent dispatch on the wire.
@@ -460,6 +521,42 @@ class MessageBusClient:
             return
         twin = _verbatim_copy(message, topic)
         twin.context[INTENT_COMPAT_TWIN_KEY] = True
+        self._send(twin)
+
+    def _send_legacy_namespace_twin(self, message: Message):
+        """Put the legacy-spelled twin of a canonical namespace emit on the wire.
+
+        RULE 1 of the namespace bridge (see the module comment above
+        :data:`NAMESPACE_COMPAT_TWIN_KEY`). Only the forward direction --
+        canonical (``ovos.*``) emit gets a real legacy twin -- is handled
+        here; a legacy emit's canonical counterpart is already delivered to
+        local listeners on the RECEIVE side (see on_message), exactly as the
+        intent bridge's RULE 2 handles its own reverse direction, so it is
+        not twinned onto the wire a second time.
+
+        An already-legacy emit, or a topic outside :data:`MIGRATION_MAP` /
+        the computed ``<skill_id>:stop`` pattern, produces no counterpart and
+        is left untouched -- including intent topics, which are twinned by
+        :meth:`_send_legacy_intent_twin` instead.
+        """
+        if not self._translator.emit_legacy:
+            return
+        if message.msg_type in MIGRATION_MAP:
+            # already a legacy-spelled emit -- nothing to twin forward with.
+            return
+        if is_intent_topic(message.msg_type):
+            return
+        counterparts = self._translator.counterpart_topics(message.msg_type)
+        if not counterparts:
+            return
+        topic = counterparts[0]
+        if topic == message.msg_type:
+            return
+        payload = self._translator.translate_payload(
+            from_topic=message.msg_type, to_topic=topic, data=message.data)
+        twin = _verbatim_copy(message, topic)
+        twin.data = payload
+        twin.context[NAMESPACE_COMPAT_TWIN_KEY] = True
         self._send(twin)
 
     def _send(self, message: Message):
