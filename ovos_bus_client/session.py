@@ -1,12 +1,10 @@
 import enum
 import time
-import warnings
 from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
 
 from ovos_config.config import Configuration
-from ovos_config.locale import get_default_lang
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang, SpecMessage
 from ovos_spec_tools.context import resolve_key
@@ -27,23 +25,13 @@ _NEXT_MAJOR_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 def _get_default_lang() -> str:
     """Read the runtime-configured default lang.
 
-    This is a hot path (every ``Session``/``Message`` without an explicit
-    lang goes through it), so it must not spam a DeprecationWarning on every
-    call. ``ovos_config.locale.get_default_lang()`` is deprecated in favor of
-    reading ``Configuration()`` directly -- but only in ovos-config releases
-    where the two are equivalent. Older ovos-config releases (still allowed
-    by this package's ``ovos-config<3.0.0`` floor) keep a private
-    ``_lang`` module-global set by ``setup_locale()``/``set_default_lang()``
-    that ``Configuration()`` does NOT see, and in those releases
-    ``get_default_lang()`` isn't deprecated at all. There is no public
-    accessor that is cache-aware on both release lines, so we keep calling
-    the real (possibly deprecated) function -- preserving behavior on every
-    supported ovos-config version -- and just swallow its own warning here.
+    This is a hot path: every ``Session``/``Message`` without an explicit
+    lang goes through it, including the module-level default session built
+    at import time. Reading ``Configuration()`` directly is what ovos-config
+    has recommended since ``get_default_lang()`` was deprecated in
+    ovos-config 1.0.0.
     """
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=DeprecationWarning,
-                                message=".*ovos_config.Configuration.*")
-        return get_default_lang()
+    return Configuration().get("lang", "en-us")
 
 # Bidirectional-wire back-compat: the canonical parent applies SESSION-1 §2.1
 # omit-when-empty semantics and stores an *empty* collection field as ``None``.
