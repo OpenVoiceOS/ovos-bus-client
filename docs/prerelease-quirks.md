@@ -18,6 +18,23 @@ quirks log starts.
 no-op: no error, the event just never updated. Fixed by emitting the
 spelling the scheduler actually listens on.
 
+`close()` used to only close the currently-active websocket object. A
+client caught inside `on_error()`'s reconnect backoff (sleep, recreate the
+websocket, recurse into `run_forever()` -- all on the same thread
+`run_in_thread()` started) ignored that and reconnected again after
+`close()` had already returned, so the receiver thread could outlive
+`close()` indefinitely instead of stopping within a bounded join. `close()`
+now sets a `_closing` flag that the reconnect path checks before sleeping,
+before recreating the websocket, and before recursing, so a client mid-
+backoff actually stops.
+
+The flag is initialised in `__init__` and reset in `run_in_thread()`
+BEFORE the new thread is started, not inside `run_forever()`'s body: a
+`close()` landing between `run_in_thread()` returning and the thread
+actually reaching `run_forever()` would otherwise be undone the instant
+the thread got there, and the client would reconnect right after being
+told to close.
+
 ## 2.8.4a3
 
 Importing `ovos_bus_client.session` no longer emits an ovos-config

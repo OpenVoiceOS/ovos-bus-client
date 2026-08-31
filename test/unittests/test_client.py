@@ -54,6 +54,91 @@ class TestMessageBusClient(unittest.TestCase):
         # TODO
         pass
 
+    def test_close_stops_reconnecting_client(self):
+        """on_error()'s reconnect path (sleep -> recreate websocket ->
+        recurse into run_forever(), all on the receiver thread) must be
+        stopped by close(), even while it is mid-backoff. Before the
+        ``_closing`` flag, close() only closed the momentarily-active
+        websocket object and had no effect on the recursion, so the
+        receiver thread survived close() indefinitely."""
+
+        class FlakyWSApp:
+            """Fails to connect every time, driving on_error() in a loop."""
+
+            def __init__(self, on_error=None, **_kwargs):
+                self.keep_running = True
+                self._on_error = on_error
+
+            def run_forever(self, *_args, **_kwargs):
+                self._on_error(ConnectionRefusedError())
+
+            def close(self):
+                self.keep_running = False
+
+        mc = MessageBusClient()
+        mc.retry = 0  # keep the backoff sleep negligible
+        mc.create_client = lambda: FlakyWSApp(on_error=mc.on_error)
+        mc.client = mc.create_client()
+
+        t = mc.run_in_thread()
+        import time as _time
+        _time.sleep(0.05)  # let it spin through on_error a few times
+        mc.close()
+        t.join(2)
+        self.assertFalse(t.is_alive())
+
+    def test_close_before_thread_starts_prevents_reconnect(self):
+        """A close() landing between run_in_thread() returning and the
+        thread actually reaching run_forever() must not be undone. The
+        ``_closing`` reset must happen in run_in_thread() BEFORE the thread
+        starts (or in __init__), never inside run_forever()'s body: resetting
+        it there would clear a close() that already landed the instant the
+        thread got there, and the client would reconnect right after being
+        told to close."""
+
+        calls = []
+
+        class FlakyWSApp:
+            def __init__(self, on_error=None, **_kwargs):
+                self.keep_running = True
+                self._on_error = on_error
+
+            def run_forever(self, *_args, **_kwargs):
+                calls.append(1)
+                self._on_error(ConnectionRefusedError())
+
+            def close(self):
+                self.keep_running = False
+
+        mc = MessageBusClient()
+        mc.retry = 0
+        mc.create_client = lambda: FlakyWSApp(on_error=mc.on_error)
+        mc.client = mc.create_client()
+
+        captured = {}
+
+        def fake_thread(target=None, **_kwargs):
+            captured['target'] = target
+            fake_t = Mock()
+            fake_t.daemon = False
+            fake_t.start = Mock()  # intentionally a no-op: the thread body
+            # is invoked manually below, AFTER close(), to simulate a
+            # thread that has not yet reached run_forever() when close()
+            # lands.
+            fake_t.is_alive = Mock(return_value=False)
+            return fake_t
+
+        with patch('ovos_bus_client.client.client.Thread', side_effect=fake_thread):
+            mc.run_in_thread()  # resets _closing=False, "starts" the fake thread
+            mc.close()          # close() lands before the thread body ever runs
+            captured['target']()  # the thread finally reaches run_forever()
+
+        # run_forever() must have made exactly one connection attempt and
+        # on_error() must not have slept/recreated/reconnected, because
+        # _closing was already True by the time it got there.
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(mc._closing)
+
     def test_on_message(self):
         # TODO
         pass

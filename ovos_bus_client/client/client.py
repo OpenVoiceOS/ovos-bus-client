@@ -265,6 +265,13 @@ class MessageBusClient:
         self.retry = 5
         self.connected_event = Event()
         self.started_running = False
+        # Set by close() to short-circuit the reconnect-backoff recursion in
+        # on_error(): that handler sleeps, recreates the websocket and
+        # recurses into run_forever() on the SAME thread run_in_thread()
+        # started, so close()ing only the currently-active websocket object
+        # does not stop a client that is mid-backoff -- it just reconnects
+        # again after close() has already returned control to the caller.
+        self._closing = False
         self.wrapped_funcs = {}
         # namespace translation on emit (orthogonal, both ON by default during
         # the migration window so every migrated event travels on BOTH the
@@ -370,12 +377,19 @@ class MessageBusClient:
         except Exception as e:
             LOG.error(f'Exception closing websocket at {self.client.url}: {e}')
 
+        if self._closing:
+            return
+
         LOG.warning("Message Bus Client "
                     "will reconnect in %.1f seconds.", self.retry)
         time.sleep(self.retry)
+        if self._closing:
+            return
         self.retry = min(self.retry * 2, 60)
         try:
             self.emitter.emit('reconnecting')
+            if self._closing:
+                return
             self.client = self.create_client()
             self.run_forever()
         except WebSocketException:
@@ -950,12 +964,25 @@ class MessageBusClient:
     def close(self):
         """
         Close the websocket connection.
+
+        Also stops a client that is currently inside on_error()'s
+        reconnect-backoff (sleep -> recreate websocket -> recurse into
+        run_forever(), all on the same thread): without this flag that
+        recursion is unaffected by closing the momentarily-active websocket
+        object, and the receiver thread survives close() indefinitely.
         """
+        self._closing = True
         self.client.close()
         self.connected_event.clear()
 
     def run_in_thread(self):
         """Launches the run_forever in a separate daemon thread."""
+        # Reset BEFORE the thread starts, not inside run_forever(): if the
+        # reset happened in run_forever() a close() landing between the
+        # thread's creation and it actually reaching run_forever() would be
+        # undone the instant the thread got there, and the client would
+        # reconnect right after being told to close.
+        self._closing = False
         t = Thread(target=self.run_forever)
         t.daemon = True
         t.start()
