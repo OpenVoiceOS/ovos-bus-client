@@ -1,11 +1,17 @@
 # Changelog
 
+## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
 
 **Merged pull requests:**
 
+- docs: add AGENTS.md with the conventions for coding agents [\#296](https://github.com/OpenVoiceOS/ovos-bus-client/pull/296) ([JarbasAl](https://github.com/JarbasAl))
+- fix: make close\(\) stop a client that is reconnecting [\#295](https://github.com/OpenVoiceOS/ovos-bus-client/pull/295) ([JarbasAl](https://github.com/JarbasAl))
 - docs: cross-link the technical manual [\#273](https://github.com/OpenVoiceOS/ovos-bus-client/pull/273) ([JarbasAl](https://github.com/JarbasAl))
 - fix: emit mycroft.scheduler.update\_event so update\_scheduled\_event reaches the scheduler [\#222](https://github.com/OpenVoiceOS/ovos-bus-client/pull/222) ([JarbasAl](https://github.com/JarbasAl))
 
@@ -442,17 +448,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.2a1...1.3.2)
 
-**Merged pull requests:**
-
-- Release 1.3.2a1 [\#160](https://github.com/OpenVoiceOS/ovos-bus-client/pull/160) ([github-actions[bot]](https://github.com/apps/github-actions))
-
 ## [1.3.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.2a1) (2025-01-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.1...1.3.2a1)
-
-**Merged pull requests:**
-
-- chore: add warnings [\#159](https://github.com/OpenVoiceOS/ovos-bus-client/pull/159) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.3.1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.1) (2024-12-29)
 
