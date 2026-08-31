@@ -35,6 +35,16 @@ actually reaching `run_forever()` would otherwise be undone the instant
 the thread got there, and the client would reconnect right after being
 told to close.
 
+`AsyncMessageBusClient.emit()` now puts the same wire frames as
+`MessageBusClient.emit()` for the same `Message`, including the legacy
+intent-topic and namespace twins (`OVOS_BUS_EMIT_LEGACY` /
+`OVOS_BUS_WIRE_LEGACY_TWINS` still gate them the same way on both clients).
+Earlier alphas of the async client only sent the canonical frame, so a
+producer that switched onto it silently stopped emitting the V0-compat
+twins. `AsyncMessageBusClient` also gained a `connected` property matching
+`MessageBusClient`'s connection-liveness semantics, for consumers that check
+`getattr(bus, "connected", None)` against either client.
+
 ## 2.8.4a3
 
 Importing `ovos_bus_client.session` no longer emits an ovos-config

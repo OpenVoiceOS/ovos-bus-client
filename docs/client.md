@@ -219,3 +219,16 @@ worked example of a subclass that overrides `emit`, `on_open`, and
 If you find yourself reaching for deeper hooks, ask whether a transport plugin
 is what you actually want — that is what `hivemind-ovos-agent-plugin` and the
 GUI client are doing structurally.
+
+## Async alternative
+
+`MessageBusClient` is synchronous. For an asyncio-native client with the same
+shape, see [`AsyncMessageBusClient`](async_client.md). It's an optional extra:
+
+```bash
+pip install ovos-bus-client[async]
+```
+
+Use it when your application is already async (FastAPI, aiohttp, Discord bots,
+etc.) and you want `await bus.emit(...)`, `await bus.wait_for_response(...)`,
+`async for msg in collector` instead of threads and blocking calls.

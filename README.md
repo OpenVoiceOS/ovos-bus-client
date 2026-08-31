@@ -38,6 +38,38 @@ client.on('speak', on_speak)
 client.run_forever()
 ```
 
+### Async alternative
+
+For asyncio-native code, install the optional `[async]` extra and use
+`AsyncMessageBusClient`:
+
+```bash
+pip install ovos-bus-client[async]
+```
+
+```python
+import asyncio
+from ovos_bus_client import Message
+from ovos_bus_client.client import AsyncMessageBusClient
+
+async def main():
+    bus = AsyncMessageBusClient()
+    await bus.connect()
+    bus.on("speak", lambda m: print("OVOS said:", m.data.get("utterance")))
+
+    await bus.emit(Message("speak", {"utterance": "hello from asyncio"}))
+    reply = await bus.wait_for_response(
+        Message("ovos.languages.stt"), timeout=3.0,
+    )
+    await bus.close()
+
+asyncio.run(main())
+```
+
+Both clients share the same `Message`, `Session`, and event-emitter shape;
+pick whichever matches the rest of your application. See
+[`docs/async_client.md`](docs/async_client.md) for the full async reference.
+
 ## CLI tools
 
 | Command | Description |
@@ -76,6 +108,7 @@ Full developer docs live in [`docs/`](docs/):
 - [Core concepts](docs/concepts.md) — bus model and the security boundary
 - [Messages](docs/messages.md) — `Message`, `GUIMessage`, reply helpers
 - [The client](docs/client.md) — `MessageBusClient` API in depth
+- [The async client](docs/async_client.md) — `AsyncMessageBusClient` (`pip install ovos-bus-client[async]`)
 - [Configuration](docs/configuration.md) — host, port, route, ssl
 - [Sessions](docs/session.md) — `Session`, `SessionManager`, `IntentContextManager`
 - [Waiters and collectors](docs/waiter_and_collector.md) — request/response and multi-reply patterns

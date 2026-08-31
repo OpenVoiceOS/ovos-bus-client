@@ -12,6 +12,7 @@ agent backends, or anything else that talks to an OVOS messagebus.
 2. [Core concepts](concepts.md) — the OVOS bus model, message anatomy, who emits what.
 3. [Messages](messages.md) — `Message`, `GUIMessage`, `reply`/`forward`/`response`, helpers.
 4. [The client](client.md) — `MessageBusClient`: connect, threading, handlers, lifecycle.
+4b. [Async client](async_client.md) — `AsyncMessageBusClient`: same shape, but `async/await`-native (optional `[async]` extra).
 5. [Configuration](configuration.md) — `load_message_bus_config`, env knobs, SSL, custom routes.
 6. [Sessions](session.md) — `Session`, `SessionManager`, `IntentContextManager`.
 

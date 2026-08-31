@@ -32,7 +32,9 @@ test = [
     "pytest-cov",
     "langcodes",
     "language_data",
+    "websockets>=10.0",
 ]
+async = ["websockets>=10.0"]
 
 [project.urls]
 Homepage = "https://github.com/OpenVoiceOS/ovos-bus-client"
