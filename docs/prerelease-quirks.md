@@ -9,6 +9,13 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.8.4a3
+
+Importing `ovos_bus_client.session` no longer emits an ovos-config
+deprecation notice. The module-level default `Session` resolves its default
+lang by reading `Configuration()` directly instead of calling the
+deprecated `get_default_lang()`. The `ovos-config` floor is now `1.0.0`.
+
 ## 2.8.4a1
 
 Added an escape hatch for the namespace wire twin added in 2.8.3a1:
