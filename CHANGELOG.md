@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.4a2...2.8.5a1)
+
+**Merged pull requests:**
+
+- fix: avoid calling deprecated get\_default\_lang\(\) at session import time [\#293](https://github.com/OpenVoiceOS/ovos-bus-client/pull/293) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.8.4a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.4a2) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.4a1...2.8.4a2)
@@ -456,10 +464,6 @@
 ## [1.3.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0) (2024-12-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.0a1...1.3.0)
-
-**Merged pull requests:**
-
-- Release 1.3.0a1 [\#156](https://github.com/OpenVoiceOS/ovos-bus-client/pull/156) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0a1) (2024-12-28)
 
