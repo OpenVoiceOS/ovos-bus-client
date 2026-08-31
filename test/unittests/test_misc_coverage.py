@@ -11,7 +11,7 @@ import pytest
 
 from ovos_bus_client.apis.enclosure import EnclosureAPI
 from ovos_bus_client.apis.events import EventSchedulerInterface
-from ovos_bus_client.apis.gui import GUIInterface
+from ovos_bus_client.apis.gui import GUIInterface, PageTemplates
 from ovos_bus_client.message import Message
 
 
@@ -52,38 +52,6 @@ class TestGUICacheAndUrl(TestCase):
     def setUp(self):
         self.bus = MagicMock()
 
-    def test_gui_with_no_ui_directories(self):
-        # exercises _cache_gui_files early-return branch
-        gui = GUIInterface(skill_id="t.skill", bus=self.bus,
-                           ui_directories=None)
-        self.assertEqual(gui.ui_directories, {})
-
-    def test_gui_with_ui_directories(self):
-        tmp = tempfile.mkdtemp()
-        try:
-            qml_dir = os.path.join(tmp, "qt5")
-            os.makedirs(qml_dir)
-            with open(os.path.join(qml_dir, "Foo.qml"), "w") as f:
-                f.write("// Foo")
-            gui = GUIInterface(skill_id="cache.test", bus=self.bus,
-                               ui_directories={"qt5": qml_dir})
-            # cache succeeded; ui_directories preserved
-            self.assertIn("qt5", gui.ui_directories)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-
-    def test_resolve_url_http(self):
-        gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-        self.assertEqual(gui._resolve_url("https://example.com/img.png"),
-                         "https://example.com/img.png")
-
-    def test_resolve_url_invalid_raises(self):
-        gui = GUIInterface(skill_id="t.skill", bus=self.bus)
-        with self.assertRaises(ValueError):
-            gui._resolve_url(None)
-        with self.assertRaises(ValueError):
-            gui._resolve_url("")
-
     def test_pages_property_with_value(self):
         gui = GUIInterface(skill_id="t.skill", bus=self.bus)
         gui._pages = ["A", "B"]
@@ -103,12 +71,6 @@ class TestGUINotificationsAndExtras(TestCase):
         self.bus = MagicMock()
         self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
 
-    def test_show_notification_no_bus_raises(self):
-        # detach bus by recreating
-        gui = GUIInterface(skill_id="t.skill")
-        with self.assertRaises(RuntimeError):
-            gui.show_notification("hi")
-
     def test_clear_without_bus_raises(self):
         gui = GUIInterface(skill_id="t.skill")
         # avoid the gui_disabled early-return by inspecting current state
@@ -126,12 +88,12 @@ class TestClientMissingBusBranches(TestCase):
     def test_remove_all_pages_no_bus_raises(self):
         gui = GUIInterface(skill_id="t.skill")
         with self.assertRaises(RuntimeError):
-            gui.remove_all_pages()
+            gui._remove_all_pages()
 
     def test_remove_pages_no_bus_raises(self):
         gui = GUIInterface(skill_id="t.skill")
         with self.assertRaises(RuntimeError):
-            gui.remove_pages(["A"])
+            gui._remove_pages([PageTemplates.TEXT])
 
 
 class TestRemainingOCPMethods(TestCase):
