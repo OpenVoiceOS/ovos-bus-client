@@ -112,7 +112,7 @@ class TestUpdateAndCancel(TestCase):
     def test_update_scheduled_event(self):
         self.api.update_scheduled_event("t1", data={"new": True})
         emitted = self.bus.emit.call_args[0][0]
-        self.assertEqual(emitted.msg_type, "mycroft.schedule.update_event")
+        self.assertEqual(emitted.msg_type, "mycroft.scheduler.update_event")
         self.assertEqual(emitted.data["event"], "my.skill:t1")
         self.assertEqual(emitted.data["data"], {"new": True})
 
