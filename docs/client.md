@@ -138,11 +138,17 @@ details and the multi-handler `collect_responses` flow.
 |---|---|
 | `bus.close()` | Initiate disconnect; safe to call multiple times (`client.py:365`). |
 | Socket dropped by server | `on_close` clears `connected_event`. `run_forever` returns. |
-| `on_error` | Logs the exception; the websocket-client library handles reconnection separately. |
+| `on_error` | Closes the client, waits, and reconnects itself (see below). |
 
-`MessageBusClient` does **not** auto-reconnect on disconnect by itself. If you
-need a long-lived resilient client, wrap construction in a retry loop or use a
-supervisor (systemd, etc.).
+`MessageBusClient` auto-reconnects on any socket error (`client.py:202-246`,
+`on_error`): it closes the client, sleeps `self.retry` seconds, then calls
+`create_client()` again. The retry delay starts at 5 seconds, doubles on each
+further failure up to a 60-second cap, and resets to 5 seconds after a
+successful reconnect. You do not need to wrap construction in your own retry
+loop for this. See the manual's
+[Bus Service: reconnect behavior](https://tigregotico.github.io/ovos-technical-manual/bus-service/#bus-restart-reconnect-behavior)
+for the full backoff details, including what happens to in-flight calls and
+messages sent during an outage.
 
 ## `GUIWebsocketClient` — `client.py:380`
 

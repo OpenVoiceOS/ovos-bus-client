@@ -5,42 +5,13 @@ What the OVOS bus actually is, what travels over it, and which pieces live in
 
 ## The bus is OVOS's nervous system — and it is private
 
-Before anything else: **the OVOS bus is the nervous system of the assistant**.
-Every component — STT, intent parsing, skills, TTS, audio playback, GUI —
-reads and writes on it. It is how OVOS thinks.
+The OVOS bus is the nervous system of the assistant: every component reads and
+writes on it, and it has no authentication or authorisation. Treat it as
+private to the device. Never expose the bus port outside the device; use
+[HiveMind](https://github.com/JarbasHiveMind) for remote access instead.
 
-That has one critical consequence:
-
-> **The bus has no authentication and no authorisation. Every connected
-> client has full access to every message. Treat it as private to the
-> device.**
-
-Anything that can speak on the bus can:
-
-- Issue any natural-language command (`recognizer_loop:utterance`).
-- Speak arbitrary text out of the speakers (`speak`).
-- Start and stop audio playback, navigate menus, change settings.
-- Activate or deactivate any skill, override any persona.
-- Read every other client's messages, including transcribed user speech.
-
-That is by design — the components inside an OVOS install have to trust each
-other. It is also why you do **not** expose the bus port outside the device:
-
-- **Bind to `127.0.0.1`**, never `0.0.0.0`. The default config already does this.
-- **Never port-forward** the bus across NAT.
-- **Never put the bus behind a public reverse proxy.**
-- **Never share bus credentials** — there are no credentials, so any "sharing"
-  is "give them full root over the assistant."
-
-For anything that needs **remote access** to an OVOS device — a satellite, a
-phone app, a third-party integration — use [HiveMind](https://github.com/JarbasHiveMind).
-HiveMind sits in front of the bus, terminates encrypted client connections,
-authenticates by `api_key`, applies ACLs and policy plugins, and forwards
-only what the policy allows onto the bus. That is the right tool for external
-clients, including ones running on the same LAN.
-
-You would not give a stranger a direct connection to your brainstem. Do not
-give a stranger a direct connection to the OVOS bus.
+See the manual's [Bus Service](https://tigregotico.github.io/ovos-technical-manual/bus-service/)
+page for the full security callout and the shipped `127.0.0.1` default.
 
 ## The bus is a JSON-over-WebSocket pub/sub
 
@@ -64,16 +35,8 @@ for tests.
 
 ## Anatomy of a message
 
-Every bus message is a triple:
-
-| Field      | Type   | Meaning                                                     |
-|------------|--------|-------------------------------------------------------------|
-| `msg_type` | `str`  | Event name. Dot-delimited convention: `mycroft.mic.listen`. |
-| `data`     | `dict` | The payload. Schema is whatever the producer chose.         |
-| `context`  | `dict` | Routing/metadata: `session`, `source`, `destination`, etc.  |
-
-The `Message` class wraps these and is defined at
-`ovos_bus_client/message.py:32`.
+Every bus message is a `{msg_type/type, data, context}` triple, wrapped by the
+`Message` class (`ovos_bus_client/message.py:32`):
 
 ```python
 from ovos_bus_client import Message
@@ -85,12 +48,8 @@ m = Message(
 )
 ```
 
-On the wire the message is JSON:
-
-```json
-{"type": "speak", "data": {"utterance": "hi", "lang": "en-us"},
- "context": {"source": "demo", "destination": "audio"}}
-```
+See the manual's [Bus Service: Message Structure](https://tigregotico.github.io/ovos-technical-manual/bus-service/#message-structure)
+page for the field table, the wire JSON example, and the colon-vs-dot topic-naming note.
 
 ## Message types are by convention, not declaration
 
