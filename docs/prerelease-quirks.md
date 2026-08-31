@@ -9,6 +9,15 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.8.5a2
+
+`EventSchedulerInterface.update_scheduled_event()` emitted
+`mycroft.schedule.update_event`, but the scheduler
+(`ovos_bus_client.util.scheduler.EventScheduler`) only ever listened on
+`mycroft.scheduler.update_event`. The topic mismatch made the call a silent
+no-op: no error, the event just never updated. Fixed by emitting the
+spelling the scheduler actually listens on.
+
 ## 2.8.4a3
 
 Importing `ovos_bus_client.session` no longer emits an ovos-config
