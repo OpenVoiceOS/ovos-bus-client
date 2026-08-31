@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
+
+**Merged pull requests:**
+
+- docs: cross-link the technical manual [\#273](https://github.com/OpenVoiceOS/ovos-bus-client/pull/273) ([JarbasAl](https://github.com/JarbasAl))
+- fix: emit mycroft.scheduler.update\_event so update\_scheduled\_event reaches the scheduler [\#222](https://github.com/OpenVoiceOS/ovos-bus-client/pull/222) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.8.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a1) (2026-08-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.4a2...2.8.5a1)
@@ -449,17 +458,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.1a1...1.3.1)
 
-**Merged pull requests:**
-
-- Release 1.3.1a1 [\#158](https://github.com/OpenVoiceOS/ovos-bus-client/pull/158) ([github-actions[bot]](https://github.com/apps/github-actions))
-
 ## [1.3.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.1a1) (2024-12-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.0...1.3.1a1)
-
-**Merged pull requests:**
-
-- fix: missing hivemind entrypoint in setup.py [\#157](https://github.com/OpenVoiceOS/ovos-bus-client/pull/157) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.3.0](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.0) (2024-12-28)
 
