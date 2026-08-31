@@ -237,6 +237,57 @@ def _maybe_decrypt(raw):
     return raw
 
 
+def _compute_legacy_intent_twin(message: Message,
+                                translator: NamespaceTranslator) -> Optional[Message]:
+    """Compute the ``.intent``-suffixed twin of an intent dispatch, or
+    ``None`` if this message doesn't need one.
+
+    Pure helper shared by :meth:`MessageBusClient._send_legacy_intent_twin`
+    and its async-client equivalent so both wire clients twin identically.
+    """
+    if not translator.emit_legacy:
+        return None
+    if not is_intent_topic(message.msg_type):
+        return None
+    topic = legacy_intent_topic(message.msg_type)
+    if topic == message.msg_type:
+        return None
+    twin = _verbatim_copy(message, topic)
+    twin.context[INTENT_COMPAT_TWIN_KEY] = True
+    return twin
+
+
+def _compute_legacy_namespace_twin(message: Message,
+                                   translator: NamespaceTranslator,
+                                   wire_legacy_twins: bool) -> Optional[Message]:
+    """Compute the legacy-spelled twin of a canonical namespace emit, or
+    ``None`` if this message doesn't need one.
+
+    Pure helper shared by :meth:`MessageBusClient._send_legacy_namespace_twin`
+    and its async-client equivalent so both wire clients twin identically.
+    """
+    if not translator.emit_legacy:
+        return None
+    if not wire_legacy_twins:
+        return None
+    if message.msg_type in MIGRATION_MAP:
+        return None
+    if is_intent_topic(message.msg_type):
+        return None
+    counterparts = translator.counterpart_topics(message.msg_type)
+    if not counterparts:
+        return None
+    topic = counterparts[0]
+    if topic == message.msg_type:
+        return None
+    payload = translator.translate_payload(
+        from_topic=message.msg_type, to_topic=topic, data=message.data)
+    twin = _verbatim_copy(message, topic)
+    twin.data = payload
+    twin.context[NAMESPACE_COMPAT_TWIN_KEY] = True
+    return twin
+
+
 class MessageBusClient:
     """The Mycroft Messagebus Client
 
@@ -559,16 +610,9 @@ class MessageBusClient:
         a few ignored bytes. An already-suffixed dispatch is never twinned, so
         the mirror cannot cascade.
         """
-        if not self._translator.emit_legacy:
-            return
-        if not is_intent_topic(message.msg_type):
-            return
-        topic = legacy_intent_topic(message.msg_type)
-        if topic == message.msg_type:
-            return
-        twin = _verbatim_copy(message, topic)
-        twin.context[INTENT_COMPAT_TWIN_KEY] = True
-        self._send(twin)
+        twin = _compute_legacy_intent_twin(message, self._translator)
+        if twin is not None:
+            self._send(twin)
 
     def _send_legacy_namespace_twin(self, message: Message):
         """Put the legacy-spelled twin of a canonical namespace emit on the wire.
@@ -586,31 +630,10 @@ class MessageBusClient:
         is left untouched -- including intent topics, which are twinned by
         :meth:`_send_legacy_intent_twin` instead.
         """
-        if not self._translator.emit_legacy:
-            return
-        if not self._wire_legacy_twins:
-            # escape hatch -- see OVOS_BUS_WIRE_LEGACY_TWINS. Default ON, for
-            # stable (<2.x) pre-spec-tools wire listeners, which are the
-            # supported compat target. Only flip this off when the operator
-            # knows no such listener is on the bus.
-            return
-        if message.msg_type in MIGRATION_MAP:
-            # already a legacy-spelled emit -- nothing to twin forward with.
-            return
-        if is_intent_topic(message.msg_type):
-            return
-        counterparts = self._translator.counterpart_topics(message.msg_type)
-        if not counterparts:
-            return
-        topic = counterparts[0]
-        if topic == message.msg_type:
-            return
-        payload = self._translator.translate_payload(
-            from_topic=message.msg_type, to_topic=topic, data=message.data)
-        twin = _verbatim_copy(message, topic)
-        twin.data = payload
-        twin.context[NAMESPACE_COMPAT_TWIN_KEY] = True
-        self._send(twin)
+        twin = _compute_legacy_namespace_twin(
+            message, self._translator, self._wire_legacy_twins)
+        if twin is not None:
+            self._send(twin)
 
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
