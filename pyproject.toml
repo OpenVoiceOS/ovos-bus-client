@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "ovos-config>=1.0.0,<3.0.0",
+    "ovos-config>=1.0.0,<4.0.0",
     "ovos-utils>=0.8.2,<1.0.0",
     "ovos-spec-tools[langcodes]>=1.7.0a1",  # narrowed is_intent_topic + intent-pair mirror guard
     "websocket-client>=0.54.0",
