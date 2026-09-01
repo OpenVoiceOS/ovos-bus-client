@@ -1,6 +1,8 @@
 import time
+import warnings
 from datetime import datetime, timedelta
 from typing import Callable, Optional, Union
+from zoneinfo import ZoneInfo
 
 from ovos_utils.events import EventContainer, create_basic_wrapper
 from ovos_bus_client.message import Message, dig_for_message
@@ -8,9 +10,38 @@ from ovos_utils.log import LOG
 from ovos_config.locale import get_config_tz
 from ovos_utils.time import now_local
 
+from ovos_bus_client.version import VERSION_MAJOR
+
+#: the legacy ``mycroft.scheduler.*`` wrappers go with the wire topics
+LEGACY_REMOVAL_VERSION = f"{VERSION_MAJOR + 1}.0.0"
+
+
+class SchedulerError(RuntimeError):
+    """A scheduler request the service refused, or did not answer."""
+
+    def __init__(self, error: str, reason: str):
+        super().__init__(f"{error}: {reason}")
+        self.error = error
+        self.reason = reason
+
+
+def _legacy_notice(method: str, replacement: str):
+    warnings.warn(
+        f"EventSchedulerInterface.{method} speaks the pre-specification "
+        f"mycroft.scheduler.* protocol; use {replacement} instead. It will "
+        f"be removed in ovos-bus-client {LEGACY_REMOVAL_VERSION}.",
+        DeprecationWarning, stacklevel=3)
+
 
 class EventSchedulerInterface:
-    """Interface for accessing the event scheduler over the message bus."""
+    """Interface for accessing the event scheduler over the message bus.
+
+    The SCHEDULER-1 methods :meth:`schedule`, :meth:`cancel`, :meth:`get`
+    and :meth:`list` send a request and wait for its answer, raising
+    :class:`SchedulerError` when the scheduler refuses. The older
+    ``*_scheduled_event`` methods speak the legacy protocol and are kept
+    for one stable cycle.
+    """
 
     def __init__(self, bus=None, skill_id=None):
         self.skill_id = skill_id or self.__class__.__name__.lower()
@@ -119,6 +150,7 @@ class EventSchedulerInterface:
         @param name: Event name, must be unique in the context of this object
         @param context: Message context to send to `handler`
         """
+        _legacy_notice("schedule_event", "schedule()")
         self._schedule_event(handler, when, data, name, context=context)
 
     def schedule_repeating_event(self,
@@ -138,6 +170,7 @@ class EventSchedulerInterface:
         @param interval:  time in seconds between calls
         @param context: Message context to send to `handler`
         """
+        _legacy_notice("schedule_repeating_event", "schedule()")
         # Ensure name is defined to avoid re-scheduling
         name = name or self.skill_id + handler.__name__
 
@@ -160,6 +193,7 @@ class EventSchedulerInterface:
             name (str): reference name of event (from original scheduling)
             data (dict): new data to update event with
         """
+        _legacy_notice("update_scheduled_event", "schedule()")
         data = {
             'event': self._create_unique_name(name),
             'data': data or {}
@@ -174,6 +208,7 @@ class EventSchedulerInterface:
         Args:
             name (str): reference name of event (from original scheduling)
         """
+        _legacy_notice("cancel_scheduled_event", "cancel()")
         unique_name = self._create_unique_name(name)
         data = {'event': unique_name}
         if name in self.scheduled_repeats:
@@ -195,6 +230,7 @@ class EventSchedulerInterface:
         Raises:
             Exception: Raised if event is not found
         """
+        _legacy_notice("get_scheduled_event_status", "get()")
         event_name = self._create_unique_name(name)
         data = {'name': event_name}
 
@@ -203,8 +239,8 @@ class EventSchedulerInterface:
         msg = message.forward('mycroft.scheduler.get_event', data)
         status = self.bus.wait_for_response(msg, reply_type=reply_name)
 
-        if status:
-            event_time = int(status.data[0][0])
+        if status and status.data.get("schedule"):
+            event_time = int(status.data["schedule"][0])
             current_time = int(time.time())
             time_left_in_seconds = event_time - current_time
             LOG.info(time_left_in_seconds)
@@ -227,3 +263,102 @@ class EventSchedulerInterface:
         """
         self.cancel_all_repeating_events()
         self.events.clear()
+
+    # --- SCHEDULER-1 -------------------------------------------------------
+
+    def _request(self, topic: str, data: dict, timeout: float = 3.0) -> dict:
+        """Send a request and return the answer, raising when refused."""
+        message = self._get_source_message()
+        response = self.bus.wait_for_response(
+            message.forward(topic, dict(data, owner=self.skill_id)),
+            reply_type=f"{topic}.response", timeout=timeout)
+        if response is None:
+            raise SchedulerError("timeout", f"no answer to {topic}")
+        if not response.data.get("ok"):
+            raise SchedulerError(response.data.get("error", "unknown"),
+                                 response.data.get("reason", ""))
+        return response.data
+
+    def _default_id(self, event: str) -> str:
+        """The id of the one schedule this component keeps for ``event``.
+
+        It comes from the event name alone, never from the timing, so
+        scheduling the same event again replaces the previous schedule
+        rather than orphaning it. Pass ``schedule_id`` to keep several
+        schedules for one event.
+        """
+        return event[len(self.skill_id) + 1:] or "schedule"
+
+    def schedule(self, event: str, handler: Optional[Callable[..., None]] = None,
+                 at: Optional[datetime] = None,
+                 every: Optional[dict] = None,
+                 local: Optional[dict] = None,
+                 in_seconds: Optional[float] = None,
+                 data: Optional[dict] = None,
+                 schedule_id: Optional[str] = None,
+                 zone: Optional[str] = None,
+                 **options) -> str:
+        """Create or replace a schedule and return its id.
+
+        ``event`` is namespaced to this component when it is not already.
+        ``at`` must be a time-zone-aware datetime unless ``zone`` names the
+        zone to read it in. ``handler`` is subscribed before the request
+        goes out, so an occurrence due immediately is not lost.
+
+        Without ``schedule_id`` the component keeps one schedule per
+        event, and calling this again for the same event replaces it. Give
+        distinct ids when one event needs several schedules.
+        """
+        if not event.startswith(f"{self.skill_id}."):
+            event = f"{self.skill_id}.{event}"
+        timing = {}
+        if at is not None:
+            if not isinstance(at, datetime):
+                raise TypeError(f"at must be a datetime, got {at!r}")
+            if at.tzinfo is None:
+                if zone is None:
+                    raise ValueError("at is a naive datetime and no zone was "
+                                     "given; pass an aware datetime or zone=")
+                at = at.replace(tzinfo=ZoneInfo(zone))
+            timing["at"] = at.isoformat()
+        if every is not None:
+            timing["every"] = every
+        if local is not None:
+            timing["local"] = local
+        if in_seconds is not None:
+            timing["in"] = {"seconds": in_seconds}
+        if len(timing) != 1:
+            raise ValueError("exactly one of at, in_seconds, every, local "
+                             "is required")
+
+        schedule_id = schedule_id or self._default_id(event)
+        if handler is not None:
+            wrapped = create_basic_wrapper(
+                handler, lambda e: LOG.exception(
+                    f"error in scheduled event handler: {e}"))
+            self.events.add(event, wrapped,
+                            once=at is not None or in_seconds is not None)
+
+        request = {"id": schedule_id, "event": event, "data": data or {}}
+        request.update(timing)
+        request.update(options)
+        self._request("scheduler.schedule", request)
+        return schedule_id
+
+    def cancel(self, schedule_id: str) -> bool:
+        """Delete a schedule. Returns whether it existed."""
+        existed = self._request("scheduler.cancel",
+                                {"id": schedule_id})["existed"]
+        return existed
+
+    def get(self, schedule_id: str) -> Optional[dict]:
+        """Read one of this component's schedules as ``record`` plus
+        computed ``state``, or None when it does not exist."""
+        answer = self._request("scheduler.get", {"id": schedule_id})
+        if not answer["existed"]:
+            return None
+        return {"record": answer["record"], "state": answer["state"]}
+
+    def list(self) -> list:
+        """Read every schedule this component owns."""
+        return self._request("scheduler.list", {})["schedules"]

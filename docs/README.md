@@ -19,7 +19,8 @@ agent backends, or anything else that talks to an OVOS messagebus.
 ### Intermediate
 
 7. [Waiters and collectors](waiter_and_collector.md) — request/response and multi-reply patterns.
-8. [High-level APIs](apis.md) — `GUIInterface`, `OCPInterface`, `EnclosureAPI`, `EventSchedulerInterface`.
+8. [High-level APIs](apis.md) — `GUIInterface`, `OCPInterface`, `EnclosureAPI`.
+8. [Scheduled events](scheduler.md) — `ScheduledEventService`, `EventSchedulerInterface`.
 9. [CLI tools](scripts.md) — `ovos-listen`, `ovos-speak`, `ovos-say-to`, `ovos-simple-cli`.
 10. [Common patterns](patterns.md) — request/reply, broadcast, session scoping, reconnect.
 11. [Testing](testing.md) — `FakeBus`, isolating tests, asserting bus traffic.

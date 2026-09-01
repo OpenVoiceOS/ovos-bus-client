@@ -135,9 +135,8 @@ class TestUpdateAndCancel(TestCase):
     def test_get_scheduled_event_status_returns_seconds_left(self):
         future = int((datetime.now() + timedelta(seconds=90)).timestamp())
         self.bus.wait_for_response.return_value = Message(
-            "callback", {0: [future]},
+            "callback", {"event": "my.skill:t", "schedule": [future, None, {}, {}]},
         )
-        # response.data[0][0] — confusingly indexed but matches source
         left = self.api.get_scheduled_event_status("t")
         self.assertGreater(left, 60)
 
