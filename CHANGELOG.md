@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.10.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.10.0a2) (2026-09-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.10.0a1...2.10.0a2)
+
+**Merged pull requests:**
+
+- revert: scheduled events service \(held for owner review\) [\#307](https://github.com/OpenVoiceOS/ovos-bus-client/pull/307) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.10.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.10.0a1) (2026-09-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.9.1a1...2.10.0a1)
@@ -18,15 +26,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 **Merged pull requests:**
 
@@ -463,10 +471,6 @@
 ## [1.3.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4a1) (2025-04-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.3a1...1.3.4a1)
-
-**Merged pull requests:**
-
-- fix: solver plugin session support [\#165](https://github.com/OpenVoiceOS/ovos-bus-client/pull/165) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.3.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.3a1) (2025-04-10)
 
