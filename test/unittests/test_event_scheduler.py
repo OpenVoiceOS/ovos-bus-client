@@ -1,144 +1,114 @@
-"""
-Test cases regarding the event scheduler.
+"""The scheduler service under its historical name, ``EventScheduler``.
+
+These exercise the epoch-float API and the ``mycroft.scheduler.*`` topics
+that the rest of the stack still speaks.
 """
 
-import unittest
+import os
+import tempfile
 import time
+import unittest
 
-try:
-    from pyee import ExecutorEventEmitter
-except (ImportError, ModuleNotFoundError):
-    from pyee.executor import ExecutorEventEmitter
-
-
-from unittest.mock import MagicMock, patch
 from ovos_utils.fakebus import FakeBus
-from ovos_bus_client.util.scheduler import EventScheduler
+
+from ovos_bus_client.message import Message
+from ovos_bus_client.util.scheduler import EventScheduler, repeat_time
+
+
+class TestRepeatTime(unittest.TestCase):
+    def test_next_occurrence_is_in_the_future(self):
+        past = time.time() - 100
+        self.assertGreaterEqual(repeat_time(past, 30), time.time())
+
+    def test_a_missed_period_keeps_the_schedule_phase(self):
+        start = time.time() - 95
+        self.assertAlmostEqual((repeat_time(start, 30) - start) % 30, 0, places=3)
+
+    def test_a_negative_period_is_read_as_its_magnitude(self):
+        self.assertGreaterEqual(repeat_time(time.time(), -30), time.time())
 
 
 class TestEventScheduler(unittest.TestCase):
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_create(self, mock_open, mock_json_dump, mock_load, mock_thread):
-        """
-        Test creating and shutting down event_scheduler.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
-        es.shutdown()
-        self.assertEqual(mock_json_dump.call_args[0][0], {})
+    def setUp(self):
+        self.bus = FakeBus()
+        self.emitted = []
+        self.bus.on("message", self._record)
+        handle, self.store = tempfile.mkstemp(suffix=".json")
+        os.close(handle)
+        os.unlink(self.store)
+        self.scheduler = EventScheduler(self.bus, self.store, autostart=False)
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_add_remove(self, mock_open, mock_json_dump, mock_load, mock_thread):
-        """
-        Test add an event and then remove it.
-        """
-        # Thread start is mocked so will not actually run the thread loop
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+    def tearDown(self):
+        self.scheduler.shutdown()
+        for path in (self.store, f"{self.store}.tmp"):
+            if os.path.isfile(path):
+                os.unlink(path)
 
-        # 900000000000 should be in the future for a long time
-        es.schedule_event("test", 90000000000, None)
-        es.schedule_event("test-2", 90000000000, None)
+    def _record(self, message):
+        if isinstance(message, str):
+            message = Message.deserialize(message)
+        self.emitted.append(message)
 
-        es.check_state()  # run one cycle
-        self.assertTrue("test" in es.events)
-        self.assertTrue("test-2" in es.events)
+    def test_an_absolute_path_is_used_as_the_store(self):
+        self.assertEqual(self.scheduler.schedule_file, self.store)
+        self.assertFalse(self.scheduler.is_running)
 
-        es.remove_event("test")
-        es.check_state()  # run one cycle
-        self.assertTrue("test" not in es.events)
-        self.assertTrue("test-2" in es.events)
-        es.shutdown()
+    def test_add_and_remove(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.scheduler.schedule_event("skill:test-2", time.time() + 3600)
+        self.assertIn(("skill", "skill:test"), self.scheduler.schedules)
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_save(self, mock_open, mock_dump, mock_load, mock_thread):
-        """
-        Test save functionality.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+        self.scheduler.remove_event("skill:test")
+        self.assertNotIn(("skill", "skill:test"), self.scheduler.schedules)
+        self.assertIn(("skill", "skill:test-2"), self.scheduler.schedules)
 
-        # 900000000000 should be in the future for a long time
-        es.schedule_event("test", 900000000000, None)
-        es.schedule_event("test-repeat", 910000000000, 60)
-        es.check_state()
+    def test_a_due_event_is_emitted_with_its_data(self):
+        self.scheduler.schedule_event("skill:test", time.time(), data={"a": 1})
+        self.scheduler.check_state()
+        fired = [m for m in self.emitted if m.msg_type == "skill:test"]
+        self.assertEqual(len(fired), 1)
+        self.assertEqual(fired[0].data, {"a": 1})
 
-        es.shutdown()
+    def test_a_one_shot_is_dropped_once_it_has_fired(self):
+        self.scheduler.schedule_event("skill:test", time.time())
+        self.scheduler.check_state()
+        self.assertEqual(self.scheduler.schedules, {})
 
-        # Make sure the dump method wasn't called with test-repeat
-        self.assertEqual(mock_dump.call_args[0][0], {"test": [(900000000000, None, {}, None)]})
+    def test_scheduling_the_same_name_twice_does_not_duplicate(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.scheduler.schedule_event("skill:test", time.time() + 7200)
+        self.assertEqual(len(self.scheduler.schedules), 1)
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_send_event(self, mock_open, mock_dump, mock_load, mock_thread):
-        """
-        Test save functionality.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+    def test_repeating_events_survive_a_restart(self):
+        self.scheduler.schedule_event("skill:tick", time.time() + 3600, repeat=60)
+        self.scheduler.shutdown()
 
-        # 0 should be in the future for a long time
-        es.schedule_event("test", time.time(), None)
+        revived = EventScheduler(self.bus, self.store, autostart=False)
+        self.addCleanup(revived.shutdown)
+        self.assertIn(("skill", "skill:tick"), revived.schedules)
 
-        es.check_state()
-        self.assertEqual(emitter.emit.call_args[0][0].msg_type, "test")
-        self.assertEqual(emitter.emit.call_args[0][0].data, {})
-        es.shutdown()
+    def test_update_event_changes_the_data(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600,
+                                      data={"a": 1})
+        self.scheduler.update_event("skill:test", {"a": 2})
+        self.assertEqual(
+            self.scheduler.schedules["skill", "skill:test"].record["data"],
+            {"a": 2})
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_list_events_handler(self, mock_open, mock_dump, mock_load, mock_thread):
-        """
-        Test list_events_handler returns all scheduled events.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+    def test_list_events_handler_answers_with_every_schedule(self):
+        self.scheduler.schedule_event("skill:one", time.time() + 36000)
+        self.scheduler.schedule_event("skill:two", time.time() + 7200, repeat=60)
+        self.scheduler.handle_legacy_list(
+            Message("mycroft.scheduler.list_events", {},
+                    {"source": ["a"], "destination": ["b"]}))
+        answers = [m for m in self.emitted if "scheduled_events" in m.data]
+        self.assertEqual(set(answers[-1].data["scheduled_events"]),
+                         {"skill:one", "skill:two"})
 
-        # Schedule a couple of events
-        es.schedule_event("test-event-1", 900000000000, None, {"data": "test1"})
-        es.schedule_event("test-event-2", 910000000000, 60, {"data": "test2"})
+    def test_the_store_is_written_on_every_mutation(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.assertTrue(os.path.isfile(self.store))
 
-        # Create a mock message
-        mock_message = MagicMock()
-        mock_message.context = {"source": "test"}
 
-        # Call the handler
-        es.handle_list_events(mock_message)
-
-        # Verify message.reply was called with correct msg_type and data
-        mock_message.response.assert_called_once()
-        call_args = mock_message.response.call_args
-        self.assertIn("scheduled_events", call_args[1]["data"])
-
-        # Verify emitter.emit was called with the reply message
-        emitter.emit.assert_called()
-
-        # Verify the scheduled events contain our test events
-        scheduled_events = call_args[1]["data"]["scheduled_events"]
-        self.assertIn("test-event-1", scheduled_events)
-        self.assertIn("test-event-2", scheduled_events)
-
-        es.shutdown()
+if __name__ == "__main__":
+    unittest.main()
