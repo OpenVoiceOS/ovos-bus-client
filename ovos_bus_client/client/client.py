@@ -298,6 +298,9 @@ class MessageBusClient:
     """
     # minimize reading of the .conf
     _config_cache = None
+    # class-level default so a test double built via __new__ (bypassing
+    # __init__) still reads a real bool instead of raising AttributeError.
+    _closing = False
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
                  emitter=None, cache=False, session=None):
@@ -323,6 +326,7 @@ class MessageBusClient:
         # does not stop a client that is mid-backoff -- it just reconnects
         # again after close() has already returned control to the caller.
         self._closing = False
+        self._run_thread = None
         self.wrapped_funcs = {}
         # namespace translation on emit (orthogonal, both ON by default during
         # the migration window so every migrated event travels on BOTH the
@@ -377,7 +381,11 @@ class MessageBusClient:
         """
         LOG.debug("Connected")
         self.connected_event.set()
-        self.emitter.emit("open")
+        try:
+            self.emitter.emit("open")
+        except RuntimeError as e:
+            LOG.debug(f'Emitter refused open event during shutdown: {e}')
+            return
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
         self.emit(Message(SpecMessage.SESSION_SYNC)) # request default session update
@@ -388,7 +396,10 @@ class MessageBusClient:
         A Basic message with the name "close" is forwarded to the emitter.
         """
         self.connected_event.clear()
-        self.emitter.emit("close")
+        try:
+            self.emitter.emit("close")
+        except RuntimeError as e:
+            LOG.debug(f'Emitter refused close event during shutdown: {e}')
 
     def on_error(self, *args):
         """
@@ -419,6 +430,8 @@ class MessageBusClient:
             LOG.exception('=== %s ===', repr(error))
             try:
                 self.emitter.emit('error', error)
+            except RuntimeError as e:
+                LOG.debug(f'Emitter refused error event during shutdown: {e}')
             except Exception as e:
                 LOG.exception(f'Failed to emit error event: {e}')
 
@@ -438,11 +451,15 @@ class MessageBusClient:
             return
         self.retry = min(self.retry * 2, 60)
         try:
+            if self._closing:
+                return
             self.emitter.emit('reconnecting')
             if self._closing:
                 return
             self.client = self.create_client()
             self.run_forever()
+        except RuntimeError as e:
+            LOG.debug(f'Emitter refused reconnecting event during shutdown: {e}')
         except WebSocketException:
             pass
 
@@ -499,29 +516,32 @@ class MessageBusClient:
         # asymmetry is inherent to wire visibility, and is already true
         # (and accepted) for the pre-existing intent-topic twin, which this
         # gate deliberately leaves untouched to stay within this fix's scope.
-        if not is_namespace_twin:
-            self.emitter.emit('message', message)
-            self.emitter.emit(parsed_message.msg_type, parsed_message)
-            # namespace migration bridge: also dispatch the counterpart topic(s) to
-            # LOCAL listeners so a handler on either namespace receives the event
-            # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
-            # convenience, not a second logical bus message: the counterpart is NOT put
-            # back on the wire and does NOT re-fire the 'message' firehose, so one
-            # logical emit yields exactly one captured message. The mirrored payload is
-            # reshaped into the counterpart topic's shape (identity for payload-compatible
-            # renames, a per-topic transform for shape-changing ones).
-            for topic in self._translator.counterpart_topics(parsed_message.msg_type):
-                translated = self._translator.translate_payload(
-                    from_topic=parsed_message.msg_type, to_topic=topic,
-                    data=parsed_message.data)
-                self.emitter.emit(topic, parsed_message.forward(topic, translated))
-        # else: a marked namespace twin is a REAL second wire frame that only
-        # exists to reach an old pre-spec-tools client with no translator of
-        # its own. A modern receiver already got both spellings delivered
-        # locally from the canonical frame this twin follows (the loop
-        # above), so re-running direct dispatch and/or the counterpart loop
-        # for the twin itself would deliver both spellings a SECOND time.
-        self._modernize_intent_topic(parsed_message, is_twin=is_intent_twin)
+        try:
+            if not is_namespace_twin:
+                self.emitter.emit('message', message)
+                self.emitter.emit(parsed_message.msg_type, parsed_message)
+                # namespace migration bridge: also dispatch the counterpart topic(s) to
+                # LOCAL listeners so a handler on either namespace receives the event
+                # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
+                # convenience, not a second logical bus message: the counterpart is NOT put
+                # back on the wire and does NOT re-fire the 'message' firehose, so one
+                # logical emit yields exactly one captured message. The mirrored payload is
+                # reshaped into the counterpart topic's shape (identity for payload-compatible
+                # renames, a per-topic transform for shape-changing ones).
+                for topic in self._translator.counterpart_topics(parsed_message.msg_type):
+                    translated = self._translator.translate_payload(
+                        from_topic=parsed_message.msg_type, to_topic=topic,
+                        data=parsed_message.data)
+                    self.emitter.emit(topic, parsed_message.forward(topic, translated))
+            # else: a marked namespace twin is a REAL second wire frame that only
+            # exists to reach an old pre-spec-tools client with no translator of
+            # its own. A modern receiver already got both spellings delivered
+            # locally from the canonical frame this twin follows (the loop
+            # above), so re-running direct dispatch and/or the counterpart loop
+            # for the twin itself would deliver both spellings a SECOND time.
+            self._modernize_intent_topic(parsed_message, is_twin=is_intent_twin)
+        except RuntimeError as e:
+            LOG.debug(f'Emitter refused message dispatch during shutdown: {e}')
 
     # ------------------------------------------------------------------
     # legacy intent-topic bridge -- RULE 2 (receive)
@@ -997,6 +1017,21 @@ class MessageBusClient:
         self._closing = True
         self.client.close()
         self.connected_event.clear()
+        if self._run_thread is not None:
+            self._run_thread.join(timeout=2)
+            self._run_thread = None
+        # Shut the emitter down LAST, after client.close() has had its join
+        # window to let the real on_close/on_error callbacks fire while the
+        # emitter is still alive -- otherwise a normal, synchronous close()
+        # would silently drop the 'close'/'error' event a live disconnect
+        # legitimately delivers. This still guarantees the emitter is torn
+        # down before close() returns for the embedder-forgets-to-wait case
+        # that motivated this fix: ExecutorEventEmitter's
+        # ThreadPoolExecutor.submit() otherwise survives until interpreter
+        # shutdown, where it raises "cannot schedule new futures after
+        # interpreter shutdown".
+        if hasattr(self.emitter, "shutdown"):
+            self.emitter.shutdown(wait=False)
 
     def run_in_thread(self):
         """Launches the run_forever in a separate daemon thread."""
@@ -1007,8 +1042,12 @@ class MessageBusClient:
         # reconnect right after being told to close.
         self._closing = False
         t = Thread(target=self.run_forever)
+        # daemon=True so an embedder that forgets to close() is never blocked
+        # at interpreter exit; close() still joins it with a timeout when the
+        # caller does the right thing.
         t.daemon = True
         t.start()
+        self._run_thread = t
         return t
 
 
