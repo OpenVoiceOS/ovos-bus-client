@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.10.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.10.1a1) (2026-09-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.10.0a2...2.10.1a1)
+
+**Merged pull requests:**
+
+- fix: shut down the event emitter and join the dispatch thread on close [\#308](https://github.com/OpenVoiceOS/ovos-bus-client/pull/308) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.10.0a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.10.0a2) (2026-09-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.10.0a1...2.10.0a2)
@@ -26,15 +34,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
-
-## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
 
 ## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+
+## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
 
 **Merged pull requests:**
 
@@ -463,10 +471,6 @@
 ## [1.3.4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4) (2025-04-10)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4a1...1.3.4)
-
-**Merged pull requests:**
-
-- Release 1.3.4a1 [\#166](https://github.com/OpenVoiceOS/ovos-bus-client/pull/166) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [1.3.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4a1) (2025-04-10)
 
