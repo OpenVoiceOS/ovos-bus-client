@@ -112,7 +112,8 @@ Full developer docs live in [`docs/`](docs/):
 - [Configuration](docs/configuration.md) — host, port, route, ssl
 - [Sessions](docs/session.md) — `Session`, `SessionManager`, `IntentContextManager`
 - [Waiters and collectors](docs/waiter_and_collector.md) — request/response and multi-reply patterns
-- [High-level APIs](docs/apis.md) — `GUIInterface`, `OCPInterface`, `EnclosureAPI`, scheduler
+- [High-level APIs](docs/apis.md) — `GUIInterface`, `OCPInterface`, `EnclosureAPI`
+- [Scheduled events](docs/scheduler.md) — firing an event at a wall-clock instant, once or on a recurrence
 - [CLI tools](docs/scripts.md) — `ovos-speak`, `ovos-listen`, `ovos-say-to`, `ovos-simple-cli`
 - [Common patterns](docs/patterns.md) — recipes for everyday use
 - [Testing](docs/testing.md) — `FakeBus`, isolating tests
