@@ -9,6 +9,32 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.10.0a2
+
+A clean `close()` could still surface `RuntimeError: cannot schedule new
+futures after interpreter shutdown` from the default `ExecutorEventEmitter`
+(a `pyee` emitter backed by a bare `ThreadPoolExecutor`, whose `emit()`
+submits to it). The receiver thread `run_in_thread()` starts is a daemon, so
+it can still be mid-emit -- inside `on_error()`'s reconnect backoff -- when
+the interpreter starts tearing down, and by then the executor refuses new
+work with that `RuntimeError` instead of a clean no-op. `close()` now joins
+the thread `run_in_thread()` started (2 second timeout) and, as its very
+last step, shuts the emitter down (`self.emitter.shutdown(wait=False)`,
+skipped for emitters that don't expose `.shutdown()`). `on_error()`'s
+reconnect path also checks `_closing` immediately before emitting
+`'reconnecting'` and before its retry sleep, and swallows a `RuntimeError`
+from the emitter at debug level in case a call slips through the window
+between that check and the emit.
+
+Two behaviour changes are worth knowing about. `close()` can now block for
+up to 2 seconds if the receiver thread is inside `on_error()`'s reconnect
+backoff sleep when `close()` is called, where it previously returned
+immediately -- the wait is bounded and lets that thread wind down cleanly
+instead of leaking past `close()`. And the emitter is torn down only after
+`client.close()` and the thread join have run, so the `'close'`/`'error'`
+events a live disconnect legitimately triggers are still delivered to any
+listener registered with `bus.on(...)` before the emitter itself goes away.
+
 ## 2.8.5a2
 
 `EventSchedulerInterface.update_scheduled_event()` emitted
