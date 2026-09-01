@@ -26,8 +26,8 @@ class TestEventScheduler(unittest.TestCase):
         cls.scheduler = EventScheduler(cls.bus, cls.test_schedule_name, False)
 
     def test_00_init(self):
-        self.assertEqual(self.scheduler.schedules, dict())
-        self.assertIsNotNone(self.scheduler.lock)
+        self.assertEqual(self.scheduler.events, dict())
+        self.assertIsNotNone(self.scheduler.event_lock)
         self.assertEqual(self.scheduler.bus, self.bus)
         self.assertFalse(isfile(self.scheduler.schedule_file))
         self.assertEqual(

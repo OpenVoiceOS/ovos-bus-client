@@ -96,25 +96,37 @@ The class is a thin emitter — every method maps one-to-one to a Mycroft
 enclosure message type. Read the source for the full method list; it is more
 exhaustive than this doc would be useful at.
 
-## `EventSchedulerInterface` — `ovos_bus_client/apis/events.py`
+## `EventSchedulerInterface` — `ovos_bus_client/apis/events.py:12`
 
-Fire a named event on the bus at a wall-clock instant, once or on a
-recurrence.
+Schedule one-shot and repeating events through the OVOS event scheduler.
 
 ```python
-from datetime import datetime, timedelta, timezone
 from ovos_bus_client.apis.events import EventSchedulerInterface
+from datetime import datetime, timedelta
 
-events = EventSchedulerInterface(bus=bus, skill_id="my.skill")
-events.schedule("wakeup", handler=my_callback,
-                at=datetime.now(timezone.utc) + timedelta(minutes=5),
-                data={"reason": "wake up"})
+es = EventSchedulerInterface(bus=bus, skill_id="my.skill")
+
+es.schedule_event(
+    handler=my_callback,
+    when=datetime.now() + timedelta(minutes=5),
+    data={"reason": "wake up"},
+    name="wakeup_timer",
+)
+
+es.schedule_repeating_event(
+    handler=heartbeat,
+    when=datetime.now(),
+    frequency=60,           # seconds
+    name="heartbeat",
+)
 ```
 
-Read them back with `get(id)` and `list()`, drop one with `cancel(id)`, and
-tear the interface down with `shutdown()`. Timing forms, recurrence rules,
-the misfire policy and the store are covered in
-[Scheduled events](scheduler.md).
+Cancel with `cancel_scheduled_event(name)`. Inspect with
+`get_scheduled_event_status(name)` (`events.py:185`). Tear everything down
+with `shutdown()` (`events.py:224`).
+
+Names are namespaced by `skill_id` internally (`events.py:44`) so two skills
+can use the same logical name without colliding.
 
 ## Pattern: passing `source_message`
 
