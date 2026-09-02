@@ -9,6 +9,27 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.10.1a2
+
+`Session.deserialize()` built its result from a hand-enumerated
+constructor call rather than the `ovos_spec_tools.session.Session` instance
+`_SpecSession.from_dict()` already stamped with `wire_payload`, so the
+`Session` object bus-client actually returned to callers was always
+snapshot-less. `SessionManager._store()` (inherited from ovos-spec-tools)
+reads `wire_payload` to decide, per OVOS-SESSION-2 §5.1, which fields an
+inbound default-session message actually carried; without it every
+serialized field -- and bus-client's `serialize()` emits `location`,
+`is_speaking`, `is_recording`, `system_unit`, `time_format`, `date_format`,
+`active_skills` and `context` unconditionally -- counted as carried, so a
+minimal inbound default-session message (e.g. `{"session_id": "default",
+"lang": "en-us"}`) silently overwrote previously stored default-session
+state such as `location_preferences`, `is_speaking`, `blacklisted_skills`
+and `intent_context` with deployment defaults. `Session.deserialize()` now
+stamps `wire_payload` on the object it returns, matching the
+`ovos_spec_tools.session.Session.from_dict()` contract. This requires
+`ovos-spec-tools>=1.9.1a1`, which shipped the `wire_payload`-aware
+`merge_from()`/`_store()` behavior this fix activates.
+
 ## 2.10.0a2
 
 A clean `close()` could still surface `RuntimeError: cannot schedule new

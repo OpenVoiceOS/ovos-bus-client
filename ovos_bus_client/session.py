@@ -1,5 +1,6 @@
 import enum
 import time
+from copy import deepcopy
 from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
@@ -1261,7 +1262,7 @@ class Session(_SpecSession):
         is_recording = data.get("is_recording", False)
         is_speaking = data.get("is_speaking", False)
 
-        return Session(uid,
+        sess = Session(uid,
                        active_skills=active,
                        utterance_states=states,
                        lang=lang,
@@ -1277,6 +1278,17 @@ class Session(_SpecSession):
                        blacklisted_intents=blacklisted_intents,
                        blacklisted_skills=blacklisted_skills,
                        **canonical_kwargs)
+        # OVOS-SESSION-2 §5.1: SessionManager._store's default-session merge
+        # (Session.merge_from) is presence-aware only when the deserialized
+        # object still carries the arrival snapshot on ``wire_payload`` — a
+        # Session built without one is treated as its own baseline, so every
+        # field it presents (bus-client emits the full overlay unconditionally
+        # in ``serialize()``) counts as carried and clobbers stored state that
+        # the arriving message never actually mentioned. Stamp it here to match
+        # the ``_SpecSession.from_dict`` contract this method otherwise
+        # replicates by hand.
+        sess.wire_payload = deepcopy(data)
+        return sess
 
     # update_from is inherited from ovos_spec_tools.session.Session: it rebuilds
     # via type(self).deserialize(other.serialize()), so a bus-client Session
