@@ -621,8 +621,6 @@ class Session(_SpecSession):
                  context: IntentContextManager = None,
                  site_id: Optional[str] = None,
                  pipeline: List[str] = None,
-                 stt_prefs: Dict = None,
-                 tts_prefs: Dict = None,
                  location_prefs: Dict = None,
                  system_unit: str = None,
                  time_format: str = None,
@@ -659,8 +657,6 @@ class Session(_SpecSession):
                 Prefer passing `intent_context` directly.
             site_id (str): Identifier for the site/location associated with the session.
             pipeline (List[str]): Ordered intent processing pipeline identifiers.
-            stt_prefs (Dict): Deprecated; provided value will be ignored.
-            tts_prefs (Dict): Deprecated; provided value will be ignored.
             location_prefs (Dict): Location preferences or metadata for the session.
             system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
             time_format (str): Time format preference identifier.
@@ -682,11 +678,6 @@ class Session(_SpecSession):
                 round-trips. Unknown keys raise (the parent ``__init__`` rejects them),
                 preserving the typo-catching contract.
         """
-        if tts_prefs:
-            log_deprecation("'tts_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
-        if stt_prefs:
-            log_deprecation("'stt_prefs' kwarg has been deprecated! value will be ignored", "0.1.0")
-
         # --- ovos-config deployment defaults the canonical class omits -------
         session_id = session_id or str(uuid4())
         blacklisted_skills = (blacklisted_skills or
@@ -1176,14 +1167,6 @@ class Session(_SpecSession):
             "is_recording": self.is_recording,
         })
         return data
-
-    def update_history(self, message: Message = None):
-        """
-        Add a message to history and then prune history
-        @param message: Message to append to history
-        """
-        LOG.warning("update_history has been deprecated, "
-                    "session no longer has a message history")
 
     @staticmethod
     def deserialize(data: Dict):

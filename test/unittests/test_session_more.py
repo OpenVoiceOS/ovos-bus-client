@@ -67,11 +67,6 @@ class TestStripResult(TestCase):
 
 
 class TestSessionExtra(TestCase):
-    def test_update_history_is_deprecated_noop(self):
-        s = Session()
-        # should not raise, just logs a warning
-        s.update_history(Message("any"))
-
     def test_serialize_includes_blacklists(self):
         s = Session(blacklisted_skills=["foo.skill"],
                     blacklisted_intents=["foo.intent"])
