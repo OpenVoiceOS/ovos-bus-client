@@ -31,11 +31,6 @@ except ImportError:
     ConnectionClosedError = OSError  # type: ignore
     ConnectionClosedOK = OSError  # type: ignore
 
-from ovos_spec_tools.messages import NamespaceTranslator
-
-from ovos_bus_client.client.client import (_bus_flag,
-                                           _compute_legacy_intent_twin,
-                                           _compute_legacy_namespace_twin)
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import SessionManager, Session
@@ -205,15 +200,6 @@ class AsyncMessageBusClient:
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._connected = asyncio.Event()
         self._listen_task: Optional[asyncio.Task] = None
-        # same dual-emit (legacy intent/namespace twin) config as the sync
-        # MessageBusClient, so switching a producer onto the async client
-        # doesn't silently drop the V0-compat wire frames -- see
-        # ovos_bus_client.client.client for the flags' semantics.
-        self._translator = NamespaceTranslator(
-            modernize=_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True),
-            emit_legacy=_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
-        self._wire_legacy_twins = _bus_flag(
-            "OVOS_BUS_WIRE_LEGACY_TWINS", "wire_legacy_twins", default=True)
 
         if session:
             SessionManager.update(session)
@@ -319,10 +305,6 @@ class AsyncMessageBusClient:
     async def emit(self, message: Message):
         """Send a message onto the message bus.
 
-        Puts the canonical frame on the wire, then the same legacy-compat
-        twins as :meth:`MessageBusClient.emit` — see
-        ``ovos_bus_client.client.client`` for what/why.
-
         Arguments:
             message: Message to send
         """
@@ -337,8 +319,6 @@ class AsyncMessageBusClient:
             raise ValueError("Timed out waiting for connection")
 
         await self._send(message)
-        await self._send_legacy_intent_twin(message)
-        await self._send_legacy_namespace_twin(message)
 
     async def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
@@ -352,17 +332,6 @@ class AsyncMessageBusClient:
             LOG.warning("Could not send %s — connection closed", message.msg_type)
         except Exception:
             LOG.exception("Failed to emit %s", message.msg_type)
-
-    async def _send_legacy_intent_twin(self, message: Message):
-        twin = _compute_legacy_intent_twin(message, self._translator)
-        if twin is not None:
-            await self._send(twin)
-
-    async def _send_legacy_namespace_twin(self, message: Message):
-        twin = _compute_legacy_namespace_twin(
-            message, self._translator, self._wire_legacy_twins)
-        if twin is not None:
-            await self._send(twin)
 
     async def _wait_connected(self):
         await self._connected.wait()

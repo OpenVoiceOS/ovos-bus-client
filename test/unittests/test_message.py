@@ -79,10 +79,6 @@ class TestMessage(TestCase):
         self.assertEqual(response_msg.data, {})
         self.assertEqual(response_msg.context, source.context)
 
-    def test_publish(self):
-        pass
-        # TODO
-
     def test_reply(self):
         """Assert that the source and destination are swapped"""
         source = Message('test_type',
@@ -102,10 +98,6 @@ class TestMessage(TestCase):
 
 
 class TestFunctions(unittest.TestCase):
-    def test_encrypt_decrypt(self):
-        from ovos_bus_client.message import encrypt_as_dict, decrypt_from_dict
-        # TODO
-
     def test_dig_for_message_simple(self):
         test_msg = Message("test message", {"test": "data"}, {"time": time()})
         self.assertEqual(test_msg, get_message_standard(test_msg))

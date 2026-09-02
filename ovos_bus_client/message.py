@@ -5,32 +5,18 @@
 """Bus message classes for ``ovos-bus-client``.
 
 The OVOS-MSG-1 envelope lives in :mod:`ovos_spec_tools.message`; this
-module re-exports it directly — no subclass, no wrapping — and attaches
-exactly one legacy bus-client convenience (:meth:`Message.publish`) to
-the class at import time. ``Message.serialize`` / ``Message.deserialize``
-are inherited unchanged from the spec implementation: they produce and
-consume plain JSON, with no transport-layer concerns mixed in.
-Everything else (:class:`CollectionMessage`, :class:`GUIMessage`,
-:func:`dig_for_message`, the encryption helpers below) stays in this
-module on top of the same class.
+module re-exports it directly — no subclass, no wrapping. ``Message.serialize``
+/ ``Message.deserialize`` are inherited unchanged from the spec implementation:
+they produce and consume plain JSON, with no transport-layer concerns mixed
+in. Everything else (:class:`CollectionMessage`, :class:`GUIMessage`,
+:func:`dig_for_message`) stays in this module on top of the same class.
 
-OVOS-MSG-1 is transport-agnostic and says nothing about encryption (§7).
-An optional **layer-2 encryption scheme** ships with this package, but it
-lives at the **transport edge** (:class:`ovos_bus_client.client.MessageBusClient`
-``emit`` / ``on_message`` — see ``_maybe_encrypt`` / ``_maybe_decrypt``
-there), not on :class:`Message`. Bolting AES (GCM) onto the JSON
-envelope is purely additive on top of the spec, and the matching
-key-setup / key-exchange side was never formally implemented — so the
-scheme is **deprecated** and the websocket client emits a
-``DeprecationWarning`` whenever it fires. The :func:`encrypt_as_dict` /
-:func:`decrypt_from_dict` helpers stay at module level for any consumer
-that imported them directly.
+OVOS-MSG-1 is transport-agnostic and says nothing about encryption (§7);
+this package does not add one.
 """
 import inspect
 import json
-import warnings
-from binascii import hexlify, unhexlify
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
@@ -38,22 +24,12 @@ from ovos_spec_tools.message import (
     Message,
 )
 from ovos_utils import json_dumps
-from ovos_utils.log import deprecated
-from ovos_utils.security import encrypt, decrypt
-
-from ovos_bus_client.version import VERSION_MAJOR
 
 # ``MalformedMessage`` in ovos-spec-tools >= 0.5.1a1 multi-inherits
 # ``ValueError`` and ``AssertionError``, so legacy ``except
 # AssertionError`` handlers around Message construction continue to
 # catch validation failures without any local re-declaration here.
 # ``Message.as_dict`` is also a property on the spec-tools class itself.
-
-# OVOS-MSG-1 defines forward / reply / response as the three normative
-# derivations (§5). ``publish`` is a bus-client tradition outside the
-# spec; it survives as an attached method for one more major release so
-# downstream consumers can migrate.
-_PUBLISH_REMOVAL_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 
 
 __all__ = [
@@ -63,111 +39,7 @@ __all__ = [
     "CollectionMessage",
     "GUIMessage",
     "dig_for_message",
-    "encrypt_as_dict",
-    "decrypt_from_dict",
 ]
-
-
-@deprecated(
-    "Message.publish is deprecated; use Message.forward (relay under a "
-    "new topic, preserves context) or Message.reply (§5.2 swap) — both "
-    "are OVOS-MSG-1 normative",
-    _PUBLISH_REMOVAL_VERSION)
-def _publish(self, msg_type: str, data: Dict[str, Any],
-             context: Optional[Dict[str, Any]] = None) -> Message:
-    """Relay a Message under a new topic without the §5.2 swap.
-
-    Copies ``self.context``, overlays the optional ``context`` argument,
-    drops any ``target`` key, and emits a new Message with the supplied
-    ``msg_type`` and ``data``. ``data`` is **not** deep-copied.
-
-    Attached to :class:`ovos_spec_tools.Message` at import time so this
-    bus-client method appears on the class downstream code already
-    imports — no subclass, no isinstance surprises.
-
-    .. deprecated::
-        Not part of OVOS-MSG-1 (the spec defines ``forward`` /
-        ``reply`` / ``response`` as the only normative derivations).
-        Slated for removal in the next major; use :meth:`forward`
-        when you do not want the routing-key swap, or :meth:`reply`
-        when you do.
-    """
-    # stacklevel=3: warn() -> body -> @deprecated wrapper -> caller
-    warnings.warn(
-        "Message.publish is deprecated; use Message.forward (no §5.2 "
-        "swap) or Message.reply (with swap) instead — both are "
-        "OVOS-MSG-1 normative derivations. ``publish`` will be removed "
-        f"in ovos-bus-client {_PUBLISH_REMOVAL_VERSION}.",
-        DeprecationWarning, stacklevel=3)
-    context = context or {}
-    new_context = dict(self.context)
-    new_context.update(context)
-    new_context.pop("target", None)
-    # Always return a plain Message — CollectionMessage and GUIMessage
-    # have incompatible constructors so self.__class__(...) would raise.
-    return Message(msg_type, data, new_context)
-
-
-# Attach the legacy publish() to the spec-tools Message. This makes the
-# method available on every Message instance — including those
-# constructed by code that imports Message from ovos_spec_tools directly,
-# or from ovos_utils.fakebus — without forcing a subclass or breaking
-# isinstance checks across the ecosystem.
-Message.publish = _publish
-
-
-# --- legacy envelope-level encryption helpers (deprecated) -----------------
-#
-# These are kept at module level for any consumer that imported them
-# directly. The websocket transport (:class:`ovos_bus_client.client.
-# MessageBusClient`) uses them at its send/receive edges when
-# ``websocket.secret_key`` is configured; the :class:`Message` class
-# itself stays pure JSON.
-
-
-def encrypt_as_dict(key: str, data: str, nonce=None) -> dict:
-    """
-    AES-encrypt data under key and produce the websocket-transport mapping.
-    
-    Kept at module level for consumers that import this helper directly; encryption is intentionally handled at the transport layer and is no longer integrated into Message.serialize/deserialize.
-    
-    Parameters:
-        key (str): Encryption key passed to the underlying encrypt routine.
-        data (str): Plaintext to encrypt.
-        nonce (optional): Nonce value forwarded to the underlying encrypt routine; if omitted the encrypt implementation will generate one.
-    
-    Returns:
-        dict: Mapping with hex-encoded fields "ciphertext", "tag", and "nonce" suitable for websocket transport.
-    """
-    ciphertext, tag, nonce = encrypt(key, data, nonce=nonce)
-    return {"ciphertext": hexlify(ciphertext).decode('utf-8'),
-            "tag": hexlify(tag).decode('utf-8'),
-            "nonce": hexlify(nonce).decode('utf-8')}
-
-
-def decrypt_from_dict(key: str, data: dict) -> str:
-    """
-    Decrypt a websocket-transport formatted dict into a plaintext string.
-    
-    Accepts a dict produced by encrypt_as_dict: hex-encoded "ciphertext" and "nonce", and an optional hex-encoded "tag". If "tag" is missing, treats the last 16 bytes of the decoded ciphertext as the GCM tag (legacy web-crypto format) before decrypting.
-    
-    Parameters:
-        key (str): Key used for decryption.
-        data (dict): Mapping with keys:
-            - "ciphertext" (str): Hex string of the ciphertext (possibly with tag appended).
-            - "nonce" (str): Hex string of the nonce.
-            - "tag" (str, optional): Hex string of the authentication tag; if absent, tag is taken from the end of the ciphertext.
-    
-    Returns:
-        str: Decrypted plaintext.
-    """
-    ciphertext = unhexlify(data["ciphertext"])
-    if data.get("tag") is None:  # web crypto
-        ciphertext, tag = ciphertext[:-16], ciphertext[-16:]
-    else:
-        tag = unhexlify(data["tag"])
-    nonce = unhexlify(data["nonce"])
-    return decrypt(key, ciphertext, tag, nonce)
 
 
 def dig_for_message(max_records: int = 10) -> Optional[Message]:
@@ -397,8 +269,7 @@ class GUIMessage(Message):
     def serialize(self) -> str:
         """Serialize the message into the GUI wire-format with message
         fields flattened to the top level. Returns plain JSON; the
-        transport layer applies the deprecated envelope encryption when
-        ``websocket.secret_key`` is configured."""
+        transport layer, if any, applies encryption on top."""
         data = Message._to_jsonable(self.data)
         return json_dumps({"type": self.msg_type, **data})
 

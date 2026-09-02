@@ -1,12 +1,9 @@
-"""Coverage tests for ovos_bus_client.message — reply/forward/response/publish,
-CollectionMessage, GUIMessage, encryption helpers, dig_for_message edge cases."""
+"""Coverage tests for ovos_bus_client.message — reply/forward/response,
+CollectionMessage, GUIMessage, dig_for_message edge cases."""
 import unittest
-import pytest
 from unittest import TestCase
 
-from ovos_bus_client.message import (CollectionMessage, GUIMessage, Message,
-                                     decrypt_from_dict, dig_for_message,
-                                     encrypt_as_dict)
+from ovos_bus_client.message import CollectionMessage, GUIMessage, Message, dig_for_message
 
 
 class TestMessageEquality(TestCase):
@@ -87,44 +84,6 @@ class TestResponse(TestCase):
         self.assertEqual(resp.msg_type, "foo.query.response")
         self.assertEqual(resp.data["answer"], 42)
         self.assertEqual(resp.context["source"], "D")
-
-
-@pytest.mark.filterwarnings("ignore:Message.publish is deprecated:DeprecationWarning")
-class TestPublish(TestCase):
-    def test_publish_emits_deprecation_warning(self):
-        """``publish`` is not part of OVOS-MSG-1 and is scheduled for
-        removal — every call must fire a DeprecationWarning so callers
-        see the migration notice."""
-        import warnings
-        orig = Message("a", {}, {"source": "S"})
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            orig.publish("b", {"d": 1})
-        deps = [w for w in caught
-                if issubclass(w.category, DeprecationWarning)
-                and "publish" in str(w.message)]
-        self.assertTrue(deps,
-                        "Message.publish() did not emit a "
-                        "DeprecationWarning")
-
-    def test_publish_keeps_context(self):
-        orig = Message("a", {}, {"k": "v"})
-        pub = orig.publish("b", {"d": 1})
-        self.assertEqual(pub.msg_type, "b")
-        self.assertEqual(pub.data, {"d": 1})
-        self.assertEqual(pub.context["k"], "v")
-
-    def test_publish_strips_target(self):
-        orig = Message("a", {}, {"target": "old", "k": "v"})
-        pub = orig.publish("b", {})
-        self.assertNotIn("target", pub.context)
-        self.assertEqual(pub.context["k"], "v")
-
-    def test_publish_merges_extra_context(self):
-        orig = Message("a", {}, {"k1": "v1"})
-        pub = orig.publish("b", {}, context={"k2": "v2"})
-        self.assertEqual(pub.context["k1"], "v1")
-        self.assertEqual(pub.context["k2"], "v2")
 
 
 class TestDigForMessage(TestCase):
@@ -208,46 +167,6 @@ class TestGUIMessage(TestCase):
         restored = GUIMessage.deserialize(s)
         self.assertEqual(restored.msg_type, "gui.value.set")
         self.assertEqual(restored.data["values"], {"temp": 22})
-
-
-try:
-    import pycryptodomex  # noqa: F401
-    _HAS_CRYPTO = True
-except ImportError:  # pragma: no cover
-    try:
-        import Cryptodome  # noqa: F401
-        _HAS_CRYPTO = True
-    except ImportError:
-        _HAS_CRYPTO = False
-
-
-@unittest.skipUnless(_HAS_CRYPTO, "pycryptodomex not installed; encryption helpers unavailable")
-class TestEncryptionHelpers(TestCase):
-    def test_encrypt_decrypt_roundtrip(self):
-        key = "0123456789abcdef"  # 16-char
-        plaintext = "secret payload"
-        enc = encrypt_as_dict(key, plaintext)
-        self.assertIn("ciphertext", enc)
-        self.assertIn("tag", enc)
-        self.assertIn("nonce", enc)
-        decrypted = decrypt_from_dict(key, enc)
-        if isinstance(decrypted, bytes):
-            decrypted = decrypted.decode("utf-8")
-        self.assertEqual(decrypted, plaintext)
-
-    def test_decrypt_web_crypto_format(self):
-        """No tag field → ciphertext last 16 bytes are the tag."""
-        key = "0123456789abcdef"
-        enc = encrypt_as_dict(key, "hello")
-        # synthesise web-crypto format: concatenate ciphertext + tag, drop tag field
-        web = {
-            "ciphertext": enc["ciphertext"] + enc["tag"],
-            "nonce": enc["nonce"],
-        }
-        decrypted = decrypt_from_dict(key, web)
-        if isinstance(decrypted, bytes):
-            decrypted = decrypted.decode("utf-8")
-        self.assertEqual(decrypted, "hello")
 
 
 class TestMessageConstructorValidation(TestCase):
