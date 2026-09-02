@@ -21,6 +21,60 @@ from ovos_bus_client.version import VERSION_MAJOR
 # version.py so the warning text can never drift out of date.
 _NEXT_MAJOR_VERSION = f"{VERSION_MAJOR + 1}.0.0"
 
+# The bus overrides below are grafted ONTO the spec-tools registry class (see
+# _BusSessionManagerMixin), so by the time they run ``SessionManager.get`` /
+# ``.update`` already resolve to the overrides. The registry's own
+# implementations are stashed on the class the first time this module is
+# imported and read back from there afterwards -- binding them straight off the
+# class would capture the overrides on a re-import and recurse forever.
+if not hasattr(_SpecSessionManager, "_pre_graft"):
+    _SpecSessionManager._pre_graft = {"get": _SpecSessionManager.get.__func__,
+                                      "update": _SpecSessionManager.update.__func__}
+_spec_get = _SpecSessionManager._pre_graft["get"]
+_spec_update = _SpecSessionManager._pre_graft["update"]
+
+#: ``SessionManager.fold_inbound`` is the OVOS-SESSION-2 §5.1 arrival merge: it
+#: takes the raw carrier off an inbound Message and merges it into the
+#: default-session store. Older spec-tools releases have no arrival point and
+#: fold lazily inside ``get`` instead, so the receive path only calls it where
+#: the registry offers it.
+HAS_FOLD_INBOUND = hasattr(_SpecSessionManager, "fold_inbound")
+
+
+def session_carrier(message) -> Dict[str, Any]:
+    """The raw session carrier off a Message, as it arrived.
+
+    An absent ``session``, an explicit ``null`` and ``{}`` all mean the same
+    thing (SESSION-1 §2.1) and come back as the empty carrier. A carrier that
+    is present but not an object is malformed (§2.5) and raises rather than
+    quietly resolving to the default session, which would route the message
+    into a session it never named.
+
+    @param message: Message to read the carrier from
+    @return: the carrier dict, empty when the message carries no session
+    @raises MalformedSession: the carrier is present but not an object
+    """
+    carrier = (getattr(message, "context", None) or {}).get("session")
+    if carrier is None:
+        return {}
+    if not isinstance(carrier, dict):
+        raise MalformedSession("session must be a JSON object (§2.5)")
+    return carrier
+
+
+def names_the_default(carrier: Dict[str, Any]) -> bool:
+    """Whether a raw session carrier names the reserved default session.
+
+    SESSION-1 §3.1: an omitted ``session_id`` is the default session, and so is
+    any value that cannot serve as an identity — §6 requires a non-empty string
+    when the field is set, so an empty or wrong-typed one reads as omitted
+    rather than as a session no message can name. Older spec-tools releases
+    have no such predicate and treat only the literal id that way.
+    """
+    if HAS_FOLD_INBOUND:
+        return _SpecSessionManager._names_the_default(carrier)
+    return carrier.get("session_id", DEFAULT_SESSION_ID) == DEFAULT_SESSION_ID
+
 
 def _get_default_lang() -> str:
     """Read the runtime-configured default lang.
@@ -1333,8 +1387,9 @@ class _BusSessionManagerMixin:
 
     Adds the bus integration — default-session broadcast, recording / speaking
     state handlers, intent-context sync — and overrides ``get`` / ``update`` /
-    ``reset_default_session`` with the bus-flavoured variants. The folding,
-    ``_store`` and ``sync_message_session`` stamping stay the spec-tools base's.
+    ``reset_default_session`` with the bus-flavoured variants. Which state a
+    read or a write touches, and the ``sync_message_session`` stamping, stay
+    the spec-tools registry's.
     """
     bus = None
 
@@ -1428,17 +1483,19 @@ class _BusSessionManagerMixin:
             # this log is dangerous, session may contain things like passwords and access keys
             # this comment is here to avoid reintroducing it by accident
             # LOG.debug(f"replacing default session with: {sess.serialize()}") # DO NOT re-enable in production
-        return cls._store(sess)
+        return _spec_update(cls, sess)
 
     @classmethod
     def get(cls, message: Optional[Message] = None) -> Session:
         """
         Get the active session for a given Message
 
-        Adds the bus-client niceties over the spec-tools base: a
-        ``dig_for_message`` fallback and the legacy ``Session.from_message``
-        extraction (which carries the context ``lang`` onto a session that
-        omits it). Folding onto the shared singleton is the base's job.
+        Adds one bus-client nicety over the spec-tools base — the
+        ``dig_for_message`` fallback. Resolving the carrier to a session is the
+        registry's job and stays there, including whether a read touches stored
+        state at all, and the message is left exactly as it arrived: a read that
+        edited the carrier would make the answer depend on how often it was
+        asked, and the edit would ride onward on every derived message.
 
         @param message: Message to get session for
         @return: Session from message or default_session
@@ -1447,10 +1504,12 @@ class _BusSessionManagerMixin:
         if message is None:
             LOG.debug("No message, use default session")
             return cls.get_default_session()
-        # every session — including the default id — folds onto the one live
-        # object for its id (the wire is value-passing; nothing is owner-only).
-        msg_sess = Session.from_message(message)
-        return cls._store(msg_sess) if msg_sess else cls.get_default_session()
+        if message.context.get("session") is None:
+            LOG.warning(f"No session context in message:{message.msg_type}")
+            LOG.debug(f"Update ovos-bus-client or add `session` to "
+                      f"`message.context` where emitted. "
+                      f"context={message.context}")
+        return _spec_get(cls, message)
 
     @staticmethod
     def touch(message: Message = None):
@@ -1535,35 +1594,78 @@ class _BusSessionManagerMixin:
         event.wait(timeout=timeout)
         cls.bus.remove("recognizer_loop:record_end", handle_rec_end)
 
+    @classmethod
+    def held_session(cls, session_id: str) -> Optional[Session]:
+        """The live Session object this process holds for ``session_id``.
+
+        The default session is the store, which every process holds. A named
+        session is client-owned (OVOS-SESSION-2 §2.5) and the orchestrator is
+        stateless for it (§2.2), so the only named session this process holds
+        is the one its bus client was built with. A different named id seen in
+        passing belongs to another client: there is nothing here to carry its
+        state on, and inventing somewhere to keep it would be the durable
+        cross-utterance state §2.2 forbids.
+
+        @param session_id: session id to resolve
+        @return: the live Session, or None when this process holds none
+        """
+        if session_id in (None, DEFAULT_SESSION_ID):
+            return cls.get_default_session()
+        # the client's own session wins over anything the registry happens to
+        # hold: §2.5 makes the client authoritative, and the registry entry is
+        # at most the utterance-scoped cache older releases keep. The registry
+        # is connected to whatever bus object a process supplies
+        # (MessageBusClient, a test double, or nothing at all), and only a real
+        # client carries the session it was built with.
+        held = getattr(cls.bus, "session", None)
+        if isinstance(held, _SpecSession) and held.session_id == session_id:
+            return held
+        return cls.sessions.get(session_id)
+
     ###############################
     # State tracking events
     @classmethod
+    def _track_audio_state(cls, message, **flags):
+        """Record a client-authoritative audio flag on the session it describes.
+
+        ``is_recording`` / ``is_speaking`` report what a client's own hardware
+        is doing, so OVOS-SESSION-2 §2.5 makes the client the authority and the
+        event only tells this process what happened. Where the flag lands
+        follows who holds the session: the default session is the store and the
+        write goes through ``update`` (§5.1), while a named session lands on the
+        object this process holds for that id, if it holds one at all.
+        """
+        sess = cls.get(message)
+        for attr, value in flags.items():
+            setattr(sess, attr, value)
+        cls.update(sess)
+        held = cls.held_session(sess.session_id)
+        if held is None:
+            LOG.debug(f"not tracking audio state for session "
+                      f"'{sess.session_id}': it belongs to another client")
+        elif held is not sess:
+            for attr, value in flags.items():
+                setattr(held, attr, value)
+
+    @classmethod
     def handle_recording_start(cls, message):
         """track when a session is recording audio"""
-        sess = cls.get(message)
-        sess.is_recording = True
-        cls.update(sess)
+        cls._track_audio_state(message, is_recording=True)
 
     @classmethod
     def handle_recording_end(cls, message):
         """track when a session stops recording audio"""
-        sess = cls.get(message)
-        sess.is_recording = False
-        cls.update(sess)
+        cls._track_audio_state(message, is_recording=False)
 
     @classmethod
     def handle_audio_output_start(cls, message):
         """track when a session is outputting audio"""
-        sess = cls.get(message)
-        sess.is_speaking = True
-        cls.update(sess)
+        cls._track_audio_state(message, is_speaking=True)
 
     @classmethod
     def handle_audio_output_end(cls, message):
         """track when a session stops outputting audio"""
-        sess = cls.get(message)
-        sess.is_speaking = False
-        cls.update(sess)
+        cls._track_audio_state(message, is_speaking=False)
 
     @staticmethod
     def merge_intent_context(target: Dict[str, Any],
@@ -1622,9 +1724,15 @@ class _BusSessionManagerMixin:
         if carried:
             inbound = Session.from_message(message)
             if inbound:
-                # a session we have never seen is adopted from the carrier
-                sess = cls.sessions.get(inbound.session_id, inbound)
+                sess = cls.held_session(inbound.session_id)
                 payload = inbound.intent_context
+                if sess is None:
+                    # a named session this process does not hold is another
+                    # client's state (§2.2/§2.5) -- there is nothing to merge
+                    # onto, and keeping it would outlive its utterance
+                    LOG.debug(f"ignoring intent_context sync for unheld "
+                              f"session '{inbound.session_id}'")
+                    return
                 if sess is not inbound and payload:
                     with _CONTEXT_LOCK:
                         if sess.intent_context is None:

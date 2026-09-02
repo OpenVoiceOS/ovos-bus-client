@@ -25,7 +25,9 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf, 
 from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
-from ovos_bus_client.session import SessionManager, Session, MalformedSession
+from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
+                                     DEFAULT_SESSION_ID, HAS_FOLD_INBOUND,
+                                     names_the_default, session_carrier)
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
 # --- legacy intent-topic compat (non-normative migration tooling) ----------
@@ -350,8 +352,11 @@ class MessageBusClient:
         if session:
             SessionManager.update(session)
         else:
-            session = SessionManager.default_session
-
+            session = SessionManager.get_default_session()
+        # OVOS-SESSION-2 §2.5/§6.4: this client IS the client that owns a named
+        # session, so the object it was built with is the authority on it --
+        # the orchestrator's registry holds no named session to look it up in.
+        self.session = session
         self.session_id = session.session_id
         self.on("ovos.session.update_default",
                 self.on_default_session_update)
@@ -484,7 +489,7 @@ class MessageBusClient:
             LOG.warning("discarding malformed bus message: %s", e)
             return
         try:
-            sess = Session.from_message(parsed_message)
+            self._take_inbound_session(parsed_message)
         except MalformedSession as e:
             # A non-object session carrier is a per-message producer fault, not a
             # transport fault (SESSION-1 §2.5): drop this one message and keep the
@@ -492,8 +497,6 @@ class MessageBusClient:
             # so a single bad producer could hold the client in a reconnect loop.
             LOG.warning("discarding bus message with malformed session: %s", e)
             return
-        if sess.session_id != "default": # 'default' can only be updated by core
-            SessionManager.update(sess)
         # RULE 2 dedup marker: read it, then POP it before any local dispatch.
         # The marker rode the wire (a different process's RULE 2 needs it to skip
         # the twin), but once here it must not survive onto descendant frames:
@@ -576,6 +579,46 @@ class MessageBusClient:
             return
         self.emitter.emit(canonical, _verbatim_copy(message, canonical))
 
+    def _own_session(self) -> Session:
+        """The session this client stamps on a message that carries none.
+
+        The default session is the orchestrator's store, so it is read live and
+        a reset is picked up. A named session is client-owned (OVOS-SESSION-2
+        §2.5) and this client is the client that owns it (§6.4), so the object
+        it was constructed with is the authority -- no registry holds a named
+        session to look one up in, and fabricating an empty one from the id
+        alone would put a session on the wire the client never had.
+        """
+        if self.session_id == DEFAULT_SESSION_ID:
+            return SessionManager.get_default_session()
+        return self.session or Session(self.session_id)
+
+    def _take_inbound_session(self, message: Message):
+        """Take an arriving message's session into whatever state holds it.
+
+        A carrier that names no usable id IS the default session (SESSION-1
+        §3.1), which is why the branch is taken off the raw carrier rather than
+        off a parsed Session: parsing rejects an empty or wrong-typed id, and
+        rejecting it here would silently discard a message the spec says to
+        route to the default session.
+
+        For the default session that means the OVOS-SESSION-2 §5.1 arrival
+        merge, which folds the carrier into the store field by field so an
+        omitted field leaves the stored one standing. A named session is
+        client-owned and the orchestrator holds nothing for it (§2.2), so it
+        only goes through ``update``, which is a no-op wherever the registry
+        honours §2.2 and the utterance-scoped registration on older releases.
+
+        @raises MalformedSession: the message carries a non-object session
+        """
+        carrier = session_carrier(message)
+        if HAS_FOLD_INBOUND and names_the_default(carrier):
+            SessionManager.fold_inbound(message)
+            return
+        sess = Session.from_message(message)
+        if sess.session_id != DEFAULT_SESSION_ID:
+            SessionManager.update(sess)
+
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
         sess = Session.deserialize(new_session)
@@ -596,9 +639,7 @@ class MessageBusClient:
             message (Message): Message to send
         """
         if "session" not in message.context:
-            sess = SessionManager.sessions.get(self.session_id) or \
-                   Session(self.session_id)
-            message.context["session"] = sess.serialize()
+            message.context["session"] = self._own_session().serialize()
 
         # a single logical emit puts exactly ONE message on the wire. The
         # namespace counterpart is bridged to listeners on the RECEIVE side

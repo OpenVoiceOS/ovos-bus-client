@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 from ovos_bus_client.client.client import (GUIWebsocketClient,
                                            MessageBusClient)
 from ovos_bus_client.message import GUIMessage, Message
-from ovos_bus_client.session import Session, SessionManager
+from ovos_bus_client.session import (Session, SessionManager,
+                                     HAS_FOLD_INBOUND)
 from websocket import (WebSocketConnectionClosedException, WebSocketException)
 
 
@@ -98,8 +99,7 @@ class TestOnDefaultSessionUpdate(TestCase):
 
 
 class TestOnMessageSessionUpdate(TestCase):
-    def test_non_default_session_is_registered(self):
-        # default = Session("default")
+    def test_named_session_is_taken_in_without_disturbing_the_store(self):
         SessionManager.sessions = {"default": Session("default")}
         bus = MessageBusClient()
         bus.client = MagicMock()
@@ -107,7 +107,13 @@ class TestOnMessageSessionUpdate(TestCase):
         s = Session("kitchen", lang="pt-pt")
         raw = Message("speak", {}, {"session": s.serialize()}).serialize()
         bus.on_message(raw)
-        self.assertIn("kitchen", SessionManager.sessions)
+        # a named session on the wire never lands in the default store
+        self.assertNotEqual(SessionManager.get_default_session().lang, "pt-PT")
+        if HAS_FOLD_INBOUND:
+            # §2.2: and it leaves no cross-utterance registry state either
+            self.assertNotIn("kitchen", SessionManager.sessions)
+        else:
+            self.assertIn("kitchen", SessionManager.sessions)
 
 
 class TestTwoArgDispatch(TestCase):
