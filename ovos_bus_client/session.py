@@ -91,6 +91,64 @@ def names_the_default(carrier: Dict[str, Any]) -> bool:
     return resolve_session_id(carrier) == DEFAULT_SESSION_ID
 
 
+_LEGACY_LOCATION_KEYS = ("city", "coordinate", "timezone")
+
+
+def _sanitize_location(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate the OVOS-SESSION-1 §3.5 ``location`` keys, dropping the rest.
+
+    Only ``lat``/``lon``/``tz`` carry normative meaning on this field (§3.5:
+    "``location`` carries only these three keys"). A malformed value for one
+    of them (wrong type, or ``lat``/``lon`` outside its range) is dropped as
+    if omitted, per the field's own malformed-key rule; any other key is
+    tolerated on ingest (§2.4 -- it does not raise) but is not re-emitted,
+    since this field defines no wire representation for it.
+    """
+    out: Dict[str, Any] = {}
+    lat = raw.get("lat")
+    if isinstance(lat, (int, float)) and not isinstance(lat, bool) and -90 <= lat <= 90:
+        out["lat"] = float(lat)
+    lon = raw.get("lon")
+    if isinstance(lon, (int, float)) and not isinstance(lon, bool) and -180 <= lon <= 180:
+        out["lon"] = float(lon)
+    tz = raw.get("tz")
+    if isinstance(tz, str) and tz:
+        out["tz"] = tz
+    return out
+
+
+def _normalize_location_input(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Accept either the SESSION-1 §3.5 wire shape or the legacy nested one.
+
+    Pre-spec producers on this compatibility line ship the nested
+    mycroft.conf ``location`` shape (``city``/``coordinate``/``timezone``)
+    instead of the flat ``{lat, lon, tz}`` object. That shape is normalized
+    here to the three keys, with a deprecation warning naming the version
+    the shim is removed in. A carrier that already uses (or mixes in) any of
+    ``lat``/``lon``/``tz`` is treated as the modern shape.
+    """
+    if not isinstance(raw, dict) or not raw:
+        return {}
+    if any(k in raw for k in _LEGACY_LOCATION_KEYS) and not any(
+            k in raw for k in ("lat", "lon", "tz")):
+        log_deprecation(
+            "the nested mycroft.conf 'location' shape (city/coordinate/"
+            "timezone) on session.location is deprecated; producers must "
+            "emit the OVOS-SESSION-1 §3.5 {lat, lon, tz} shape instead",
+            _NEXT_MAJOR_VERSION)
+        coordinate = raw.get("coordinate", {}) or {}
+        timezone = raw.get("timezone", {}) or {}
+        legacy: Dict[str, Any] = {}
+        if "latitude" in coordinate:
+            legacy["lat"] = coordinate["latitude"]
+        if "longitude" in coordinate:
+            legacy["lon"] = coordinate["longitude"]
+        if "code" in timezone:
+            legacy["tz"] = timezone["code"]
+        return _sanitize_location(legacy)
+    return _sanitize_location(raw)
+
+
 def _get_default_lang() -> str:
     """Read the runtime-configured default lang.
 
@@ -730,7 +788,12 @@ class Session(_SpecSession):
             pipeline (List[str]): Ordered intent processing pipeline identifiers.
             stt_prefs (Dict): Deprecated; provided value will be ignored.
             tts_prefs (Dict): Deprecated; provided value will be ignored.
-            location_prefs (Dict): Location preferences or metadata for the session.
+            location_prefs (Dict): OVOS-SESSION-1 §3.5 `location` -- either the wire shape
+                `{lat, lon, tz}` or the legacy nested mycroft.conf shape (normalized on
+                ingest, with a deprecation warning). Stored as given (key-wise validated);
+                since the deployment default for this field IS the deployment
+                configuration (§4.1), an omitted/empty/malformed value is stored as `{}`,
+                never materialized from configuration -- readers fall back at read time.
             system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
             time_format (str): Time format preference identifier.
             date_format (str): Date format preference identifier.
@@ -830,7 +893,15 @@ class Session(_SpecSession):
         self.touch_time = int(time.time())
         self.expiration_seconds = expiration_seconds or \
                                   Configuration().get('session', {}).get("ttl", -1)
-        self.location_preferences = location_prefs or Configuration().get("location", {})
+        # OVOS-SESSION-1 §3.5: ``location``'s deployment default IS a
+        # deployment-configured value (the mycroft.conf location), so §4.1
+        # forbids materializing it into session state or onto the wire on
+        # the origin's behalf. `self.location` therefore stores ONLY what the
+        # caller/wire actually provided (key-wise validated, possibly `{}`);
+        # the configured fallback is applied at READ time only -- see
+        # `timezone` and `location_preferences` below, mirroring how
+        # `timezone` already falls back to config without storing it.
+        self.location: Dict[str, Any] = _normalize_location_input(location_prefs or {})
         # Legacy back-compat: a caller (or a legacy wire payload via
         # deserialize) may hand an ``IntentContextManager`` frame stack. It is
         # NOT stored as a parallel object — its entities fold into the canonical
@@ -905,12 +976,57 @@ class Session(_SpecSession):
     @property
     def timezone(self) -> Optional[str]:
         """
-        Return the session's configured timezone code.
+        Return the session's timezone code.
+
+        OVOS-SESSION-1 §3.5: ``location.tz``, when present, MUST be used to
+        resolve wall-clock time for this session. When absent, the consumer
+        falls back to its own deployment-configured timezone (§2.1).
 
         Returns:
-            timezone_code (Optional[str]): Timezone identifier like 'America/Los_Angeles' if set in location preferences, `None` otherwise.
+            timezone_code (Optional[str]): IANA timezone identifier like
+                'America/Los_Angeles', or `None` if neither the session nor
+                the deployment configures one.
         """
-        return self.location_preferences.get('timezone', {}).get('code')
+        return self.location.get('tz') or \
+            Configuration().get("location", {}).get("timezone", {}).get("code")
+
+    @property
+    def location_preferences(self) -> Dict[str, Any]:
+        """DEPRECATED legacy nested view of ``location``.
+
+        Reconstructs the pre-spec mycroft.conf shape (``city``/
+        ``coordinate``/``timezone``) for callers written before
+        OVOS-SESSION-1 §3.5 adopted the flat ``{lat, lon, tz}`` wire shape.
+        ``city``/``state``/``country`` have no slot in the three-key field --
+        they are read from deployment configuration, not from session state.
+        """
+        log_deprecation("Session.location_preferences is a legacy nested "
+                        "view of the canonical OVOS-SESSION-1 §3.5 "
+                        "'location' field ({lat, lon, tz}); use "
+                        "session.location directly",
+                        _NEXT_MAJOR_VERSION)
+        cfg = Configuration().get("location", {}) or {}
+        return {
+            "city": cfg.get("city", {}),
+            "coordinate": {
+                "latitude": self.location.get(
+                    "lat", cfg.get("coordinate", {}).get("latitude")),
+                "longitude": self.location.get(
+                    "lon", cfg.get("coordinate", {}).get("longitude")),
+            },
+            "timezone": {**cfg.get("timezone", {}),
+                        "code": self.location.get(
+                            "tz", cfg.get("timezone", {}).get("code"))},
+        }
+
+    @location_preferences.setter
+    def location_preferences(self, value: Optional[Dict[str, Any]]):
+        log_deprecation("Session.location_preferences is a legacy nested "
+                        "view of the canonical OVOS-SESSION-1 §3.5 "
+                        "'location' field ({lat, lon, tz}); use "
+                        "session.location directly",
+                        _NEXT_MAJOR_VERSION)
+        self.location = _normalize_location_input(value or {})
 
     # ------------------------------------------------------------------
     # touch() on mutation — lifecycle bookkeeping the canonical class omits.
@@ -1237,13 +1353,18 @@ class Session(_SpecSession):
                                  if mode.get("skill_id") else {}),
             "session_id": self.session_id,
             "context": self._context_view().serialize(),
-            "location": self.location_preferences,
             "system_unit": self.system_unit,
             "time_format": self.time_format,
             "date_format": self.date_format,
             "is_speaking": self.is_speaking,
             "is_recording": self.is_recording,
         })
+        # OVOS-SESSION-1 §3.5/§2.1: the three-key location object, omitted
+        # entirely when none of lat/lon/tz is set (equivalent to omission).
+        if self.location:
+            data["location"] = dict(self.location)
+        else:
+            data.pop("location", None)
         return data
 
     def update_history(self, message: Message = None):
