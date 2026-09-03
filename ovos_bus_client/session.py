@@ -62,18 +62,33 @@ def session_carrier(message) -> Dict[str, Any]:
     return carrier
 
 
+try:
+    from ovos_spec_tools.session import resolve_session_id
+except ImportError:
+    def resolve_session_id(carrier: Dict[str, Any]) -> str:
+        """Resolve the session id a raw carrier names.
+
+        SESSION-1 §3.1: an omitted ``session_id`` names the default session.
+        §6 requires a non-empty string when the field is set, so an empty or
+        wrong-typed value reads as omitted rather than as a session no
+        message can name.
+
+        @param carrier: the raw session carrier off a Message
+        @return: the session id the carrier names, or the default session id
+        """
+        session_id = carrier.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            return session_id
+        return DEFAULT_SESSION_ID
+
+
 def names_the_default(carrier: Dict[str, Any]) -> bool:
     """Whether a raw session carrier names the reserved default session.
 
-    SESSION-1 §3.1: an omitted ``session_id`` is the default session, and so is
-    any value that cannot serve as an identity — §6 requires a non-empty string
-    when the field is set, so an empty or wrong-typed one reads as omitted
-    rather than as a session no message can name. Older spec-tools releases
-    have no such predicate and treat only the literal id that way.
+    Thin wrapper around ``resolve_session_id`` for callers that only need the
+    boolean.
     """
-    if HAS_FOLD_INBOUND:
-        return _SpecSessionManager._names_the_default(carrier)
-    return carrier.get("session_id", DEFAULT_SESSION_ID) == DEFAULT_SESSION_ID
+    return resolve_session_id(carrier) == DEFAULT_SESSION_ID
 
 
 def _get_default_lang() -> str:
