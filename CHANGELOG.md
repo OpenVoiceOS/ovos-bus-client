@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.2a1) (2026-09-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.1a1...2.11.2a1)
+
+**Merged pull requests:**
+
+- fix: resolve session\_id per SESSION-1 without reaching into ovos-spec-tools internals [\#318](https://github.com/OpenVoiceOS/ovos-bus-client/pull/318) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.1a1) (2026-09-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.0a1...2.11.1a1)
@@ -50,15 +58,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 **Merged pull requests:**
 
