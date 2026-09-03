@@ -2,6 +2,8 @@ import unittest
 from unittest.mock import patch
 from time import time, sleep
 
+from ovos_bus_client.session import HAS_FOLD_INBOUND
+
 
 class TestSessionModule(unittest.TestCase):
     def test_utterance_state(self):
@@ -250,24 +252,30 @@ class TestSessionManager(unittest.TestCase):
         self.assertEqual(session, self.SessionManager.default_session)
         # TODO
 
-    def test_update(self):
+    def test_update_writes_the_default_store_in_place(self):
         from ovos_bus_client.session import Session
-        sess = Session("sid-update")
-        # update returns the canonical (singleton) object for the id
-        canonical = self.SessionManager.update(sess)
-        self.assertIs(canonical, sess)
-        self.assertIs(self.SessionManager.sessions["sid-update"], sess)
-
-        # a second snapshot for the same id is folded onto the singleton in
-        # place — the original object identity is preserved, not replaced
-        snapshot = Session("sid-update")
+        stored = self.SessionManager.get_default_session()
+        snapshot = Session("default")
         snapshot.lang = "pt-PT"
         returned = self.SessionManager.update(snapshot)
-        self.assertIs(returned, sess)
-        self.assertIsNot(returned, snapshot)
-        self.assertEqual(sess.lang, "pt-PT")
+        # the store keeps its identity across a write -- components hold
+        # references to it, so a write may never swap the object out
+        self.assertIs(returned, stored)
+        self.assertIs(self.SessionManager.get_default_session(), stored)
+        self.assertEqual(stored.lang, "pt-PT")
 
-    def test_get_returns_singleton(self):
+    def test_update_hands_a_named_session_straight_back(self):
+        from ovos_bus_client.session import Session
+        sess = Session("sid-update")
+        self.assertIs(self.SessionManager.update(sess), sess)
+        if HAS_FOLD_INBOUND:
+            # OVOS-SESSION-2 §2.2: the orchestrator keeps no state for a named
+            # session, so a write records nothing and the caller keeps the object
+            self.assertNotIn("sid-update", self.SessionManager.sessions)
+        else:
+            self.assertIs(self.SessionManager.sessions["sid-update"], sess)
+
+    def test_get_resolves_the_named_session_on_the_message(self):
         from ovos_bus_client.session import Session
         from ovos_bus_client.message import Message
         sess = Session("sid-get")
@@ -275,39 +283,57 @@ class TestSessionManager(unittest.TestCase):
 
         first = self.SessionManager.get(msg)
         second = self.SessionManager.get(msg)
-        # every get() for the same id hands back the one live object, even
-        # though each message carries its own serialized snapshot
-        self.assertIs(first, second)
-        self.assertIs(self.SessionManager.sessions["sid-get"], first)
+        self.assertEqual(first.session_id, "sid-get")
+        self.assertEqual(second.session_id, "sid-get")
+        if HAS_FOLD_INBOUND:
+            # OVOS-SESSION-2 §2.2: the orchestrator is stateless for a named
+            # session, and §2.6 makes get a pure read — it builds the session
+            # the carrier describes and registers nothing
+            self.assertIsNot(first, second)
+            self.assertNotIn("sid-get", self.SessionManager.sessions)
+        else:
+            self.assertIs(first, second)
+            self.assertIs(self.SessionManager.sessions["sid-get"], first)
 
     def test_held_reference_observes_later_mutation(self):
         # the corner case the singleton fixes: a reference taken early in a
         # flow must see a flag flipped through a later snapshot of the same id
         from ovos_bus_client.session import Session
         from ovos_bus_client.message import Message
-        held = self.SessionManager.get(
-            Message("a", context={"session": Session("sid-flag").serialize()}))
-        self.assertFalse(held.is_speaking)
+        held = self.SessionManager.get_default_session()
+        held.is_speaking = False
 
-        speaking = Session("sid-flag")
+        speaking = Session("default")
         speaking.is_speaking = True
         self.SessionManager.update(speaking)
         # the early reference observes the mutation without being re-fetched
         self.assertTrue(held.is_speaking)
+        self.assertIs(self.SessionManager.get_default_session(), held)
 
     def test_forward_stamps_live_bus_session(self):
         # bus-client land: get -> mutate -> forward; the derived message carries
-        # the LIVE bus Session for its id (refresh, not the pre-mutation copy).
+        # the LIVE bus Session for the default id (refresh, not the pre-mutation
+        # copy), because the store is the only session this process is
+        # authoritative for.
         from ovos_bus_client.session import Session
         from ovos_bus_client.message import Message
-        live = self.SessionManager.get(
-            Message("a", context={"session": Session("sid-fwd").serialize()}))
+        live = self.SessionManager.get_default_session()
         live.activate_skill("my.skill")
-        derived = Message("utt", context={"session": {"session_id": "sid-fwd"}}
+        derived = Message("utt", context={"session": {"session_id": "default"}}
                           ).forward("my.skill.activate")
         skills = [s[0] for s in
                   Session.deserialize(derived.context["session"]).active_skills]
         self.assertIn("my.skill", skills)
+
+    def test_forward_carries_a_named_session_verbatim(self):
+        # OVOS-SESSION-2 §2.5: a named session is client-owned, so the carrier
+        # on the message is the only authority this process has for it
+        from ovos_bus_client.session import Session
+        from ovos_bus_client.message import Message
+        carrier = Session("sid-named", lang="pt-PT").serialize()
+        derived = Message("utt", context={"session": carrier}).forward("x")
+        self.assertEqual(
+            Session.deserialize(derived.context["session"]).lang, "pt-PT")
 
     def test_update_from_present_empty_overrides(self):
         # SESSION-1 §2: a snapshot that carries an (empty) value for a field
@@ -315,14 +341,17 @@ class TestSessionManager(unittest.TestCase):
         # not a self-preserving merge that keeps stale state.
         from ovos_bus_client.session import Session
         from ovos_bus_client.message import Message
-        held = self.SessionManager.get(
-            Message("a", context={"session": Session("sid-clear").serialize()}))
+        held = self.SessionManager.get_default_session()
         held.activate_skill("skill.foo")
         self.assertTrue(held.active_skills)
 
-        # a later snapshot with no active skills must clear the singleton
-        self.SessionManager.update(Session("sid-clear"))
-        self.assertEqual(held.active_skills, [])
+        # a snapshot that carries a value for a field replaces the stored one
+        self.SessionManager.update(Session("default", lang="pt-PT"))
+        self.assertEqual(held.lang, "pt-PT")
+        if HAS_FOLD_INBOUND:
+            # OVOS-SESSION-2 §2.6: a write is authoritative whole state, so the
+            # skills the snapshot does not carry are gone from the store too
+            self.assertEqual(held.active_skills, [])
 
     def test_update_from_does_not_alias_nested_state(self):
         # round-tripping through (de)serialize rebuilds nested objects, so the

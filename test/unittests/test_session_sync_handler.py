@@ -11,7 +11,8 @@ import unittest
 from unittest.mock import MagicMock
 
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import Session, SessionManager
+from ovos_bus_client.session import (Session, SessionManager,
+                                     HAS_FOLD_INBOUND)
 
 
 def _sync_message(session_dict):
@@ -78,13 +79,15 @@ class TestHandleSessionSync(unittest.TestCase):
         self.assertIs(sess.intent_context, held)
         self.assertIn("room", held)
 
-    def test_untracked_session_adopted(self):
+    def test_unheld_session_is_left_alone(self):
+        # §2.2/§2.5: a named session this process holds nothing for belongs to
+        # another client -- there is nowhere to merge it and nowhere to keep it
         SessionManager.handle_session_sync(_sync_message(
             {"session_id": "sync-new",
              "intent_context": {"person": {"value": "Bob"}}}))
-        sess = SessionManager.sessions.get("sync-new")
-        self.assertIsNotNone(sess)
-        self.assertEqual(sess.intent_context["person"], {"value": "Bob"})
+        if HAS_FOLD_INBOUND:
+            self.assertIsNone(SessionManager.sessions.get("sync-new"))
+        self.assertIsNone(SessionManager.held_session("sync-new"))
 
     def test_removal_propagates_end_to_end(self):
         """skill-side remove + sync deletes the entry on the managed session."""
@@ -93,7 +96,8 @@ class TestHandleSessionSync(unittest.TestCase):
         local = Session.deserialize(managed.serialize())
         local.remove_intent_context("person", scope="shared")
         SessionManager.handle_session_sync(_sync_message(local.serialize()))
-        self.assertNotIn("person", managed.intent_context)
+        self.assertNotIn("person",
+                         SessionManager.sessions["sync-6"].intent_context)
 
     def test_no_echo_for_spec_sync(self):
         """A session-carrying §5.3 sync is not a default-session request."""

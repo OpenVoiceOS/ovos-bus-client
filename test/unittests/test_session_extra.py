@@ -2,13 +2,15 @@
 Session methods, SessionManager handlers/utilities."""
 import time
 import unittest
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import (IntentContextManager,
                                      IntentContextManagerFrame, Session,
-                                     SessionManager, UtteranceState)
+                                     SessionManager, UtteranceState,
+                                     HAS_FOLD_INBOUND)
 
 
 def _reset_session_manager():
@@ -315,17 +317,26 @@ class TestSessionManager(TestCase):
         sess = SessionManager.get(msg)
         self.assertEqual(sess.session_id, "default")
 
-    def test_get_registers_non_default_session(self):
+    def test_get_resolves_non_default_session(self):
         s = Session("k")
         msg = Message("t", context={"session": s.serialize()})
         sess = SessionManager.get(msg)
         self.assertEqual(sess.session_id, "k")
-        self.assertIn("k", SessionManager.sessions)
+        if HAS_FOLD_INBOUND:
+            # a named session is client-owned (OVOS-SESSION-2 §2.2); reading one
+            # off a message leaves no cross-utterance state behind
+            self.assertNotIn("k", SessionManager.sessions)
+        else:
+            self.assertIn("k", SessionManager.sessions)
 
     def test_update_stores_session(self):
         s = Session("upd")
-        SessionManager.update(s)
-        self.assertIs(SessionManager.sessions["upd"], s)
+        self.assertIs(SessionManager.update(s), s)
+        if HAS_FOLD_INBOUND:
+            # §2.2: no orchestrator state for a named session, not even briefly
+            self.assertNotIn("upd", SessionManager.sessions)
+        else:
+            self.assertIs(SessionManager.sessions["upd"], s)
 
     def test_update_make_default(self):
         # "default" is a singleton: make_default folds the snapshot onto the
@@ -373,22 +384,62 @@ class TestSessionManager(TestCase):
         self.assertFalse(SessionManager.is_recording())
 
     def test_handle_recording_start_and_end(self):
-        s = Session("rec-1")
+        # the flag lands on the default store, which every process holds
         msg = Message("recognizer_loop:record_begin",
-                      context={"session": s.serialize()})
+                      context={"session": Session("default").serialize()})
         SessionManager.handle_recording_start(msg)
-        self.assertTrue(SessionManager.sessions["rec-1"].is_recording)
+        self.assertTrue(SessionManager.get_default_session().is_recording)
         SessionManager.handle_recording_end(msg)
-        self.assertFalse(SessionManager.sessions["rec-1"].is_recording)
+        self.assertFalse(SessionManager.get_default_session().is_recording)
+
+    def test_handle_recording_tracks_the_session_this_process_holds(self):
+        # OVOS-SESSION-2 §2.5: is_recording is client-authoritative, so a named
+        # session's flag lands on the object this process holds for that id
+        held = Session("rec-1")
+        SessionManager.bus = SimpleNamespace(session=held)
+        try:
+            msg = Message("recognizer_loop:record_begin",
+                          context={"session": Session("rec-1").serialize()})
+            SessionManager.handle_recording_start(msg)
+            self.assertTrue(held.is_recording)
+            SessionManager.handle_recording_end(msg)
+            self.assertFalse(held.is_recording)
+        finally:
+            SessionManager.bus = None
+
+    def test_handle_recording_ignores_another_clients_session(self):
+        held = Session("mine")
+        SessionManager.bus = SimpleNamespace(session=held)
+        try:
+            SessionManager.handle_recording_start(
+                Message("recognizer_loop:record_begin",
+                        context={"session": Session("theirs").serialize()}))
+            self.assertFalse(held.is_recording)
+            if HAS_FOLD_INBOUND:
+                self.assertIsNone(SessionManager.held_session("theirs"))
+        finally:
+            SessionManager.bus = None
 
     def test_handle_audio_output_start_and_end(self):
-        s = Session("aud-1")
         msg = Message("recognizer_loop:audio_output_start",
-                      context={"session": s.serialize()})
+                      context={"session": Session("default").serialize()})
         SessionManager.handle_audio_output_start(msg)
-        self.assertTrue(SessionManager.sessions["aud-1"].is_speaking)
+        self.assertTrue(SessionManager.get_default_session().is_speaking)
         SessionManager.handle_audio_output_end(msg)
-        self.assertFalse(SessionManager.sessions["aud-1"].is_speaking)
+        self.assertFalse(SessionManager.get_default_session().is_speaking)
+
+    def test_handle_audio_output_tracks_the_session_this_process_holds(self):
+        held = Session("aud-1")
+        SessionManager.bus = SimpleNamespace(session=held)
+        try:
+            msg = Message("recognizer_loop:audio_output_start",
+                          context={"session": Session("aud-1").serialize()})
+            SessionManager.handle_audio_output_start(msg)
+            self.assertTrue(held.is_speaking)
+            SessionManager.handle_audio_output_end(msg)
+            self.assertFalse(held.is_speaking)
+        finally:
+            SessionManager.bus = None
 
     def test_sync_emits_when_bus_attached(self):
         bus = MagicMock()

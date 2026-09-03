@@ -38,7 +38,9 @@ from ovos_bus_client.client.client import (_bus_flag,
                                            _compute_legacy_namespace_twin)
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
-from ovos_bus_client.session import SessionManager, Session
+from ovos_bus_client.session import (SessionManager, Session,
+                                     DEFAULT_SESSION_ID, HAS_FOLD_INBOUND,
+                                     names_the_default, session_carrier)
 
 
 class AsyncMessageWaiter:
@@ -218,7 +220,10 @@ class AsyncMessageBusClient:
         if session:
             SessionManager.update(session)
         else:
-            session = SessionManager.default_session
+            session = SessionManager.get_default_session()
+        # see MessageBusClient.__init__ -- OVOS-SESSION-2 §2.5/§6.4 make this
+        # client the authority on a named session it was built with
+        self.session = session
         self.session_id = session.session_id
         self.on("ovos.session.update_default", self._on_default_session_update)
 
@@ -288,9 +293,14 @@ class AsyncMessageBusClient:
 
     async def _on_message(self, raw: str):
         parsed = Message.deserialize(raw)
-        sess = Session.from_message(parsed)
-        if sess.session_id != "default":
-            SessionManager.update(sess)
+        # see MessageBusClient._take_inbound_session
+        carrier = session_carrier(parsed)
+        if HAS_FOLD_INBOUND and names_the_default(carrier):
+            SessionManager.fold_inbound(parsed)
+        else:
+            sess = Session.from_message(parsed)
+            if sess.session_id != DEFAULT_SESSION_ID:
+                SessionManager.update(sess)
         self.emitter.emit("message", raw)
         self.emitter.emit(parsed.msg_type, parsed)
 
@@ -327,8 +337,10 @@ class AsyncMessageBusClient:
             message: Message to send
         """
         if "session" not in message.context:
-            sess = (SessionManager.sessions.get(self.session_id)
-                    or Session(self.session_id))
+            # see MessageBusClient._own_session
+            sess = (SessionManager.get_default_session()
+                    if self.session_id == DEFAULT_SESSION_ID
+                    else self.session or Session(self.session_id))
             message.context["session"] = sess.serialize()
 
         try:
