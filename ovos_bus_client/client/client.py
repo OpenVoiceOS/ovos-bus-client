@@ -27,7 +27,7 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
                                      DEFAULT_SESSION_ID, HAS_FOLD_INBOUND,
-                                     names_the_default, session_carrier)
+                                     resolve_session_id, session_carrier)
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
 # --- legacy intent-topic compat (non-normative migration tooling) ----------
@@ -612,7 +612,7 @@ class MessageBusClient:
         @raises MalformedSession: the message carries a non-object session
         """
         carrier = session_carrier(message)
-        if HAS_FOLD_INBOUND and names_the_default(carrier):
+        if HAS_FOLD_INBOUND and resolve_session_id(carrier) == DEFAULT_SESSION_ID:
             SessionManager.fold_inbound(message)
             return
         sess = Session.from_message(message)
