@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.11.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.1a1) (2026-09-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.0a1...2.11.1a1)
+
+**Merged pull requests:**
+
+- fix: reach the session registry through its public API, not \_store [\#313](https://github.com/OpenVoiceOS/ovos-bus-client/pull/313) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.11.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.0a1) (2026-09-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.10.1a1...2.11.0a1)
+
+**Merged pull requests:**
+
+- feat: scheduled events service and client \(SCHEDULER-1\) [\#311](https://github.com/OpenVoiceOS/ovos-bus-client/pull/311) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.10.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.10.1a1) (2026-09-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.10.0a2...2.10.1a1)
@@ -457,16 +473,10 @@
 **Merged pull requests:**
 
 - Release 1.3.6a1 [\#171](https://github.com/OpenVoiceOS/ovos-bus-client/pull/171) ([github-actions[bot]](https://github.com/apps/github-actions))
-- fix: make orjson optional [\#169](https://github.com/OpenVoiceOS/ovos-bus-client/pull/169) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.3.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.5a1) (2025-06-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/1.3.4...1.3.5a1)
-
-**Merged pull requests:**
-
-- Release 1.3.5a1 [\#168](https://github.com/OpenVoiceOS/ovos-bus-client/pull/168) ([github-actions[bot]](https://github.com/apps/github-actions))
-- Update ovos-config requirement from \<2.0.0,\>=0.0.12 to \>=0.0.12,\<3.0.0 [\#167](https://github.com/OpenVoiceOS/ovos-bus-client/pull/167) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 ## [1.3.4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.4) (2025-04-10)
 
