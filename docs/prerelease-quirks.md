@@ -9,6 +9,41 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.11.0a1
+
+The event scheduler was rewritten against SCHEDULER-1 and now speaks an
+`ovos.scheduler.*` request/response protocol alongside the
+`mycroft.scheduler.*` topics, which keep working for one stable cycle and log
+a deprecation notice naming the release that drops them. `EventScheduler` is
+the new service under its old name, so nothing that starts it needs to
+change.
+
+Four behaviour changes are worth knowing about before you upgrade. The store
+moved from the XDG configuration directory to the XDG state directory, where
+it belongs; an existing `schedule.json` is copied there on first start and the
+original left in place. Recurring schedules now survive a restart instead of
+being deleted on shutdown. A one-shot that was due while the service was down
+now fires late within its grace period, or is reported on
+`ovos.scheduler.missed`, rather than being dropped silently. And scheduling
+the same name twice replaces rather than appends, so a skill that re-creates
+its schedules on boot no longer doubles them.
+
+The client derives a schedule's id from the event name alone when you do not
+pass one, so a component keeps one schedule per event and re-scheduling
+replaces it. Give explicit ids when one event needs several schedules. The
+client also owns the handler it registers: cancelling a schedule removes it,
+and replacing a schedule replaces it.
+
+Two smaller changes can surface as a behaviour difference. A fired event
+carries the context of the request that created the schedule, unchanged, plus
+a `context["scheduler"]` block describing the occurrence — on both protocols,
+including the session, which is what the scheduler this replaced did. A
+request made with no context still fires with none. And
+`mycroft.scheduler.get_event` answers with
+`{"event": ..., "schedule": [...]}` instead of a bare list, because the
+message spec refuses a list-shaped payload and the old reply could not be
+constructed at all.
+
 ## 2.10.0a2
 
 A clean `close()` could still surface `RuntimeError: cannot schedule new
