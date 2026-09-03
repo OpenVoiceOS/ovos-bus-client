@@ -26,7 +26,7 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
-                                     DEFAULT_SESSION_ID, HAS_FOLD_INBOUND,
+                                     DEFAULT_SESSION_ID,
                                      resolve_session_id, session_carrier)
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
@@ -596,24 +596,37 @@ class MessageBusClient:
     def _take_inbound_session(self, message: Message):
         """Take an arriving message's session into whatever state holds it.
 
-        A carrier that names no usable id IS the default session (SESSION-1
-        §3.1), which is why the branch is taken off the raw carrier rather than
-        off a parsed Session: parsing rejects an empty or wrong-typed id, and
-        rejecting it here would silently discard a message the spec says to
-        route to the default session.
+        OVOS-SESSION-2 §5.1's arrival merge is an orchestrator-intake fold: it
+        happens exactly once, at the process that owns the default-session
+        store, when an utterance is first taken in. This client is a bus
+        *consumer* -- a listener, a satellite, a skill container, or the
+        orchestrator itself -- and every one of those observes far more
+        default-session messages than the single intake per utterance the
+        spec merges (replies, handled-acks, forwarded frames all carry a
+        session too). Folding on each of those would merge stale field values
+        back into the live store on every observed message, not just at
+        intake, and would silently overwrite whatever the orchestrator's own
+        intake fold just wrote (see OVOS-SESSION-2 §2.6: mutation only at
+        lifecycle boundaries, not on every observation). The orchestrator
+        process folds for itself, explicitly, at its own intake point; this
+        client only needs to be able to *resolve* a session for handlers,
+        which ``SessionManager.get`` already does purely off the carrier
+        without touching the store.
 
-        For the default session that means the OVOS-SESSION-2 §5.1 arrival
-        merge, which folds the carrier into the store field by field so an
-        omitted field leaves the stored one standing. A named session is
-        client-owned and the orchestrator holds nothing for it (§2.2), so it
-        only goes through ``update``, which is a no-op wherever the registry
-        honours §2.2 and the utterance-scoped registration on older releases.
+        A carrier that names no usable id IS the default session (SESSION-1
+        §3.1) and is left exactly alone: it dispatches without touching the
+        store, whether or not it would otherwise construct into a well-formed
+        ``Session`` (an empty/falsy id is unusable but still names the
+        default per §3.1, so it must not be rejected as malformed here). A
+        named session is client-owned and the orchestrator holds nothing for
+        it (§2.2), so it still goes through ``update``, which is a no-op
+        wherever the registry honours §2.2 and the utterance-scoped
+        registration on older releases.
 
         @raises MalformedSession: the message carries a non-object session
         """
         carrier = session_carrier(message)
-        if HAS_FOLD_INBOUND and resolve_session_id(carrier) == DEFAULT_SESSION_ID:
-            SessionManager.fold_inbound(message)
+        if resolve_session_id(carrier) == DEFAULT_SESSION_ID:
             return
         sess = Session.from_message(message)
         if sess.session_id != DEFAULT_SESSION_ID:

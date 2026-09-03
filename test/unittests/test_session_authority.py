@@ -79,14 +79,18 @@ class TestFalsySessionIdIsTheDefaultSession(unittest.TestCase):
                                  DEFAULT_SESSION_ID,
                                  f"{unusable!r} names no session")
 
-    @unittest.skipUnless(HAS_FOLD_INBOUND, "no §3.1 predicate in the registry")
-    def test_empty_id_folds_into_the_store_and_still_dispatches(self):
+    def test_empty_id_still_dispatches_without_folding_the_store(self):
+        # An unusable id IS the default session (§3.1), but the §5.1 arrival
+        # fold is orchestrator-intake-only (see core#915) -- a bus-client
+        # observing this message dispatches it normally without merging its
+        # carrier into the live default-session store.
         seen = []
         self.bus.on("speak", seen.append)
+        stored_lang = SessionManager.get_default_session().lang
         raw = Message("speak", {"utterance": "hi"},
                       {"session": {"session_id": "", "lang": "pt-pt"}}).serialize()
         self.bus.on_message(raw)
-        self.assertEqual(SessionManager.get_default_session().lang, "pt-PT")
+        self.assertEqual(SessionManager.get_default_session().lang, stored_lang)
         self.assertEqual(len(seen), 1)
 
     def test_malformed_carrier_is_still_rejected(self):
