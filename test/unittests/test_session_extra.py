@@ -117,9 +117,19 @@ class TestSessionLifecycle(TestCase):
         self.assertEqual(s.timezone, "Europe/Lisbon")
 
     def test_timezone_none_when_missing(self):
-        # explicitly empty timezone block to bypass any global config defaults
-        s = Session(location_prefs={"timezone": {}})
-        self.assertIsNone(s.timezone)
+        # Pre-spec pin: this used to assert that an explicit-but-empty legacy
+        # nested `location_prefs` bypassed the deployment config default by
+        # being STORED as the empty session state. Under OVOS-SESSION-1
+        # §3.5/§4.1 the deployment default for `location` is itself a
+        # deployment-configured value, so it is never materialized into
+        # `self.location` -- the fallback happens at READ time only, exactly
+        # like this case: `self.location` stays `{}` and `timezone` falls
+        # back to whatever `Configuration()` reports (here, nothing).
+        with patch("ovos_bus_client.session.Configuration", return_value={}):
+            s = Session(location_prefs={"timezone": {}})
+            self.assertEqual(s.location, {})
+            self.assertIsNone(s.timezone)
+            self.assertEqual(s.location, {}, "read must not mutate stored state")
 
     def test_active_property(self):
         s = Session()
@@ -210,16 +220,24 @@ class TestSessionSerialization(TestCase):
         _reset_session_manager()
 
     def test_serialize_includes_all_keys(self):
+        # Pre-spec pin: `location` used to always be present, materialized
+        # from the deployment config even when the session named none. Under
+        # OVOS-SESSION-1 §3.5/§4.1 `location`'s deployment default IS a
+        # deployment-configured value, so it is never materialized onto the
+        # wire on the origin's behalf (§4.1) -- it is omitted here because no
+        # `location` was ever provided to this session, same as an omitted
+        # override field with no session-carried value.
         s = Session("sid", lang="pt-pt", site_id="kitchen", persona_id="p1",
                     blacklisted_skills=["bad.skill"],
                     blacklisted_intents=["bad:intent"])
         d = s.serialize()
         for key in ["active_skills", "utterance_states", "session_id",
                     "persona_id", "lang", "context", "site_id", "pipeline",
-                    "location", "system_unit", "time_format", "date_format",
+                    "system_unit", "time_format", "date_format",
                     "is_speaking", "is_recording", "blacklisted_skills",
                     "blacklisted_intents"]:
             self.assertIn(key, d)
+        self.assertNotIn("location", d)
         self.assertEqual(d["session_id"], "sid")
         self.assertEqual(d["persona_id"], "p1")
         self.assertEqual(d["site_id"], "kitchen")
