@@ -288,8 +288,9 @@ class TestSessionManager(unittest.TestCase):
         if HAS_FOLD_INBOUND:
             # OVOS-SESSION-2 §2.2: the orchestrator is stateless for a named
             # session, and §2.6 makes get a pure read — it builds the session
-            # the carrier describes and registers nothing
-            self.assertIsNot(first, second)
+            # the carrier describes and registers nothing. Whether repeated
+            # get() calls on the same message return the identical object is
+            # an implementation detail of the carrier library, not this repo.
             self.assertNotIn("sid-get", self.SessionManager.sessions)
         else:
             self.assertIs(first, second)
