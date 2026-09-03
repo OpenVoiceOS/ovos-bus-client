@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.3a1) (2026-09-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.2a2...2.11.3a1)
+
+**Merged pull requests:**
+
+- fix: carry session.location as {lat, lon, tz} per OVOS-SESSION-1 §3.5 [\#320](https://github.com/OpenVoiceOS/ovos-bus-client/pull/320) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.2a2) (2026-09-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.2a1...2.11.2a2)
@@ -480,7 +488,6 @@
 
 - Release 1.3.6a2 [\#174](https://github.com/OpenVoiceOS/ovos-bus-client/pull/174) ([github-actions[bot]](https://github.com/apps/github-actions))
 - Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
-- feat\(EventScheduler\): list\_events API [\#172](https://github.com/OpenVoiceOS/ovos-bus-client/pull/172) ([mikejgray](https://github.com/mikejgray))
 
 ## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
 
