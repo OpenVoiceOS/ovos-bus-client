@@ -402,6 +402,7 @@ class TestFullCanonicalRoundTrip(TestCase):
             converse_handlers=[{"skill_id": "ch.skill", "activated_at": 2.0}],
             response_mode={"skill_id": "rm.skill", "expires_at": 9.0},
             persona_id="persona-1",
+            location={"lat": 38.7, "lon": -9.1, "tz": "Europe/Lisbon"},
         )
 
     # the complete canonical field set asserted equal post round-trip
@@ -415,7 +416,7 @@ class TestFullCanonicalRoundTrip(TestCase):
         "blacklisted_metadata_transformers", "blacklisted_intent_transformers",
         "blacklisted_dialog_transformers", "blacklisted_tts_transformers",
         "fallback_handlers", "active_handlers", "converse_handlers",
-        "response_mode", "persona_id",
+        "response_mode", "persona_id", "location",
     )
 
     def test_constructor_accepts_every_canonical_field(self):
