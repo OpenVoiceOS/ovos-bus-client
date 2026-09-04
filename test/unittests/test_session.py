@@ -2,8 +2,6 @@ import unittest
 from unittest.mock import patch
 from time import time, sleep
 
-from ovos_bus_client.session import HAS_FOLD_INBOUND
-
 
 class TestSessionModule(unittest.TestCase):
     def test_utterance_state(self):
@@ -11,6 +9,16 @@ class TestSessionModule(unittest.TestCase):
         for state in UtteranceState:
             self.assertIsInstance(state, UtteranceState)
             self.assertIsInstance(state, str)
+
+    def test_location_preferences_setter_empty_value_keeps_location_dict(self):
+        from ovos_bus_client.session import Session
+        sess = Session()
+        for empty in ({}, None):
+            sess.location_preferences = empty
+            self.assertEqual(sess.location, {})
+            # timezone falls back to deployment config and must not raise
+            # AttributeError on a None `location`
+            sess.timezone
 
 
 class TestIntentContextManagerFrame(unittest.TestCase):
@@ -249,7 +257,7 @@ class TestSessionManager(unittest.TestCase):
         from ovos_bus_client.session import Session
         session = self.SessionManager.reset_default_session()
         self.assertIsInstance(session, Session)
-        self.assertEqual(session, self.SessionManager.default_session)
+        self.assertEqual(session, self.SessionManager.get_default_session())
         # TODO
 
     def test_update_writes_the_default_store_in_place(self):
@@ -268,12 +276,9 @@ class TestSessionManager(unittest.TestCase):
         from ovos_bus_client.session import Session
         sess = Session("sid-update")
         self.assertIs(self.SessionManager.update(sess), sess)
-        if HAS_FOLD_INBOUND:
-            # OVOS-SESSION-2 §2.2: the orchestrator keeps no state for a named
-            # session, so a write records nothing and the caller keeps the object
-            self.assertNotIn("sid-update", self.SessionManager.sessions)
-        else:
-            self.assertIs(self.SessionManager.sessions["sid-update"], sess)
+        # OVOS-SESSION-2 §2.2: the orchestrator keeps no state for a named
+        # session, so a write records nothing and the caller keeps the object
+        self.assertNotIn("sid-update", self.SessionManager.sessions)
 
     def test_get_resolves_the_named_session_on_the_message(self):
         from ovos_bus_client.session import Session
@@ -285,16 +290,12 @@ class TestSessionManager(unittest.TestCase):
         second = self.SessionManager.get(msg)
         self.assertEqual(first.session_id, "sid-get")
         self.assertEqual(second.session_id, "sid-get")
-        if HAS_FOLD_INBOUND:
-            # OVOS-SESSION-2 §2.2: the orchestrator is stateless for a named
-            # session, and §2.6 makes get a pure read — it builds the session
-            # the carrier describes and registers nothing. Whether repeated
-            # get() calls on the same message return the identical object is
-            # an implementation detail of the carrier library, not this repo.
-            self.assertNotIn("sid-get", self.SessionManager.sessions)
-        else:
-            self.assertIs(first, second)
-            self.assertIs(self.SessionManager.sessions["sid-get"], first)
+        # OVOS-SESSION-2 §2.2: the orchestrator is stateless for a named
+        # session, and §2.6 makes get a pure read — it builds the session
+        # the carrier describes and registers nothing. Whether repeated
+        # get() calls on the same message return the identical object is
+        # an implementation detail of the carrier library, not this repo.
+        self.assertNotIn("sid-get", self.SessionManager.sessions)
 
     def test_held_reference_observes_later_mutation(self):
         # the corner case the singleton fixes: a reference taken early in a
@@ -349,10 +350,9 @@ class TestSessionManager(unittest.TestCase):
         # a snapshot that carries a value for a field replaces the stored one
         self.SessionManager.update(Session("default", lang="pt-PT"))
         self.assertEqual(held.lang, "pt-PT")
-        if HAS_FOLD_INBOUND:
-            # OVOS-SESSION-2 §2.6: a write is authoritative whole state, so the
-            # skills the snapshot does not carry are gone from the store too
-            self.assertEqual(held.active_skills, [])
+        # OVOS-SESSION-2 §2.6: a write is authoritative whole state, so the
+        # skills the snapshot does not carry are gone from the store too
+        self.assertEqual(held.active_skills, [])
 
     def test_update_from_does_not_alias_nested_state(self):
         # round-tripping through (de)serialize rebuilds nested objects, so the

@@ -11,8 +11,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import (Session, SessionManager,
-                                     HAS_FOLD_INBOUND)
+from ovos_bus_client.session import Session, SessionManager
 
 
 def _sync_message(session_dict):
@@ -85,8 +84,7 @@ class TestHandleSessionSync(unittest.TestCase):
         SessionManager.handle_session_sync(_sync_message(
             {"session_id": "sync-new",
              "intent_context": {"person": {"value": "Bob"}}}))
-        if HAS_FOLD_INBOUND:
-            self.assertIsNone(SessionManager.sessions.get("sync-new"))
+        self.assertIsNone(SessionManager.sessions.get("sync-new"))
         self.assertIsNone(SessionManager.held_session("sync-new"))
 
     def test_removal_propagates_end_to_end(self):

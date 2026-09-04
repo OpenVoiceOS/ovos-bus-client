@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import ovos_bus_client.session as session_module
 from ovos_bus_client.client.client import MessageBusClient
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import (Session, SessionManager, HAS_FOLD_INBOUND,
+from ovos_bus_client.session import (Session, SessionManager,
                                      DEFAULT_SESSION_ID, resolve_session_id,
                                      session_carrier)
 
@@ -73,11 +73,10 @@ class TestFalsySessionIdIsTheDefaultSession(unittest.TestCase):
                           DEFAULT_SESSION_ID)
         self.assertNotEqual(resolve_session_id({"session_id": "kitchen"}),
                             DEFAULT_SESSION_ID)
-        if HAS_FOLD_INBOUND:
-            for unusable in ("", 0, False, [], {}):
-                self.assertEqual(resolve_session_id({"session_id": unusable}),
-                                 DEFAULT_SESSION_ID,
-                                 f"{unusable!r} names no session")
+        for unusable in ("", 0, False, [], {}):
+            self.assertEqual(resolve_session_id({"session_id": unusable}),
+                             DEFAULT_SESSION_ID,
+                             f"{unusable!r} names no session")
 
     def test_empty_id_still_dispatches_without_folding_the_store(self):
         # An unusable id IS the default session (§3.1), but the §5.1 arrival
@@ -130,7 +129,6 @@ class TestGetDoesNotTouchTheMessage(unittest.TestCase):
         SessionManager.get(msg)
         self.assertEqual(msg.context["session"], carrier)
 
-    @unittest.skipUnless(HAS_FOLD_INBOUND, "get folds on older registries")
     def test_reading_a_default_message_does_not_move_the_store(self):
         SessionManager.reset_default_session()
         SessionManager.get_default_session().site_id = "kitchen"
@@ -169,7 +167,6 @@ class TestTouchReplacesTheDefaultStore(unittest.TestCase):
     def tearDown(self):
         SessionManager.reset_default_session()
 
-    @unittest.skipUnless(HAS_FOLD_INBOUND, "older registries merge on write")
     def test_stale_default_copy_wipes_uncarried_fields(self):
         SessionManager.get_default_session().site_id = "kitchen"
         stale = Session.deserialize({"session_id": "default", "lang": "en-US"})

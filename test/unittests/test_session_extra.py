@@ -9,13 +9,11 @@ from unittest.mock import MagicMock, patch
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import (IntentContextManager,
                                      IntentContextManagerFrame, Session,
-                                     SessionManager, UtteranceState,
-                                     HAS_FOLD_INBOUND)
+                                     SessionManager, UtteranceState)
 
 
 def _reset_session_manager():
     default = Session("default")
-    SessionManager.default_session = default
     SessionManager.sessions = {"default": default}
     SessionManager.bus = None
 
@@ -340,21 +338,15 @@ class TestSessionManager(TestCase):
         msg = Message("t", context={"session": s.serialize()})
         sess = SessionManager.get(msg)
         self.assertEqual(sess.session_id, "k")
-        if HAS_FOLD_INBOUND:
-            # a named session is client-owned (OVOS-SESSION-2 §2.2); reading one
-            # off a message leaves no cross-utterance state behind
-            self.assertNotIn("k", SessionManager.sessions)
-        else:
-            self.assertIn("k", SessionManager.sessions)
+        # a named session is client-owned (OVOS-SESSION-2 §2.2); reading one
+        # off a message leaves no cross-utterance state behind
+        self.assertNotIn("k", SessionManager.sessions)
 
     def test_update_stores_session(self):
         s = Session("upd")
         self.assertIs(SessionManager.update(s), s)
-        if HAS_FOLD_INBOUND:
-            # §2.2: no orchestrator state for a named session, not even briefly
-            self.assertNotIn("upd", SessionManager.sessions)
-        else:
-            self.assertIs(SessionManager.sessions["upd"], s)
+        # §2.2: no orchestrator state for a named session, not even briefly
+        self.assertNotIn("upd", SessionManager.sessions)
 
     def test_update_make_default(self):
         # "default" is a singleton: make_default folds the snapshot onto the
@@ -363,7 +355,7 @@ class TestSessionManager(TestCase):
         s = Session("foo")
         canonical = SessionManager.update(s, make_default=True)
         self.assertEqual(s.session_id, "default")
-        self.assertIs(SessionManager.default_session, canonical)
+        self.assertIs(SessionManager.get_default_session(), canonical)
         self.assertIs(SessionManager.sessions["default"], canonical)
 
     def test_update_raises_on_none(self):
@@ -371,13 +363,13 @@ class TestSessionManager(TestCase):
             SessionManager.update(None)
 
     def test_touch_updates_default_when_no_message(self):
-        before = SessionManager.default_session.touch_time
-        SessionManager.default_session.touch_time = before - 100
+        before = SessionManager.get_default_session().touch_time
+        SessionManager.get_default_session().touch_time = before - 100
         SessionManager.touch()
-        self.assertGreater(SessionManager.default_session.touch_time, before - 100)
+        self.assertGreater(SessionManager.get_default_session().touch_time, before - 100)
 
     def test_reset_default_session_creates_fresh(self):
-        old = SessionManager.default_session
+        old = SessionManager.get_default_session()
         new = SessionManager.reset_default_session()
         self.assertIsNot(new, old)
         self.assertEqual(new.session_id, "default")
@@ -393,7 +385,7 @@ class TestSessionManager(TestCase):
 
     def test_is_speaking_default(self):
         self.assertFalse(SessionManager.is_speaking())
-        sess = SessionManager.default_session
+        sess = SessionManager.get_default_session()
         sess.is_speaking = True
         SessionManager.update(sess)
         self.assertTrue(SessionManager.is_speaking())
@@ -433,8 +425,7 @@ class TestSessionManager(TestCase):
                 Message("recognizer_loop:record_begin",
                         context={"session": Session("theirs").serialize()}))
             self.assertFalse(held.is_recording)
-            if HAS_FOLD_INBOUND:
-                self.assertIsNone(SessionManager.held_session("theirs"))
+            self.assertIsNone(SessionManager.held_session("theirs"))
         finally:
             SessionManager.bus = None
 
@@ -504,7 +495,7 @@ class TestSessionManager(TestCase):
     def test_wait_while_speaking_not_speaking_returns_immediately(self):
         SessionManager.bus = MagicMock()
         try:
-            sess = SessionManager.default_session
+            sess = SessionManager.get_default_session()
             sess.is_speaking = False
             SessionManager.update(sess)
             SessionManager.wait_while_speaking(timeout=0.01)
@@ -515,7 +506,7 @@ class TestSessionManager(TestCase):
         """Bool timeout triggers a warning branch — patch Event.wait so we
         don't actually block on the 15-second fallback."""
         SessionManager.bus = MagicMock()
-        sess = SessionManager.default_session
+        sess = SessionManager.get_default_session()
         sess.is_speaking = True
         SessionManager.update(sess)
         try:

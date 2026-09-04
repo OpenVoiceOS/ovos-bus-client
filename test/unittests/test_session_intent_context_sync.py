@@ -6,21 +6,17 @@ from types import SimpleNamespace
 import pytest
 
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import (Session, SessionManager,
-                                     HAS_FOLD_INBOUND)
+from ovos_bus_client.session import Session, SessionManager
 
 
 @pytest.fixture(autouse=True)
 def _reset_sessions():
     # isolate the singleton between tests
     saved = dict(SessionManager.sessions)
-    saved_default = SessionManager.default_session
     SessionManager.sessions = {"default": Session("default")}
-    SessionManager.default_session = SessionManager.sessions["default"]
     SessionManager.bus = None  # cls.sync() no-ops without a bus
     yield
     SessionManager.sessions = saved
-    SessionManager.default_session = saved_default
 
 
 def test_intent_context_roundtrips():
@@ -76,8 +72,7 @@ def test_handle_session_sync_ignores_another_clients_session():
         SessionManager.handle_session_sync(
             Message("ovos.session.sync", {}, {"session": snap.serialize()}))
         assert held.intent_context == {}
-        if HAS_FOLD_INBOUND:
-            assert "s2" not in SessionManager.sessions
+        assert "s2" not in SessionManager.sessions
     finally:
         SessionManager.bus = None
 

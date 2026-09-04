@@ -13,7 +13,8 @@ from ovos_spec_tools.session import (Session as _SpecSession,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
                                      DEFAULT_SESSION_ID,
                                      MalformedSession,
-                                     SESSION1_REGISTERED_FIELDS)
+                                     SESSION1_REGISTERED_FIELDS,
+                                     resolve_session_id)
 from ovos_bus_client.message import dig_for_message, Message
 from ovos_bus_client.version import VERSION_MAJOR
 
@@ -32,13 +33,6 @@ if not hasattr(_SpecSessionManager, "_pre_graft"):
                                       "update": _SpecSessionManager.update.__func__}
 _spec_get = _SpecSessionManager._pre_graft["get"]
 _spec_update = _SpecSessionManager._pre_graft["update"]
-
-#: ``SessionManager.fold_inbound`` is the OVOS-SESSION-2 §5.1 arrival merge: it
-#: takes the raw carrier off an inbound Message and merges it into the
-#: default-session store. Older spec-tools releases have no arrival point and
-#: fold lazily inside ``get`` instead, so the receive path only calls it where
-#: the registry offers it.
-HAS_FOLD_INBOUND = hasattr(_SpecSessionManager, "fold_inbound")
 
 
 def session_carrier(message) -> Dict[str, Any]:
@@ -61,8 +55,6 @@ def session_carrier(message) -> Dict[str, Any]:
         raise MalformedSession("session must be a JSON object (§2.5)")
     return carrier
 
-
-from ovos_spec_tools.session import resolve_session_id
 
 _LEGACY_LOCATION_KEYS = ("city", "coordinate", "timezone")
 
@@ -113,20 +105,11 @@ def _get_default_lang() -> str:
     """
     return Configuration().get("lang", "en-us")
 
-# Bidirectional-wire back-compat: the canonical parent applies SESSION-1 §2.1
-# omit-when-empty semantics and stores an *empty* collection field as ``None``.
-# On the wire that is equivalent to omission, but in-process it breaks the
-# public contract that these fields are always iterable containers — consumers
-# do ``intent in session.blacklisted_intents`` and a ``None`` raises
-# ``TypeError: argument of type 'NoneType' is not iterable``. These fields are
-# therefore folded back to their canonical empty container after construction
-# so they ALWAYS deserialize to ``[]`` / ``{}``, never ``None``. Serialization
-# omits them when empty (``to_dict`` drops falsy values), per SESSION-1 §3.4:
-# an empty list-valued override field is wire-equivalent to omission, and a
-# producer SHOULD NOT spend wire weight restating the deployment default on
-# every Message. Scalar fields (``site_id``, ``persona_id``, the per-channel
-# language overrides) and the single-object ``response_mode`` legitimately stay
-# ``None`` and are intentionally excluded.
+# The canonical parent stores an empty list/dict field as ``None`` (SESSION-1
+# §2.1 omit-when-empty); these fields are folded back to ``[]`` / ``{}`` after
+# construction so ``x in session.<field>`` never raises ``TypeError``. Scalar
+# fields and the single-object ``response_mode`` stay ``None`` and are
+# intentionally excluded.
 _CANONICAL_LIST_FIELDS = (
     "secondary_langs",
     "pipeline",
@@ -154,13 +137,8 @@ _CANONICAL_DICT_FIELDS = (
     "location",
 )
 
-# Guards every mutation of a Session's ``intent_context`` map (the canonical
-# mutators, the legacy view's write-through folds, and the §5.3 sync merge).
-# Bus handlers run on reader threads, so two writers — or a writer racing the
-# sync merge's iteration — are a real schedule. A single module-level lock is
-# deliberate: contention is negligible (mutations are tiny dict ops) and a
-# per-instance lock would be replaced whenever ``update_from`` swaps a
-# session's ``__dict__``, silently splitting the mutual exclusion.
+# Module-level because ``update_from`` swaps a session's ``__dict__``, which
+# would replace a per-instance lock and silently split the mutual exclusion.
 _CONTEXT_LOCK = RLock()
 
 
@@ -905,10 +883,10 @@ class Session(_SpecSession):
         leaking a ``None`` that breaks ``x in session.<field>``.
         """
         for name in _CANONICAL_LIST_FIELDS:
-            if getattr(self, name, None) is None:
+            if getattr(self, name) is None:
                 setattr(self, name, [])
         for name in _CANONICAL_DICT_FIELDS:
-            if getattr(self, name, None) is None:
+            if getattr(self, name) is None:
                 setattr(self, name, {})
 
     def _context_view(self) -> "_IntentContextView":
@@ -995,7 +973,7 @@ class Session(_SpecSession):
                         "'location' field ({lat, lon, tz}); use "
                         "session.location directly",
                         _NEXT_MAJOR_VERSION)
-        self.location = _normalize_location_input(value or {})
+        self.location = _normalize_location_input(value or {}) or {}
 
     # ------------------------------------------------------------------
     # touch() on mutation — lifecycle bookkeeping the canonical class omits.
@@ -1510,7 +1488,7 @@ class _BusSessionManagerMixin:
         if cls.bus:
             message = message or Message(SpecMessage.SESSION_SYNC)
             cls.bus.emit(message.reply("ovos.session.update_default",
-                                       {"session_data": cls.default_session.serialize()}))
+                                       {"session_data": cls.get_default_session().serialize()}))
 
     @classmethod
     def sync(cls, message=None):
@@ -1570,7 +1548,6 @@ class _BusSessionManagerMixin:
         """
         sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
         cls.sessions[DEFAULT_SESSION_ID] = sess
-        cls.default_session = sess
         LOG.info("Default Session reset")
         cls.sync()
         return sess

@@ -88,7 +88,6 @@ class TestSessionExtra(TestCase):
 class TestSessionManagerExtra(TestCase):
     def setUp(self):
         default = Session("default")
-        SessionManager.default_session = default
         SessionManager.sessions = {"default": default}
         SessionManager.bus = None
 
@@ -98,6 +97,20 @@ class TestSessionManagerExtra(TestCase):
         try:
             SessionManager.handle_default_session_request(Message("ovos.session.sync"))
             # sync emits an update
+            self.assertTrue(bus.emit.called)
+        finally:
+            SessionManager.bus = None
+
+    def test_broadcast_default_session_without_mirror_attribute(self):
+        # a fresh process never wrote the `default_session` mirror -- the
+        # broadcast must read the store via get_default_session(), not raise
+        # AttributeError on a class attribute that was never set.
+        if hasattr(SessionManager, "default_session"):
+            delattr(SessionManager, "default_session")
+        bus = MagicMock()
+        SessionManager.bus = bus
+        try:
+            SessionManager._broadcast_default_session()
             self.assertTrue(bus.emit.called)
         finally:
             SessionManager.bus = None

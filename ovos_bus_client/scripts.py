@@ -116,7 +116,7 @@ def simple_cli():
     lang = lang or Configuration().get("lang", "en-us")
 
     from ovos_bus_client.session import SessionManager, Session
-    sess = SessionManager.default_session
+    sess = SessionManager.get_default_session()
 
     while True:
         try:

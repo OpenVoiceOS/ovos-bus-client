@@ -36,6 +36,7 @@ from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
     MalformedMessage,
     Message,
+    _stamp_live_session,
 )
 from ovos_utils import json_dumps
 from ovos_utils.log import deprecated
@@ -193,25 +194,6 @@ def dig_for_message(max_records: int = 10) -> Optional[Message]:
     return None
 
 
-def _stamp_session_if_present(msg: Message, source: Message) -> Message:
-    """Refresh a derived message's session to the live value for its id.
-
-    Mirrors the ovos_spec_tools ``Message.forward`` / ``reply`` stamping (see
-    ``_stamp_live_session``) for the bus-client Message subclasses
-    (``CollectionMessage`` / ``GUIMessage``), whose differing ``__init__``
-    signatures force them to build a base ``Message`` directly instead of
-    inheriting the stamping spec methods. A session-less message is left
-    untouched (§5). ``SessionManager.stamp_derived`` prefers the session bound
-    to ``source`` (the handler write of OVOS-CONTEXT-1 §5.3) and falls back to
-    ``sync_message_session`` otherwise, so a session for an id the registry
-    never folded is still carried verbatim.
-    """
-    if msg.context.get("session"):
-        from ovos_spec_tools.session import SessionManager
-        return SessionManager.stamp_derived(msg, source)
-    return msg
-
-
 class CollectionMessage(Message):
     """Extension of :class:`Message` for use with collect handlers.
 
@@ -328,7 +310,7 @@ class CollectionMessage(Message):
             Message: A new Message constructed with `msg_type`, `data` (or `{}`), and a deep-copied context from this message.
         """
         from copy import deepcopy
-        return _stamp_session_if_present(
+        return _stamp_live_session(
             Message(msg_type, data or {}, deepcopy(self.context)), self)
 
     def reply(self, msg_type, data=None, context=None):  # type: ignore[override]
@@ -360,7 +342,7 @@ class CollectionMessage(Message):
         if src is not None:
             new_context["destination"] = src
         msg = Message(msg_type, data or {}, new_context)
-        return msg if explicit_session else _stamp_session_if_present(msg, self)
+        return msg if explicit_session else _stamp_live_session(msg, self)
 
     def response(self, data=None, context=None):  # type: ignore[override]
         """
@@ -449,7 +431,7 @@ class GUIMessage(Message):
             Message: A new Message constructed with `msg_type`, `data` (or `{}`), and a deep-copied context from this message.
         """
         from copy import deepcopy
-        return _stamp_session_if_present(
+        return _stamp_live_session(
             Message(msg_type, data or {}, deepcopy(self.context)), self)
 
     def reply(self, msg_type, data=None, context=None):  # type: ignore[override]
