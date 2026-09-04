@@ -3,13 +3,12 @@ onto CollectionMessage / GUIMessage derivations.
 
 ``CollectionMessage`` and ``GUIMessage`` cannot inherit the spec-tools
 ``Message.forward`` / ``reply`` stamping (their ``__init__`` signatures do
-not match), so ``ovos_bus_client.message._stamp_session_if_present`` mirrors
-it by hand via ``SessionManager.stamp_derived``. Before this fix the helper
-called ``sync_message_session`` with no source, which only re-reads the
-default-session store and never consults the session a handler bound via
-``SessionManager.get(msg)`` — a handler that read its session off a
-collect/GUI message and wrote an intent-context entry on a *named* session
-lost that write the moment the message was forwarded/replied/responded to.
+not match), so their ``forward``/``reply``/``response`` overrides call
+``ovos_spec_tools.message._stamp_live_session`` by hand. It consults the
+session a handler bound via ``SessionManager.get(msg)``, not just the
+default-session store — a handler that read its session off a collect/GUI
+message and wrote an intent-context entry on a *named* session must not
+lose that write the moment the message is forwarded/replied/responded to.
 """
 import unittest
 

@@ -9,7 +9,6 @@ from ovos_bus_client.session import Session, SessionManager
 
 def _reset():
     default = Session("default")
-    SessionManager.default_session = default
     SessionManager.sessions = {"default": default}
     SessionManager.bus = None
 
@@ -21,7 +20,7 @@ class TestWaitWhileSpeakingPath(TestCase):
     def test_wait_while_speaking_registers_and_removes_listener(self):
         bus = MagicMock()
         SessionManager.bus = bus
-        sess = SessionManager.default_session
+        sess = SessionManager.get_default_session()
         sess.is_speaking = True
         SessionManager.update(sess)
         try:
@@ -39,7 +38,7 @@ class TestWaitWhileSpeakingPath(TestCase):
     def test_wait_while_recording_registers_and_removes_listener(self):
         bus = MagicMock()
         SessionManager.bus = bus
-        sess = SessionManager.default_session
+        sess = SessionManager.get_default_session()
         sess.is_recording = True
         SessionManager.update(sess)
         try:

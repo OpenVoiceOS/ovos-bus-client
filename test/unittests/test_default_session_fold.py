@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 from ovos_bus_client.client.client import MessageBusClient
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import SessionManager, HAS_FOLD_INBOUND
+from ovos_bus_client.session import SessionManager
 
 
 def _inbound(carrier):
@@ -82,8 +82,6 @@ class TestObservedMessagesNeverFoldTheDefaultStore(unittest.TestCase):
         self.assertEqual(stored.site_id, "kitchen")
 
 
-@unittest.skipUnless(HAS_FOLD_INBOUND,
-                     "spec-tools registry has no fold_inbound arrival point")
 class TestExplicitIntakeFoldStillWorksThroughTheSameClient(unittest.TestCase):
     """The orchestrator's own explicit §5.1 fold at intake is untouched.
 
