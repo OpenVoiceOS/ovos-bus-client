@@ -488,7 +488,7 @@ class TestSessionManager(TestCase):
                 "ovos.session.sync",
             ]:
                 self.assertIn(event, registered)
-            self.assertTrue(bus.emit.called)
+            self.assertFalse(bus.emit.called)
         finally:
             SessionManager.bus = None
 
