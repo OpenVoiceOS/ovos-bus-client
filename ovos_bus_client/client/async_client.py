@@ -38,8 +38,7 @@ from ovos_bus_client.client.client import (_bus_flag,
                                            _compute_legacy_namespace_twin)
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
-from ovos_bus_client.session import (SessionManager, Session,
-                                     DEFAULT_SESSION_ID, HAS_FOLD_INBOUND,
+from ovos_bus_client.session import (SessionManager, Session, DEFAULT_SESSION_ID,
                                      resolve_session_id, session_carrier)
 
 
@@ -293,11 +292,10 @@ class AsyncMessageBusClient:
 
     async def _on_message(self, raw: str):
         parsed = Message.deserialize(raw)
-        # see MessageBusClient._take_inbound_session
+        # see MessageBusClient._take_inbound_session -- the §5.1 arrival fold
+        # is orchestrator-intake-only; this client only tracks named sessions.
         carrier = session_carrier(parsed)
-        if HAS_FOLD_INBOUND and resolve_session_id(carrier) == DEFAULT_SESSION_ID:
-            SessionManager.fold_inbound(parsed)
-        else:
+        if resolve_session_id(carrier) != DEFAULT_SESSION_ID:
             sess = Session.from_message(parsed)
             if sess.session_id != DEFAULT_SESSION_ID:
                 SessionManager.update(sess)

@@ -169,6 +169,57 @@ class TestOnMessage(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertEqual(len(raw_received), 1)
 
+    async def test_on_message_leaves_the_default_store_alone(self):
+        # OVOS-SESSION-2 §5.1's arrival fold is orchestrator-intake-only (see
+        # ovos_bus_client.client.client.MessageBusClient._take_inbound_session);
+        # this is the async twin of that assertion.
+        from ovos_bus_client.session import SessionManager
+        SessionManager.reset_default_session()
+        self.addCleanup(SessionManager.reset_default_session)
+        stored = SessionManager.get_default_session()
+        stored.lang = "pt-PT"
+        stored.site_id = "kitchen"
+
+        bus = _make_bus()
+        # an omitted-field default carrier must not reset a field the store
+        # has already moved past
+        raw = json.dumps({"type": "recognizer_loop:utterance",
+                          "data": {"utterances": ["hi"]},
+                          "context": {"session": {"session_id": "default"}}})
+        await bus._on_message(raw)
+        self.assertIs(SessionManager.get_default_session(), stored)
+        self.assertEqual(stored.lang, "pt-PT")
+        self.assertEqual(stored.site_id, "kitchen")
+
+        # nor does a fully-populated observed carrier overwrite it
+        raw2 = json.dumps({"type": "recognizer_loop:utterance",
+                           "data": {"utterances": ["hi"]},
+                           "context": {"session": {"session_id": "default",
+                                                    "site_id": "bedroom"}}})
+        await bus._on_message(raw2)
+        self.assertEqual(stored.site_id, "kitchen")
+
+    async def test_on_message_still_updates_a_named_session(self):
+        # a named-session carrier still goes through SessionManager.update()
+        # exactly once (§2.2/#313 held-session handling), unlike the default
+        # session above.
+        from ovos_bus_client.session import SessionManager
+        SessionManager.reset_default_session()
+        self.addCleanup(SessionManager.reset_default_session)
+        self.addCleanup(SessionManager.sessions.pop, "kitchen-sat", None)
+
+        bus = _make_bus()
+        with patch.object(SessionManager, "update",
+                          wraps=SessionManager.update) as mock_update:
+            raw = json.dumps({"type": "recognizer_loop:utterance",
+                              "data": {"utterances": ["hi"]},
+                              "context": {"session": {"session_id": "kitchen-sat",
+                                                       "site_id": "bedroom"}}})
+            await bus._on_message(raw)
+            mock_update.assert_called_once()
+            called_sess = mock_update.call_args[0][0]
+            self.assertEqual(called_sess.session_id, "kitchen-sat")
+
 
 # ---------------------------------------------------------------------------
 # Event registration tests
