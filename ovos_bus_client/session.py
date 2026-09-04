@@ -1526,13 +1526,19 @@ class _BusSessionManagerMixin:
 
     @classmethod
     def connect_to_bus(cls, bus):
+        """Attach the registry to ``bus`` and subscribe its handlers.
+
+        Nothing is announced: no participant pushes a session at another
+        (OVOS-SESSION-2 §2.7). The default session is derived locally from
+        configuration and thereafter converges by adoption from observed
+        traffic.
+        """
         cls.bus = bus
         cls.bus.on("recognizer_loop:record_begin", cls.handle_recording_start)
         cls.bus.on("recognizer_loop:record_end", cls.handle_recording_end)
         cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
         cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
         cls.bus.on(SpecMessage.SESSION_SYNC, cls.handle_session_sync)
-        cls._broadcast_default_session()
 
     @classmethod
     def prune_sessions(cls):
