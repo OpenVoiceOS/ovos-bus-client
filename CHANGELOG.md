@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.8a1) (2026-09-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.7a1...2.11.8a1)
+
+**Merged pull requests:**
+
+- fix: location\_preferences setter, session/message readability cleanup [\#331](https://github.com/OpenVoiceOS/ovos-bus-client/pull/331) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.7a1) (2026-09-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.6a1...2.11.7a1)
@@ -106,23 +114,23 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
-
-## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
 
 ## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
 
-## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
 
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+
+## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
 
 **Merged pull requests:**
 
@@ -367,10 +375,6 @@
 ## [2.1.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.1a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.0a1...2.1.1a1)
-
-**Merged pull requests:**
-
-- fix: restore legacy AES encryption at the websocket transport edge [\#218](https://github.com/OpenVoiceOS/ovos-bus-client/pull/218) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.1.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.0a1) (2026-05-24)
 
