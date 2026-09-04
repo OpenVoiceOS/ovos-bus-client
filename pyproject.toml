@@ -21,7 +21,7 @@ classifiers = [
 dependencies = [
     "ovos-config>=1.0.0,<4.0.0",
     "ovos-utils>=0.8.2,<1.0.0",
-    "ovos-spec-tools[langcodes]>=1.7.0a1",  # narrowed is_intent_topic + intent-pair mirror guard
+    "ovos-spec-tools[langcodes]>=1.10.3a1",  # public resolve_session_id + SessionManager.stamp_derived
     "websocket-client>=0.54.0",
     "pyee>=8.1.0,<13.0.0",
 ]

@@ -1,10 +1,9 @@
 """SESSION-1 §2/§3.1/§6 — resolving a raw carrier's ``session_id`` locally.
 
-``resolve_session_id`` and ``names_the_default`` must not reach into
-``ovos_spec_tools.session.SessionManager._names_the_default`` (a private that
-package is removing) and must apply the same non-empty-string rule §6
-requires: a wrong-typed value is malformed and reads as omitted (§2.1), and
-an omitted id names the default session (§3.1).
+``resolve_session_id`` is the public ``ovos_spec_tools.session`` resolver and
+must apply the non-empty-string rule §6 requires: a wrong-typed value is
+malformed and reads as omitted (§2.1), and an omitted id names the default
+session (§3.1).
 """
 import unittest
 from unittest.mock import MagicMock
@@ -12,7 +11,7 @@ from unittest.mock import MagicMock
 from ovos_bus_client.client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import (DEFAULT_SESSION_ID, SessionManager,
-                                     names_the_default, resolve_session_id)
+                                     resolve_session_id)
 
 
 class TestResolveSessionId(unittest.TestCase):
@@ -27,11 +26,6 @@ class TestResolveSessionId(unittest.TestCase):
 
     def test_a_named_string_id_resolves_to_itself(self):
         self.assertEqual(resolve_session_id({"session_id": "abc"}), "abc")
-
-    def test_names_the_default_agrees_with_resolve_session_id(self):
-        for carrier in ({}, {"session_id": 123}, {"session_id": "kitchen"}):
-            self.assertEqual(names_the_default(carrier),
-                              resolve_session_id(carrier) == DEFAULT_SESSION_ID)
 
 
 class TestWrongTypedIdOnTheWireIsTheDefaultSession(unittest.TestCase):

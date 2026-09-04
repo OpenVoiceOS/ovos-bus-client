@@ -14,7 +14,8 @@ import ovos_bus_client.session as session_module
 from ovos_bus_client.client.client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import (Session, SessionManager, HAS_FOLD_INBOUND,
-                                     names_the_default, session_carrier)
+                                     DEFAULT_SESSION_ID, resolve_session_id,
+                                     session_carrier)
 
 
 def _client(session=None):
@@ -67,13 +68,16 @@ class TestFalsySessionIdIsTheDefaultSession(unittest.TestCase):
         SessionManager.reset_default_session()
 
     def test_predicate_reads_unusable_ids_as_the_default(self):
-        self.assertTrue(names_the_default({}))
-        self.assertTrue(names_the_default({"session_id": "default"}))
-        self.assertFalse(names_the_default({"session_id": "kitchen"}))
+        self.assertEqual(resolve_session_id({}), DEFAULT_SESSION_ID)
+        self.assertEqual(resolve_session_id({"session_id": "default"}),
+                          DEFAULT_SESSION_ID)
+        self.assertNotEqual(resolve_session_id({"session_id": "kitchen"}),
+                            DEFAULT_SESSION_ID)
         if HAS_FOLD_INBOUND:
             for unusable in ("", 0, False, [], {}):
-                self.assertTrue(names_the_default({"session_id": unusable}),
-                                f"{unusable!r} names no session")
+                self.assertEqual(resolve_session_id({"session_id": unusable}),
+                                 DEFAULT_SESSION_ID,
+                                 f"{unusable!r} names no session")
 
     @unittest.skipUnless(HAS_FOLD_INBOUND, "no §3.1 predicate in the registry")
     def test_empty_id_folds_into_the_store_and_still_dispatches(self):

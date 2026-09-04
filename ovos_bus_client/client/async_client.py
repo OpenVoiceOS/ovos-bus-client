@@ -40,7 +40,7 @@ from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import (SessionManager, Session,
                                      DEFAULT_SESSION_ID, HAS_FOLD_INBOUND,
-                                     names_the_default, session_carrier)
+                                     resolve_session_id, session_carrier)
 
 
 class AsyncMessageWaiter:
@@ -295,7 +295,7 @@ class AsyncMessageBusClient:
         parsed = Message.deserialize(raw)
         # see MessageBusClient._take_inbound_session
         carrier = session_carrier(parsed)
-        if HAS_FOLD_INBOUND and names_the_default(carrier):
+        if HAS_FOLD_INBOUND and resolve_session_id(carrier) == DEFAULT_SESSION_ID:
             SessionManager.fold_inbound(parsed)
         else:
             sess = Session.from_message(parsed)
