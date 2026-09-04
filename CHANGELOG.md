@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.4a1) (2026-09-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.3a1...2.11.4a1)
+
+**Merged pull requests:**
+
+- fix: use spec-tools session resolver and stamp bound sessions on Collection/GUI derivations [\#324](https://github.com/OpenVoiceOS/ovos-bus-client/pull/324) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.3a1) (2026-09-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.2a2...2.11.3a1)
@@ -74,27 +82,27 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 **Merged pull requests:**
 
 - feat: AsyncMessageBusClient \(async/await native client\) [\#200](https://github.com/OpenVoiceOS/ovos-bus-client/pull/200) ([JarbasAl](https://github.com/JarbasAl))
 
-## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
-
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+
+## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
 
 **Merged pull requests:**
 
@@ -487,7 +495,6 @@
 **Merged pull requests:**
 
 - Release 1.3.6a2 [\#174](https://github.com/OpenVoiceOS/ovos-bus-client/pull/174) ([github-actions[bot]](https://github.com/apps/github-actions))
-- Update setup.py [\#173](https://github.com/OpenVoiceOS/ovos-bus-client/pull/173) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.3.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/1.3.6a1) (2025-09-05)
 
