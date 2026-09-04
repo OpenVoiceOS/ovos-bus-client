@@ -67,41 +67,21 @@ from ovos_spec_tools.session import resolve_session_id
 _LEGACY_LOCATION_KEYS = ("city", "coordinate", "timezone")
 
 
-def _sanitize_location(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate the OVOS-SESSION-1 §3.5 ``location`` keys, dropping the rest.
-
-    Only ``lat``/``lon``/``tz`` carry normative meaning on this field (§3.5:
-    "``location`` carries only these three keys"). A malformed value for one
-    of them (wrong type, or ``lat``/``lon`` outside its range) is dropped as
-    if omitted, per the field's own malformed-key rule; any other key is
-    tolerated on ingest (§2.4 -- it does not raise) but is not re-emitted,
-    since this field defines no wire representation for it.
-    """
-    out: Dict[str, Any] = {}
-    lat = raw.get("lat")
-    if isinstance(lat, (int, float)) and not isinstance(lat, bool) and -90 <= lat <= 90:
-        out["lat"] = float(lat)
-    lon = raw.get("lon")
-    if isinstance(lon, (int, float)) and not isinstance(lon, bool) and -180 <= lon <= 180:
-        out["lon"] = float(lon)
-    tz = raw.get("tz")
-    if isinstance(tz, str) and tz:
-        out["tz"] = tz
-    return out
-
-
-def _normalize_location_input(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Accept either the SESSION-1 §3.5 wire shape or the legacy nested one.
+def _normalize_location_input(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Translate the legacy nested ``location`` shape to the §3.5 flat one.
 
     Pre-spec producers on this compatibility line ship the nested
     mycroft.conf ``location`` shape (``city``/``coordinate``/``timezone``)
-    instead of the flat ``{lat, lon, tz}`` object. That shape is normalized
+    instead of the flat ``{lat, lon, tz}`` object. That shape is translated
     here to the three keys, with a deprecation warning naming the version
     the shim is removed in. A carrier that already uses (or mixes in) any of
-    ``lat``/``lon``/``tz`` is treated as the modern shape.
+    ``lat``/``lon``/``tz`` is treated as the modern shape and passed through
+    unvalidated -- the key-wise ``lat``/``lon``/``tz`` validation itself is
+    owned by the registered OVOS-SESSION-1 §3.5 ``location`` field on the
+    canonical parent (``ovos_spec_tools.session.Session``).
     """
     if not isinstance(raw, dict) or not raw:
-        return {}
+        return None
     if any(k in raw for k in _LEGACY_LOCATION_KEYS) and not any(
             k in raw for k in ("lat", "lon", "tz")):
         log_deprecation(
@@ -118,8 +98,8 @@ def _normalize_location_input(raw: Dict[str, Any]) -> Dict[str, Any]:
             legacy["lon"] = coordinate["longitude"]
         if "code" in timezone:
             legacy["tz"] = timezone["code"]
-        return _sanitize_location(legacy)
-    return _sanitize_location(raw)
+        return legacy
+    return raw
 
 
 def _get_default_lang() -> str:
@@ -171,6 +151,7 @@ _CANONICAL_LIST_FIELDS = (
 )
 _CANONICAL_DICT_FIELDS = (
     "intent_context",
+    "location",
 )
 
 # Guards every mutation of a Session's ``intent_context`` map (the canonical
@@ -837,12 +818,25 @@ class Session(_SpecSession):
                     response_mode = {"skill_id": skill_id,
                                      "expires_at": time.time() + ttl}
 
+        # OVOS-SESSION-1 §3.5 ``location`` is a registered canonical field
+        # (ovos-spec-tools >= 1.10.5a1): ``location_prefs`` is the bus-client
+        # back-compat alias (also accepting the legacy nested mycroft.conf
+        # shape); a generic call site forwarding the registered field set
+        # verbatim (e.g. deserialize()) may instead pass it as ``location``
+        # via canonical_kwargs. ``location_prefs`` wins when both are given.
+        location = (location_prefs if location_prefs is not None
+                   else canonical_kwargs.pop("location", None))
+        canonical_kwargs.pop("location", None)
+
         # --- canonical SESSION-1 fields / helpers (inherited) ----------------
         # Every registered field is forwarded to the canonical parent so the
         # whole SESSION-1 §3 surface round-trips. The explicitly-named params
         # above are the ones bus-client applies deployment defaults to (or that
         # have legacy back-compat aliases / dedicated docs); the rest arrive via
-        # canonical_kwargs and pass straight through.
+        # canonical_kwargs and pass straight through. ``location`` is
+        # key-wise validated by the parent itself (§3.5) -- only the legacy
+        # nested-shape translation happens on this side, in
+        # `_normalize_location_input`.
         super().__init__(session_id=session_id,
                          lang=lang,
                          site_id=site_id,
@@ -855,6 +849,7 @@ class Session(_SpecSession):
                          response_mode=response_mode,
                          persona_id=persona_id,
                          fallback_handlers=fallback_handlers,
+                         location=_normalize_location_input(location or {}),
                          **canonical_kwargs)
 
         # --- bus-client-only state the canonical class does not carry --------
@@ -869,12 +864,13 @@ class Session(_SpecSession):
         # OVOS-SESSION-1 §3.5: ``location``'s deployment default IS a
         # deployment-configured value (the mycroft.conf location), so §4.1
         # forbids materializing it into session state or onto the wire on
-        # the origin's behalf. `self.location` therefore stores ONLY what the
-        # caller/wire actually provided (key-wise validated, possibly `{}`);
-        # the configured fallback is applied at READ time only -- see
-        # `timezone` and `location_preferences` below, mirroring how
-        # `timezone` already falls back to config without storing it.
-        self.location: Dict[str, Any] = _normalize_location_input(location_prefs or {})
+        # the origin's behalf. `self.location` is set above via the parent
+        # constructor, which stores ONLY what was actually provided
+        # (key-wise validated, folded to `{}` by `_normalize_empty_containers`
+        # below when nothing valid was given); the configured fallback is
+        # applied at READ time only -- see `timezone` and
+        # `location_preferences` below, mirroring how `timezone` already
+        # falls back to config without storing it.
         # Legacy back-compat: a caller (or a legacy wire payload via
         # deserialize) may hand an ``IntentContextManager`` frame stack. It is
         # NOT stored as a parallel object — its entities fold into the canonical
@@ -1397,6 +1393,12 @@ class Session(_SpecSession):
         pipeline = canonical_kwargs.pop("pipeline", [])
         blacklisted_skills = canonical_kwargs.pop("blacklisted_skills", [])
         blacklisted_intents = canonical_kwargs.pop("blacklisted_intents", [])
+        # `location` is extracted from the raw wire dict below (it may be the
+        # legacy nested shape, which the canonical parser above already
+        # dropped as unrecognised) and passed on explicitly as
+        # `location_prefs`; drop the canonical-parsed copy so it is not
+        # forwarded twice.
+        canonical_kwargs.pop("location", None)
 
         # legacy back-compat aliases — only seed the canonical handler/response
         # stores from these when the canonical keys were absent. Legacy wire shape
