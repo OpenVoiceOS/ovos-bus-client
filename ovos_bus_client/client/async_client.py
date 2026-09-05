@@ -43,8 +43,8 @@ from ovos_bus_client.client.client import (_bus_flag,
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import (SessionManager, Session, DEFAULT_SESSION_ID,
-                                     resolve_session_id, session_carrier,
-                                     _NEXT_MAJOR_VERSION)
+                                     MalformedSession, resolve_session_id,
+                                     session_carrier, _NEXT_MAJOR_VERSION)
 
 
 class AsyncMessageWaiter:
@@ -316,7 +316,15 @@ class AsyncMessageBusClient:
         parsed = Message.deserialize(raw)
         # see MessageBusClient._take_inbound_session -- the §5.1 arrival fold
         # is orchestrator-intake-only; this client only tracks named sessions.
-        carrier = session_carrier(parsed)
+        try:
+            carrier = session_carrier(parsed)
+        except MalformedSession as e:
+            # A non-object session carrier is a per-message producer fault, not
+            # a transport fault (SESSION-1 §2.5): drop this one message and
+            # keep the connection. Letting it propagate would reach the recv
+            # loop's exception handler, which tears the socket down.
+            LOG.warning("discarding bus message with malformed session: %s", e)
+            return
         if resolve_session_id(carrier) != DEFAULT_SESSION_ID:
             sess = Session.from_message(parsed)
             if sess.session_id != DEFAULT_SESSION_ID:

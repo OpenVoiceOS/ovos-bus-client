@@ -220,6 +220,20 @@ class TestOnMessage(unittest.IsolatedAsyncioTestCase):
             called_sess = mock_update.call_args[0][0]
             self.assertEqual(called_sess.session_id, "kitchen-sat")
 
+    async def test_on_message_discards_malformed_session(self):
+        """SESSION-1 §2.5: a non-object session carrier is dropped, not
+        raised -- letting it escape would reach the recv loop's exception
+        handler, which tears the connection down."""
+        bus = _make_bus()
+        received = []
+        bus.on("ovos.test", lambda m: received.append(m))
+        raw = json.dumps({"type": "ovos.test", "data": {},
+                          "context": {"session": "oops"}})
+        # must not raise
+        await bus._on_message(raw)
+        await asyncio.sleep(0)
+        self.assertEqual(received, [])
+
 
 # ---------------------------------------------------------------------------
 # Event registration tests
