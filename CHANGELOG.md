@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.13a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.13a1) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.12a1...2.11.13a1)
+
+**Merged pull requests:**
+
+- fix: honour the SESSION-2 §2.7 data carrier in the ovos.session.sync shim [\#342](https://github.com/OpenVoiceOS/ovos-bus-client/pull/342) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.12a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.12a1) (2026-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.11a1...2.11.12a1)
@@ -146,23 +154,23 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
 
-## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+
+## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
 
 **Merged pull requests:**
 
@@ -374,10 +382,6 @@
 ## [2.3.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.3.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.2.0a1...2.3.0a1)
-
-**Merged pull requests:**
-
-- feat: namespace migration via MessageBusClient — both flags on + handler dedup [\#230](https://github.com/OpenVoiceOS/ovos-bus-client/pull/230) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.2.0a1) (2026-06-25)
 
