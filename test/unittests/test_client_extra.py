@@ -222,14 +222,20 @@ class TestLifecycle(TestCase):
         t = client.run_in_thread()
         self.assertTrue(t.daemon)
 
-    def test_on_open_sets_connected_and_syncs(self):
+    def test_on_open_sets_connected_and_requests_default_session(self):
+        """The connect-time default-session PUSH (OVOS-SESSION-2 §2.7) stays
+        removed (#328). The connect-time ``ovos.session.sync`` REQUEST is a
+        deprecated, one-cycle-only shim: a pre-spec-tools core (stable
+        1.3.1) only ever answers ``ovos.session.update_default`` when asked,
+        so on_open still sends exactly one request."""
         client = MessageBusClient()
         client.client = MagicMock()
         client.client.send = MagicMock()
         client.on_open()
         self.assertTrue(client.connected_event.is_set())
-        # ovos.session.sync emit
-        self.assertTrue(client.client.send.called)
+        self.assertEqual(client.client.send.call_count, 1)
+        sent = json.loads(client.client.send.call_args[0][0])
+        self.assertEqual(sent["type"], "ovos.session.sync")
 
     def test_on_close_emits_close_event(self):
         client = MessageBusClient()

@@ -16,7 +16,7 @@ from typing import Any, Callable, List, Optional, Union
 from uuid import uuid4
 
 from ovos_utils import json_dumps
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 
 try:
     from pyee.asyncio import AsyncIOEventEmitter
@@ -39,7 +39,8 @@ from ovos_bus_client.client.client import (_bus_flag,
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import (SessionManager, Session, DEFAULT_SESSION_ID,
-                                     resolve_session_id, session_carrier)
+                                     resolve_session_id, session_carrier,
+                                     _NEXT_MAJOR_VERSION)
 
 
 class AsyncMessageWaiter:
@@ -224,6 +225,16 @@ class AsyncMessageBusClient:
         # client the authority on a named session it was built with
         self.session = session
         self.session_id = session.session_id
+        # DEPRECATED: ovos.session.update_default is a pre-spec surface
+        # OVOS-SESSION-2 §2.7 retires (see session.py's _broadcast_default_
+        # session / sync()). Symmetric with the sync MessageBusClient's own
+        # kept listener -- the audit's objection to #200 was a NEW
+        # subscriber added with no removal version, not the listener as
+        # such -- so this one is kept one cycle, deprecated the same way.
+        log_deprecation("subscribing to ovos.session.update_default is a "
+                        "pre-spec surface retired by OVOS-SESSION-2 §2.7 "
+                        "and will stop being served",
+                        _NEXT_MAJOR_VERSION)
         self.on("ovos.session.update_default", self._on_default_session_update)
 
     @staticmethod
@@ -268,6 +279,13 @@ class AsyncMessageBusClient:
                 self._connected.set()
                 LOG.debug("AsyncMessageBusClient connected to %s", self.url)
                 self.emitter.emit("open")
+                # DEPRECATED: see MessageBusClient.on_open -- kept one cycle
+                # so a fresh client still learns a pre-spec-tools core's
+                # (e.g. stable 1.3.1) default session on connect.
+                log_deprecation("the connect-time ovos.session.sync request "
+                                "is a pre-spec surface retired by "
+                                "OVOS-SESSION-2 §2.7 and will stop being sent",
+                                _NEXT_MAJOR_VERSION)
                 await self.emit(Message("ovos.session.sync"))
                 self._listen_task = asyncio.ensure_future(self._recv_loop())
                 return

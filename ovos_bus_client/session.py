@@ -1797,20 +1797,28 @@ class _BusSessionManagerMixin:
 
     @classmethod
     def handle_session_sync(cls, message=None):
-        """OVOS-CONTEXT-1 §5.3 — handle an ``ovos.session.sync`` request.
+        """Handle an ``ovos.session.sync`` request.
 
-        The sync carries the emitter's updated session snapshot in
-        ``Message.context.session`` (the standard session carrier). The
-        singleton resolves the target session and merges the snapshot's
-        ``intent_context`` entry-by-entry onto it (set + null-delete, §5.3),
-        keeping the managed session the authoritative owner of intent
-        context. The merge mutates the working map **in place**: the map
-        object every live view holds keeps its identity, and it stays a dict
-        — never ``None`` — per the in-process SESSION-1 §2.1 normalization.
+        ``ovos.session.sync`` is a pre-spec surface: OVOS-SESSION-2 §7
+        defines no bus topic, and appendix/divergences.md §5.2.1 marks it
+        retired. It is kept for one release cycle for two reasons that are
+        NOT the same protocol:
 
-        The legacy default-session echo is emitted only for a **bare**
-        request (no session carrier on the message): a spec-conformant §5.3
-        sync is not a default-session request and triggers no echo.
+        - a **carried** request (``Message.context.session`` present) is
+          used, in practice, to move an ``intent_context`` snapshot between
+          processes. The merge itself -- set + null-delete, entry-by-entry,
+          §5.3 -- is OVOS-CONTEXT-1's in-place mutation semantics, which
+          defines no topic either; this handler is just where that merge
+          happens to be reachable from the bus today;
+        - a **bare** request (no session carrier) is the legacy
+          default-session echo and logs a deprecation warning.
+
+        The singleton resolves the target session and merges the snapshot's
+        ``intent_context`` entry-by-entry onto it, keeping the managed
+        session the authoritative owner of intent context. The merge
+        mutates the working map **in place**: the map object every live
+        view holds keeps its identity, and it stays a dict -- never
+        ``None`` -- per the in-process SESSION-1 §2.1 normalization.
         """
         carried = message is not None and \
             isinstance(getattr(message, "context", None), dict) and \
@@ -1838,6 +1846,10 @@ class _BusSessionManagerMixin:
         else:
             # legacy: a bare ``ovos.session.sync`` *requests* the current
             # default session; echo it back.
+            log_deprecation("ovos.session.sync (bare default-session request) "
+                            "is a pre-spec surface retired by OVOS-SESSION-2 "
+                            "§2.7 and will stop being served",
+                            _NEXT_MAJOR_VERSION)
             cls._broadcast_default_session(message)
 
     # legacy alias — ``ovos.session.sync`` historically routed here to echo

@@ -9,7 +9,7 @@ from threading import Event, Thread
 from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
 
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 try:
     from pyee import ExecutorEventEmitter
 except (ImportError, ModuleNotFoundError):
@@ -27,7 +27,8 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
                                      DEFAULT_SESSION_ID,
-                                     resolve_session_id, session_carrier)
+                                     resolve_session_id, session_carrier,
+                                     _NEXT_MAJOR_VERSION)
 from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
 
 # --- legacy intent-topic compat (non-normative migration tooling) ----------
@@ -393,7 +394,18 @@ class MessageBusClient:
             return
         # Restore reconnect timer to 5 seconds on sucessful connect
         self.retry = 5
-        self.emit(Message(SpecMessage.SESSION_SYNC)) # request default session update
+        # DEPRECATED: ovos.session.sync's bare-request/echo round trip is a
+        # pre-spec surface OVOS-SESSION-2 §2.7/§7 retires. It is still the
+        # only way a pre-spec-tools core (e.g. stable 1.3.1) ever answers
+        # with its default session, so a freshly-connected client kept one
+        # cycle behind: without this, it never learns a long-running old
+        # core's default session (lang, etc) and is stuck on its own
+        # config-derived default.
+        log_deprecation("the connect-time ovos.session.sync request is a "
+                        "pre-spec surface retired by OVOS-SESSION-2 §2.7 "
+                        "and will stop being sent",
+                        _NEXT_MAJOR_VERSION)
+        self.emit(Message(SpecMessage.SESSION_SYNC))  # request default session update
 
     def on_close(self, *args):
         """
