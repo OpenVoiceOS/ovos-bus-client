@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.12a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.12a1) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.11a1...2.11.12a1)
+
+**Merged pull requests:**
+
+- fix: async client survives a malformed session carrier [\#338](https://github.com/OpenVoiceOS/ovos-bus-client/pull/338) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.11a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.11a1) (2026-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.10a1...2.11.11a1)
@@ -138,15 +146,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
-
-## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
 
 ## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+
+## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
 
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
@@ -374,10 +382,6 @@
 ## [2.2.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.2.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.2a2...2.2.0a1)
-
-**Merged pull requests:**
-
-- feat: transparent opt-in legacy\<-\>ovos.\* namespace migration in MessageBusClient [\#228](https://github.com/OpenVoiceOS/ovos-bus-client/pull/228) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.1.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.2a2) (2026-06-25)
 
