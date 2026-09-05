@@ -1309,7 +1309,19 @@ class Session(_SpecSession):
         # OVOS-SESSION-1 §3.5/§2.1: the three-key location object, omitted
         # entirely when none of lat/lon/tz is set (equivalent to omission).
         if self.location:
-            data["location"] = dict(self.location)
+            location = dict(self.location)
+            # the pre-spec nested mycroft.conf shape (city/coordinate/
+            # timezone) is projected alongside the flat keys for one stable
+            # cycle, so a reader still keyed on ``location.timezone.code``
+            # keeps working; _normalize_location_input on the read side
+            # already accepts either shape under the same "location" key
+            if "tz" in location:
+                log_deprecation(
+                    "session.location.timezone.code is a legacy nested "
+                    "mycroft.conf projection; read location.tz instead",
+                    _NEXT_MAJOR_VERSION)
+                location["timezone"] = {"code": location["tz"]}
+            data["location"] = location
         else:
             data.pop("location", None)
         return data

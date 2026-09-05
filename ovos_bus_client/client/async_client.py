@@ -31,11 +31,15 @@ except ImportError:
     ConnectionClosedError = OSError  # type: ignore
     ConnectionClosedOK = OSError  # type: ignore
 
+from ovos_spec_tools.intent_topics import canonical_intent_topic, is_intent_topic
 from ovos_spec_tools.messages import NamespaceTranslator
 
 from ovos_bus_client.client.client import (_bus_flag,
                                            _compute_legacy_intent_twin,
-                                           _compute_legacy_namespace_twin)
+                                           _compute_legacy_namespace_twin,
+                                           _verbatim_copy,
+                                           INTENT_COMPAT_TWIN_KEY,
+                                           NAMESPACE_COMPAT_TWIN_KEY)
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import (SessionManager, Session, DEFAULT_SESSION_ID,
@@ -317,8 +321,37 @@ class AsyncMessageBusClient:
             sess = Session.from_message(parsed)
             if sess.session_id != DEFAULT_SESSION_ID:
                 SessionManager.update(sess)
-        self.emitter.emit("message", raw)
-        self.emitter.emit(parsed.msg_type, parsed)
+        # see MessageBusClient.on_message -- pop both compat markers before
+        # any local dispatch so they never survive onto a forwarded/replied
+        # descendant frame.
+        is_intent_twin = parsed.context.pop(INTENT_COMPAT_TWIN_KEY, False)
+        is_namespace_twin = parsed.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
+        # one logical dispatch yields one firehose event -- see
+        # MessageBusClient.on_message for why each marker gates it
+        if not is_namespace_twin and not is_intent_twin:
+            self.emitter.emit("message", raw)
+        if not is_namespace_twin:
+            self.emitter.emit(parsed.msg_type, parsed)
+            # namespace migration bridge: mirror the emit to LOCAL listeners
+            # on the counterpart topic(s), same as MessageBusClient.on_message
+            for topic in self._translator.counterpart_topics(parsed.msg_type):
+                translated = self._translator.translate_payload(
+                    from_topic=parsed.msg_type, to_topic=topic, data=parsed.data)
+                self.emitter.emit(topic, parsed.forward(topic, translated))
+        self._modernize_intent_topic(parsed, is_twin=is_intent_twin)
+
+    def _modernize_intent_topic(self, message: Message, is_twin: bool = False):
+        """RULE 2 receive-side bridge -- see MessageBusClient._modernize_intent_topic."""
+        if not self._translator.modernize:
+            return
+        if is_twin:
+            return
+        if not is_intent_topic(message.msg_type):
+            return
+        canonical = canonical_intent_topic(message.msg_type)
+        if canonical == message.msg_type:
+            return
+        self.emitter.emit(canonical, _verbatim_copy(message, canonical))
 
     def _on_default_session_update(self, message: Message):
         new_session = message.data["session_data"]

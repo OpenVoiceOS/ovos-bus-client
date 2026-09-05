@@ -75,13 +75,17 @@ class TestRoundTrip(unittest.TestCase):
     def test_partial_object_round_trips_byte_stable(self):
         sess = Session.deserialize({"location": {"tz": "Asia/Tokyo"}})
         data = sess.serialize()
-        self.assertEqual(data["location"], {"tz": "Asia/Tokyo"})
+        # the legacy nested mycroft.conf projection (location.timezone.code)
+        # is emitted alongside the flat keys for one stable cycle
+        self.assertEqual(data["location"],
+                         {"tz": "Asia/Tokyo", "timezone": {"code": "Asia/Tokyo"}})
 
     def test_full_object_round_trips_byte_stable(self):
         sess = Session.deserialize({"location": {"lat": 1.5, "lon": -2.5,
                                                   "tz": "Europe/Lisbon"}})
         self.assertEqual(sess.serialize()["location"],
-                         {"lat": 1.5, "lon": -2.5, "tz": "Europe/Lisbon"})
+                         {"lat": 1.5, "lon": -2.5, "tz": "Europe/Lisbon",
+                          "timezone": {"code": "Europe/Lisbon"}})
 
 
 class TestLocationIngest(unittest.TestCase):

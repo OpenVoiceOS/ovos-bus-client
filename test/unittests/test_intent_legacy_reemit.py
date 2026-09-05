@@ -679,5 +679,32 @@ class TestRegistrationIdempotency(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class TestFirehoseIsNotDoubledByTheIntentTwin(unittest.TestCase):
+    """The intent-topic twin is the SAME logical dispatch as the canonical
+    frame that preceded it on the wire, so the 'message' firehose a modern
+    receiver's wildcard/logging listeners see must fire exactly once per
+    logical emit, same as the namespace twin (test_namespace_wire_twin.py).
+    """
+
+    def test_firehose_sees_exactly_one_frame_per_logical_emit(self):
+        core, sat = _client(), _client()
+        firehose = []
+        sat.emitter.on("message", lambda m: firehose.append(m))
+        core.emit(Message(CANONICAL, {"a": 1}))
+        self.assertEqual(_sent(core), [CANONICAL, LEGACY])
+        _relay(core, sat)
+        self.assertEqual(len(firehose), 1)
+
+    def test_direct_dispatch_on_the_suffixed_spelling_still_fires(self):
+        # the twin is only skipped for the firehose -- a listener bound
+        # directly to the suffixed spelling has no other way to hear it,
+        # since RULE 2 only bridges suffixed -> canonical, not the reverse
+        core, sat = _client(), _client()
+        got = _received(sat, LEGACY)
+        core.emit(Message(CANONICAL, {"a": 1}))
+        _relay(core, sat)
+        self.assertEqual(len(got), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

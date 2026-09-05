@@ -111,10 +111,16 @@ class TestUpdateAndCancel(TestCase):
 
     def test_update_scheduled_event(self):
         self.api.update_scheduled_event("t1", data={"new": True})
-        emitted = self.bus.emit.call_args[0][0]
-        self.assertEqual(emitted.msg_type, "mycroft.scheduler.update_event")
-        self.assertEqual(emitted.data["event"], "my.skill:t1")
-        self.assertEqual(emitted.data["data"], {"new": True})
+        # #222's fix (mycroft.scheduler.update_event) is emitted, plus the
+        # misspelled mycroft.schedule.update_event for one stable cycle in
+        # case anything still listens on the typo directly
+        emitted = [c.args[0] for c in self.bus.emit.call_args_list]
+        self.assertEqual([m.msg_type for m in emitted],
+                         ["mycroft.scheduler.update_event",
+                          "mycroft.schedule.update_event"])
+        for message in emitted:
+            self.assertEqual(message.data["event"], "my.skill:t1")
+            self.assertEqual(message.data["data"], {"new": True})
 
     def test_cancel_existing_repeating_event(self):
         self.api.schedule_repeating_event(
