@@ -26,10 +26,10 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
-                                     DEFAULT_SESSION_ID,
+                                     DEFAULT_SESSION_ID, LEGACY_SESSION_SYNC,
                                      resolve_session_id, session_carrier,
                                      _NEXT_MAJOR_VERSION)
-from ovos_spec_tools.messages import NamespaceTranslator, SpecMessage
+from ovos_spec_tools.messages import NamespaceTranslator
 
 # --- legacy intent-topic compat (non-normative migration tooling) ----------
 #
@@ -405,7 +405,7 @@ class MessageBusClient:
                         "pre-spec surface retired by OVOS-SESSION-2 §2.7 "
                         "and will stop being sent",
                         _NEXT_MAJOR_VERSION)
-        self.emit(Message(SpecMessage.SESSION_SYNC))  # request default session update
+        self.emit(Message(LEGACY_SESSION_SYNC))  # request default session update
 
     def on_close(self, *args):
         """

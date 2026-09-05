@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from ovos_config.config import Configuration
 from ovos_utils.log import LOG, log_deprecation
-from ovos_spec_tools import standardize_lang, SpecMessage
+from ovos_spec_tools import standardize_lang
 from ovos_spec_tools.context import resolve_key
 from ovos_spec_tools.session import (Session as _SpecSession,
                                      SessionManager as _SpecSessionManager,
@@ -33,6 +33,15 @@ if not hasattr(_SpecSessionManager, "_pre_graft"):
                                       "update": _SpecSessionManager.update.__func__}
 _spec_get = _SpecSessionManager._pre_graft["get"]
 _spec_update = _SpecSessionManager._pre_graft["update"]
+
+# ovos-spec-tools implements only the spec; every public-API compatibility
+# shim for a pre-spec topic lives here instead. ``ovos.session.sync`` and
+# ``ovos.session.update_default`` are not OVOS-SESSION-2 topics (no
+# SpecMessage enum member is minted for a topic that isn't in a spec), so
+# they are local string constants, not spec-tools imports. Removed at
+# _NEXT_MAJOR_VERSION.
+LEGACY_SESSION_SYNC = "ovos.session.sync"
+LEGACY_SESSION_UPDATE_DEFAULT = "ovos.session.update_default"
 
 
 def session_carrier(message) -> Dict[str, Any]:
@@ -1481,13 +1490,34 @@ class _BusSessionManagerMixin:
     the spec-tools registry's.
     """
     bus = None
+    #: Kept for readers of the pre-spec attribute; the registry (``sessions``)
+    #: is authoritative and this is only ever written to mirror it, never
+    #: read internally. Removed in <_NEXT_MAJOR_VERSION>. Defined here (not
+    #: read off the spec-tools base) so the mirror keeps working once
+    #: spec-tools drops its own copy.
+    default_session: Optional[Session] = None
+
+    @classmethod
+    def get_default_session(cls) -> Session:
+        """Return (materializing once) the singleton for the reserved default id.
+
+        The shared ``sessions`` dict is the single source of truth. The
+        pre-spec ``default_session`` class attribute is mirrored here as a
+        compatibility shim -- see the attribute's own docstring.
+        """
+        sess = cls.sessions.get(DEFAULT_SESSION_ID)
+        if sess is None:
+            sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+            cls.sessions[DEFAULT_SESSION_ID] = sess
+        cls.default_session = sess
+        return sess
 
     @classmethod
     def _broadcast_default_session(cls, message=None):
         """Emit the legacy ``ovos.session.update_default`` default-session echo."""
         if cls.bus:
-            message = message or Message(SpecMessage.SESSION_SYNC)
-            cls.bus.emit(message.reply("ovos.session.update_default",
+            message = message or Message(LEGACY_SESSION_SYNC)
+            cls.bus.emit(message.reply(LEGACY_SESSION_UPDATE_DEFAULT,
                                        {"session_data": cls.get_default_session().serialize()}))
 
     @classmethod
@@ -1518,7 +1548,7 @@ class _BusSessionManagerMixin:
         cls.bus.on("recognizer_loop:record_end", cls.handle_recording_end)
         cls.bus.on("recognizer_loop:audio_output_start", cls.handle_audio_output_start)
         cls.bus.on("recognizer_loop:audio_output_end", cls.handle_audio_output_end)
-        cls.bus.on(SpecMessage.SESSION_SYNC, cls.handle_session_sync)
+        cls.bus.on(LEGACY_SESSION_SYNC, cls.handle_session_sync)
 
     @classmethod
     def prune_sessions(cls):
@@ -1548,6 +1578,7 @@ class _BusSessionManagerMixin:
         """
         sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
         cls.sessions[DEFAULT_SESSION_ID] = sess
+        cls.default_session = sess
         LOG.info("Default Session reset")
         cls.sync()
         return sess

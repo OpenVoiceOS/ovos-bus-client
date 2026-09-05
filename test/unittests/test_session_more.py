@@ -115,6 +115,21 @@ class TestSessionManagerExtra(TestCase):
         finally:
             SessionManager.bus = None
 
+    def test_default_session_mirror_owned_by_bus_client(self):
+        # ovos-bus-client owns this pre-spec `default_session` mirror -- it
+        # must keep tracking the registry through get/reset even if the
+        # spec-tools base this grafts onto no longer defines the attribute
+        # at all (simulated here by deleting it before each call).
+        if hasattr(SessionManager, "default_session"):
+            delattr(SessionManager, "default_session")
+        sess = SessionManager.get_default_session()
+        self.assertIs(SessionManager.default_session, sess)
+
+        delattr(SessionManager, "default_session")
+        new_sess = SessionManager.reset_default_session()
+        self.assertIs(SessionManager.default_session, new_sess)
+        self.assertIsNot(new_sess, sess)
+
 
 class TestFromMessageLangFallback(TestCase):
     def test_from_message_merges_lang_from_context(self):
