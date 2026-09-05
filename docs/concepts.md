@@ -10,7 +10,7 @@ writes on it, and it has no authentication or authorisation. Treat it as
 private to the device. Never expose the bus port outside the device; use
 [HiveMind](https://github.com/JarbasHiveMind) for remote access instead.
 
-See the manual's [Bus Service](https://tigregotico.github.io/ovos-technical-manual/bus-service/)
+See the manual's [Bus Service](https://openvoiceos.github.io/beta-technical-manual/bus-service/)
 page for the full security callout and the shipped `127.0.0.1` default.
 
 ## The bus is a JSON-over-WebSocket pub/sub
@@ -48,7 +48,7 @@ m = Message(
 )
 ```
 
-See the manual's [Bus Service: Message Structure](https://tigregotico.github.io/ovos-technical-manual/bus-service/#message-structure)
+See the manual's [Bus Service: Message Structure](https://openvoiceos.github.io/beta-technical-manual/bus-service/#message-structure)
 page for the field table, the wire JSON example, and the colon-vs-dot topic-naming note.
 
 ## Message types are by convention, not declaration
