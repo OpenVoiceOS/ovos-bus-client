@@ -80,3 +80,66 @@ def test_handle_session_sync_ignores_another_clients_session():
 def test_handle_bare_sync_request_does_not_crash():
     # a bare request (no session carrier) just echoes; must not raise
     SessionManager.handle_session_sync(Message("ovos.session.sync"))
+
+
+def test_handle_session_sync_data_carrier_folds_full_default_session():
+    # pre-spec emitters (skills, SessionManager.sync()) carry the whole
+    # session in message.data["session"], not just intent_context -- the
+    # default-session payload must fold every modelled field (lang here),
+    # not just intent_context, onto the default session singleton
+    snap = Session("default")
+    snap.lang = "pt-PT"
+    SessionManager.handle_session_sync(
+        Message("ovos.session.sync", {"session": snap.serialize()}))
+    assert SessionManager.get_default_session().lang == "pt-PT"
+
+
+def test_handle_session_sync_context_carrier_folds_full_default_session():
+    # the same full-field fold applies when the default-session payload
+    # arrives on the context carrier instead of message.data
+    snap = Session("default")
+    snap.lang = "pt-PT"
+    SessionManager.handle_session_sync(
+        Message("ovos.session.sync", {}, {"session": snap.serialize()}))
+    assert SessionManager.get_default_session().lang == "pt-PT"
+
+
+def test_handle_session_sync_default_session_omitted_field_survives():
+    # OVOS-SESSION-2 §5.1: "An omitted inbound field leaves the stored field
+    # unchanged" -- a sync payload that only carries `lang` must not reset a
+    # previously diverged `pipeline` to the deployment default
+    stored = SessionManager.get_default_session()
+    stored.pipeline = ["custom-pipeline-plugin"]
+    # a raw wire payload that only carries `lang` -- constructing this via
+    # `Session(...).serialize()` would materialize the deployment-default
+    # pipeline onto the wire and make it indistinguishable from an explicit
+    # carry, so the payload is built by hand instead
+    payload = {"session_id": "default", "lang": "pt-PT"}
+    SessionManager.handle_session_sync(
+        Message("ovos.session.sync", {"session": payload}))
+    assert SessionManager.get_default_session().lang == "pt-PT"
+    assert SessionManager.get_default_session().pipeline == ["custom-pipeline-plugin"]
+
+
+def test_handle_session_sync_default_session_intent_context_entry_merge():
+    # OVOS-CONTEXT-1 §5.3 applies to the default-session branch too: a
+    # payload that only nulls one entry must leave sibling entries alone and
+    # must remove the nulled key rather than writing a literal None
+    stored = SessionManager.get_default_session()
+    stored.intent_context = {"keepA": {"value": 1}, "delB": {"value": 2}}
+    snap = Session("default")
+    snap.intent_context = {"delB": None}
+    SessionManager.handle_session_sync(
+        Message("ovos.session.sync", {"session": snap.serialize()}))
+    merged = SessionManager.get_default_session().intent_context
+    assert merged == {"keepA": {"value": 1}}
+
+
+def test_handle_session_sync_data_carrier_named_session_untouched():
+    # OVOS-SESSION-2 §2.2: a named session this process does not hold is
+    # never adopted, whether it arrives via message.data or message.context
+    snap = Session("s9")
+    snap.intent_context = {"k": {"value": 9}}
+    SessionManager.handle_session_sync(
+        Message("ovos.session.sync", {"session": snap.serialize()}))
+    assert "s9" not in SessionManager.sessions
