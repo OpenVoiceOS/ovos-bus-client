@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.9a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.9a1) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.8a1...2.11.9a1)
+
+**Merged pull requests:**
+
+- fix: retire ovos.session.update\_default / ovos.session.sync push topics [\#333](https://github.com/OpenVoiceOS/ovos-bus-client/pull/333) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.8a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.8a1) (2026-09-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.7a1...2.11.8a1)
@@ -122,22 +130,21 @@
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
-
-## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
 
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+
+## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
 
 **Merged pull requests:**
 
 - docs: add AGENTS.md with the conventions for coding agents [\#296](https://github.com/OpenVoiceOS/ovos-bus-client/pull/296) ([JarbasAl](https://github.com/JarbasAl))
 - fix: make close\(\) stop a client that is reconnecting [\#295](https://github.com/OpenVoiceOS/ovos-bus-client/pull/295) ([JarbasAl](https://github.com/JarbasAl))
 - docs: cross-link the technical manual [\#273](https://github.com/OpenVoiceOS/ovos-bus-client/pull/273) ([JarbasAl](https://github.com/JarbasAl))
-- fix: emit mycroft.scheduler.update\_event so update\_scheduled\_event reaches the scheduler [\#222](https://github.com/OpenVoiceOS/ovos-bus-client/pull/222) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.8.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a1) (2026-08-31)
 
