@@ -146,7 +146,7 @@ details and the multi-handler `collect_responses` flow.
 further failure up to a 60-second cap, and resets to 5 seconds after a
 successful reconnect. You do not need to wrap construction in your own retry
 loop for this. See the manual's
-[Bus Service: reconnect behavior](https://tigregotico.github.io/ovos-technical-manual/bus-service/#bus-restart-reconnect-behavior)
+[Bus Service: reconnect behavior](https://openvoiceos.github.io/beta-technical-manual/bus-service/#bus-restart-reconnect-behavior)
 for the full backoff details, including what happens to in-flight calls and
 messages sent during an outage.
 
