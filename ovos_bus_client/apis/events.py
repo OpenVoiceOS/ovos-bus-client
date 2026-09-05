@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Callable, Optional, Union
 
 from ovos_utils.events import create_basic_wrapper
-from ovos_utils.log import LOG
+from ovos_utils.log import LOG, log_deprecation
 from ovos_config.locale import get_config_tz
 from ovos_utils.time import now_local
 
@@ -167,6 +167,15 @@ class EventSchedulerInterface(SchedulerClient):
         }
         message = self._get_source_message()
         self.bus.emit(message.forward(topics.LEGACY_UPDATE, data))
+        # #222 fixed the topic to the spelling the scheduler actually
+        # listens on (mycroft.scheduler.update_event, above); the misspelled
+        # mycroft.schedule.update_event is emitted alongside it for one
+        # stable cycle in case anything still listens on the typo directly
+        log_deprecation(
+            "mycroft.schedule.update_event is a misspelling of "
+            "mycroft.scheduler.update_event and will stop being emitted",
+            LEGACY_REMOVAL_VERSION)
+        self.bus.emit(message.forward("mycroft.schedule.update_event", data))
 
     def cancel_scheduled_event(self, name: str):
         """
@@ -207,8 +216,10 @@ class EventSchedulerInterface(SchedulerClient):
 
         if not status or not status.data.get("schedule"):
             raise Exception("Event Status Messagebus Timeout")
-        # the reply carries the schedule under a key: the wire refuses a
-        # list-shaped payload, which is what this used to answer with
+        # the reply carries the schedule under a key: MSG-1 §2.2 forbids a
+        # list-shaped Message.data on this wire, so the pre-specification
+        # bare-list callback payload cannot reach here from a real bus --
+        # the callback shape is object-only, there is nothing to shim
         event_time = int(status.data["schedule"][0])
         return event_time - int(time.time())
 

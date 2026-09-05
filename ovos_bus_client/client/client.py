@@ -521,19 +521,22 @@ class MessageBusClient:
         # forward()/reply()).
         is_namespace_twin = parsed_message.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
         # The 'message' firehose is the raw wire-capture stream a modern
-        # receiver's wildcard/logging listeners see. A marked NAMESPACE twin
-        # is the SAME logical dispatch as the canonical frame that preceded
-        # it on the wire -- firing the firehose for it too would double-count
-        # every migrated topic for any modern listener bound to it, breaking
-        # the one-frame-per-logical-emit invariant conformance captures
-        # (ovoscope/busmon) rely on. An old client has no notion of "twin"
-        # and legitimately sees both raw frames off the wire -- that
-        # asymmetry is inherent to wire visibility, and is already true
-        # (and accepted) for the pre-existing intent-topic twin, which this
-        # gate deliberately leaves untouched to stay within this fix's scope.
+        # receiver's wildcard/logging listeners see. A marked NAMESPACE or
+        # INTENT twin is the SAME logical dispatch as the canonical frame
+        # that preceded it on the wire -- firing the firehose for it too
+        # would double-count every migrated topic for any modern listener
+        # bound to it, breaking the one-frame-per-logical-emit invariant
+        # conformance captures (ovoscope/busmon) rely on. An old client has
+        # no notion of "twin" and legitimately sees both raw frames off the
+        # wire -- that asymmetry is inherent to wire visibility. The intent
+        # twin still needs its own direct dispatch below (a listener bound
+        # to the suffixed spelling is only ever served from this frame, RULE
+        # 2 does not translate canonical -> suffixed) -- only the firehose
+        # double-count is what this gate closes.
         try:
-            if not is_namespace_twin:
+            if not is_namespace_twin and not is_intent_twin:
                 self.emitter.emit('message', message)
+            if not is_namespace_twin:
                 self.emitter.emit(parsed_message.msg_type, parsed_message)
                 # namespace migration bridge: also dispatch the counterpart topic(s) to
                 # LOCAL listeners so a handler on either namespace receives the event
