@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.11a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.11a1) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.10a1...2.11.11a1)
+
+**Merged pull requests:**
+
+- fix: restore pre-spec EventScheduler surface, dual-emit topics, nested location and async-client compat twins [\#335](https://github.com/OpenVoiceOS/ovos-bus-client/pull/335) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.10a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.10a1) (2026-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.9a1...2.11.10a1)
@@ -374,10 +382,6 @@
 ## [2.1.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.2a2) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.1.2a1...2.1.2a2)
-
-**Merged pull requests:**
-
-- refactor: deprecate EnclosureAPI \(moved to ovos-gui-api-client\) [\#226](https://github.com/OpenVoiceOS/ovos-bus-client/pull/226) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.1.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.1.2a1) (2026-06-23)
 
