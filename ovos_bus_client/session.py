@@ -13,6 +13,7 @@ from ovos_spec_tools.session import (Session as _SpecSession,
                                      DEFAULT_CONVERSE_HANDLERS_CAP,
                                      DEFAULT_SESSION_ID,
                                      MalformedSession,
+                                     parse_session_payload,
                                      SESSION1_REGISTERED_FIELDS,
                                      resolve_session_id)
 from ovos_bus_client.message import dig_for_message, Message
@@ -1844,30 +1845,56 @@ class _BusSessionManagerMixin:
 
         ``ovos.session.sync`` is a pre-spec surface: OVOS-SESSION-2 §7
         defines no bus topic, and appendix/divergences.md §5.2.1 marks it
-        retired. It is kept for one release cycle for two reasons that are
-        NOT the same protocol:
+        retired. It is kept for one release cycle for reasons that are NOT
+        the same protocol:
 
-        - a **carried** request (``Message.context.session`` present) is
-          used, in practice, to move an ``intent_context`` snapshot between
-          processes. The merge itself -- set + null-delete, entry-by-entry,
-          §5.3 -- is OVOS-CONTEXT-1's in-place mutation semantics, which
-          defines no topic either; this handler is just where that merge
-          happens to be reachable from the bus today;
-        - a **bare** request (no session carrier) is the legacy
+        - pre-spec emitters (skills, satellites, the legacy
+          :meth:`SessionManager.sync`) carry the **whole** session, not just
+          ``intent_context`` -- in ``message.data["session"]`` when the
+          producer built the request that way, or in
+          ``message.context.session`` otherwise. When that carried session
+          names the **default** session (no id, or ``"default"``), it is
+          folded onto the default session with the same field-by-field
+          merge the intake fold (:meth:`fold_inbound`, backed by
+          ``_merge_into_default``/``merge_carrier``) uses for every other
+          inbound snapshot -- lang, pipeline, ``intent_context``, and any
+          other modelled field travel together, an omitted field leaves the
+          stored value unchanged, and ``intent_context`` merges entry by
+          entry per OVOS-CONTEXT-1 §5.3, exactly as a normally-received
+          message would fold;
+        - a carried **named** session is OVOS-SESSION-2 §2.2 territory: this
+          process is never pushed someone else's session, so the only named
+          session honoured here is the one it already holds
+          (:meth:`held_session`), and only for the OVOS-CONTEXT-1 §5.3
+          ``intent_context`` set + null-delete entry-by-entry merge -- an
+          unheld named session is another client's state and is ignored;
+        - a **bare** request (no session carrier at all) is the legacy
           default-session echo and logs a deprecation warning.
 
-        The singleton resolves the target session and merges the snapshot's
-        ``intent_context`` entry-by-entry onto it, keeping the managed
-        session the authoritative owner of intent context. The merge
-        mutates the working map **in place**: the map object every live
-        view holds keeps its identity, and it stays a dict -- never
-        ``None`` -- per the in-process SESSION-1 §2.1 normalization.
+        The ``intent_context`` merge mutates the working map **in place**:
+        the map object every live view holds keeps its identity, and it
+        stays a dict -- never ``None`` -- per the in-process SESSION-1 §2.1
+        normalization.
         """
-        carried = message is not None and \
-            isinstance(getattr(message, "context", None), dict) and \
-            "session" in message.context
-        if carried:
-            inbound = Session.from_message(message)
+        raw = None
+        if message is not None:
+            data = getattr(message, "data", None)
+            if isinstance(data, dict) and data.get("session") is not None:
+                raw = data["session"]
+            else:
+                ctx = getattr(message, "context", None)
+                if isinstance(ctx, dict) and "session" in ctx:
+                    raw = ctx["session"]
+        if raw is not None:
+            try:
+                inbound = cls.session_cls.deserialize(raw)
+            except MalformedSession as e:
+                LOG.warning(f"ignoring malformed ovos.session.sync payload: {e}")
+                inbound = None
+            if inbound and inbound.session_id in (None, "", DEFAULT_SESSION_ID):
+                cls._merge_into_default(parse_session_payload(raw))
+                LOG.debug("merged ovos.session.sync default-session payload")
+                return
             if inbound:
                 sess = cls.held_session(inbound.session_id)
                 payload = inbound.intent_context
