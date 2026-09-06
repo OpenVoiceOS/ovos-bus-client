@@ -9,6 +9,30 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.11.13a1 - 2.11.13a2
+
+`SessionManager` owns the pre-spec session shims outright instead of
+borrowing them from `ovos-spec-tools`: `ovos.session.sync` and
+`ovos.session.update_default` are the client's own `LEGACY_SESSION_SYNC` and
+`LEGACY_SESSION_UPDATE_DEFAULT` string constants, and the default-session
+mirror is written by the client's own `get_default_session` /
+`reset_default_session` overrides rather than by reaching into the registry's
+`_store`. SESSION-2 §2.7 defines no push topic for session sync, so neither
+constant is a `SpecMessage` member.
+
+Pin `ovos-bus-client` and `ovos-spec-tools` from the same alpha channel.
+`ovos-spec-tools` drops its private `_store` classmethod in `1.10.1a1` and
+`SpecMessage.SESSION_SYNC` in `1.11.0a2`. `ovos-bus-client` `2.7.0a1` through
+`2.11.0a1` call `cls._store(...)` directly (fixed in `2.11.1a1`, #313), and
+`2.7.0a1` through `2.11.9a1` reference `SpecMessage.SESSION_SYNC` (replaced by
+the local `LEGACY_SESSION_SYNC` constant in `2.11.10a1`, #336). None of those
+client releases cap `ovos-spec-tools`'s upper bound, so an install that
+upgrades only `ovos-spec-tools` past `1.10.0a1` while `ovos-bus-client` stays
+below `2.11.1a1` goes deaf on named sessions: an inbound session-sync frame
+raises `AttributeError: _store` before local dispatch. The supported pairing
+is `ovos-bus-client>=2.11.10a1` with `ovos-spec-tools>=1.11.0a2`; a partial
+upgrade of only one package is not a supported combination.
+
 ## 2.11.0a1
 
 The event scheduler was rewritten against SCHEDULER-1 and now speaks an
@@ -203,7 +227,10 @@ is cleared on close/error.
 `SessionManager` merges `intent_context` entry-by-entry
 (OVOS-CONTEXT-1 §5.3) instead of replacing the whole dict. A mirrored
 namespace payload is translated onto its counterpart topic correctly.
-`ovos.session.sync` now uses `SpecMessage.SESSION_SYNC`.
+`ovos.session.sync` uses the client's own `LEGACY_SESSION_SYNC` string
+constant rather than a `SpecMessage` enum member: SESSION-2 §2.7 defines no
+push topic for session sync, so the topic has no spec-tools counterpart to
+borrow.
 
 ## 2.4.0a1 - 2.4.1a1
 
