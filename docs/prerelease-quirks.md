@@ -9,7 +9,7 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
-## 2.11.14a1
+## 2.11.13a4
 
 `websocket.async_sender` (env `OVOS_BUS_ASYNC_SENDER`) is a new, off-by-default
 flag that moves outbound writes onto a single dedicated thread instead of the
@@ -21,6 +21,8 @@ on the same bounded queue, so one can be written while the other is silently
 dropped. A consumer that only understands the legacy topic can therefore miss
 a frame that a canonical-topic consumer received. Leave the flag off on any
 deployment that still depends on legacy topics under sustained load.
+
+The realistic production path into the overflow drop is a broker restart, because the client's reconnect backoff progressively waits 5, 10, 20, 40, and then 60 seconds (capped) between reconnection attempts. During this period, frames emitted with the queue on accumulate up to the 5000-frame limit and are then dropped and counted. With the queue off, those same periods block callers instead.
 
 ## 2.11.13a1 - 2.11.13a2
 
