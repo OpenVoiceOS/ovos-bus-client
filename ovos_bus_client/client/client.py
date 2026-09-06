@@ -306,6 +306,10 @@ class MessageBusClient:
     # partial constructions) keep the synchronous sender
     _sender_queue = None
     _sender_thread = None
+    _sender_closing = False
+    #: how long close() lets the sender finish draining before the socket is
+    #: closed underneath it
+    SENDER_CLOSE_TIMEOUT_S = 5.0
     # class-level default so a test double built via __new__ (bypassing
     # __init__) still reads a real bool instead of raising AttributeError.
     _closing = False
@@ -340,6 +344,7 @@ class MessageBusClient:
         # guaranteed processing).
         self._sender_queue = None
         self._sender_thread = None
+        self._sender_closing = False
         if _bus_flag("OVOS_BUS_ASYNC_SENDER", "async_sender", default=False):
             self._sender_queue = _queue.Queue(maxsize=5000)
             self._sender_thread = Thread(target=self._drain_sender,
@@ -773,6 +778,9 @@ class MessageBusClient:
             msg = json_dumps(message.__dict__)
         msg = _maybe_encrypt(msg)
         if self._sender_queue is not None:
+            if self._sender_closing:
+                LOG.warning(f"bus client is closing; dropping {message.msg_type}")
+                return
             try:
                 # bounded: a stuck socket applies backpressure to callers
                 # instead of buffering frames without limit
@@ -1181,20 +1189,27 @@ class MessageBusClient:
         self._closing = True
         sender = self._sender_thread
         if sender is not None:
-            self.flush(timeout=5.0)
+            # Stop admitting first, so nothing new joins the queue behind the
+            # sentinel while we are draining.
+            self._sender_closing = True
             try:
-                # never block close() behind a full queue: the sender holds
-                # its own reference and drains regardless; a lost sentinel
-                # only means the daemon thread parks on get() until process
-                # exit instead of returning early
+                # The sentinel goes to the BACK of the queue, so the sender
+                # reaching it means it already wrote every frame ahead of it.
+                # Joining on the sender is therefore the drain: a separate
+                # emptiness check would not prove the last write completed.
                 self._sender_queue.put_nowait(self._SENDER_STOP)
             except _queue.Full:
                 LOG.warning("outbound bus queue still full at close(); "
                             "sender thread will not be stopped explicitly")
-            sender.join(timeout=2.0)
+            # The socket must stay open while the sender still owns frames:
+            # closing it underneath a blocked write means the next queued
+            # frame is written to a closed socket and silently dropped.
+            sender.join(timeout=self.SENDER_CLOSE_TIMEOUT_S)
             if sender.is_alive():
-                LOG.warning("bus sender still draining at close(); "
-                            "leaving it to finish in the background")
+                LOG.warning(
+                    "bus sender still draining after %.1fs; closing the socket "
+                    "anyway, queued frames may be lost",
+                    self.SENDER_CLOSE_TIMEOUT_S)
             # the drain loop keeps a local queue reference, so clearing the
             # attributes is safe even if the thread is still finishing
             self._sender_thread = None

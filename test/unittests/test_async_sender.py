@@ -6,6 +6,7 @@ measured ~23ms per emit under a 400-client load in a ~20-thread process vs
 daemon thread owns the socket: ordering preserved, errors logged per frame.
 """
 import threading
+import json
 import time
 import unittest
 from unittest import TestCase
@@ -119,6 +120,9 @@ class TestAsyncSenderOn(TestCase):
         while not sent and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertEqual(len(sent), 1)
+        # a retry of the failed {"n": 1} frame followed by dropping {"n": 2}
+        # would also leave exactly one frame here, so name which one landed
+        self.assertEqual(json.loads(sent[0])["data"]["n"], 2)
 
     def test_close_drains_pending_frames(self):
         sent = []
@@ -132,3 +136,71 @@ class TestAsyncSenderOn(TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAsyncSenderCloseOrdering(TestCase):
+    """close() must not close the socket out from under the sender."""
+
+    def setUp(self):
+        self.c = _client(True)
+
+    def tearDown(self):
+        try:
+            self.c.close()
+        except Exception:
+            pass
+
+    def test_socket_closes_only_after_the_sender_drains(self):
+        order = []
+        first_write = threading.Event()
+        release = threading.Event()
+
+        def slow_send(payload):
+            if not first_write.is_set():
+                first_write.set()
+                # the first write blocks; the second frame is queued behind it
+                release.wait(5)
+            order.append(("send", json.loads(payload)["data"]["seq"]))
+
+        self.c.client.send.side_effect = slow_send
+        self.c.client.close.side_effect = lambda *a, **k: order.append(("close", None))
+
+        self.c.emit(Message("unit.test", {"seq": 0}))
+        self.assertTrue(first_write.wait(5), "sender never started writing")
+        self.c.emit(Message("unit.test", {"seq": 1}))
+
+        closer = threading.Thread(target=self.c.close, daemon=True)
+        closer.start()
+        # close() is now waiting on the blocked sender; the socket must NOT
+        # have been closed yet
+        time.sleep(0.2)
+        self.assertNotIn(("close", None), order,
+                         "socket closed while the sender still had frames")
+
+        release.set()
+        closer.join(timeout=10)
+        self.assertFalse(closer.is_alive())
+
+        # both frames went out, and only then did the socket close
+        self.assertEqual(order, [("send", 0), ("send", 1), ("close", None)])
+
+    def test_emit_after_close_starts_is_refused(self):
+        release = threading.Event()
+        sent = []
+
+        def slow_send(payload):
+            release.wait(5)
+            sent.append(json.loads(payload)["data"]["seq"])
+
+        self.c.client.send.side_effect = slow_send
+        self.c.emit(Message("unit.test", {"seq": 0}))
+
+        closer = threading.Thread(target=self.c.close, daemon=True)
+        closer.start()
+        time.sleep(0.2)
+        # nothing may join the queue behind the stop sentinel
+        self.c.emit(Message("unit.test", {"seq": 99}))
+
+        release.set()
+        closer.join(timeout=10)
+        self.assertEqual(sent, [0])
