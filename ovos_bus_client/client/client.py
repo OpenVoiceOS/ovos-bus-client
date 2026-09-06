@@ -307,6 +307,8 @@ class MessageBusClient:
     _sender_queue = None
     _sender_thread = None
     _sender_closing = False
+    _sender_dropped = 0
+    _sender_dropped_logged_at = 0.0
     #: how long close() lets the sender finish draining before the socket is
     #: closed underneath it
     SENDER_CLOSE_TIMEOUT_S = 5.0
@@ -345,6 +347,8 @@ class MessageBusClient:
         self._sender_queue = None
         self._sender_thread = None
         self._sender_closing = False
+        self._sender_dropped = 0
+        self._sender_dropped_logged_at = 0.0
         if _bus_flag("OVOS_BUS_ASYNC_SENDER", "async_sender", default=False):
             self._sender_queue = _queue.Queue(maxsize=5000)
             self._sender_thread = Thread(target=self._drain_sender,
@@ -782,11 +786,19 @@ class MessageBusClient:
                 LOG.warning(f"bus client is closing; dropping {message.msg_type}")
                 return
             try:
-                # bounded: a stuck socket applies backpressure to callers
-                # instead of buffering frames without limit
-                self._sender_queue.put((msg, message.msg_type), timeout=30)
+                # bounded and non-blocking: a stuck socket must apply
+                # backpressure by DROPPING, not by parking the caller --
+                # emit() has to return in microseconds regardless of queue
+                # state, that is the whole point of the async sender.
+                self._sender_queue.put_nowait((msg, message.msg_type))
             except _queue.Full:
-                LOG.error(f"outbound bus queue full; dropping {message.msg_type}")
+                self._sender_dropped += 1
+                now = time.monotonic()
+                if now - self._sender_dropped_logged_at >= 1.0:
+                    self._sender_dropped_logged_at = now
+                    LOG.error(f"outbound bus queue full; dropping "
+                              f"{message.msg_type} ({self._sender_dropped} "
+                              f"dropped total)")
             return
         try:
             self.client.send(msg)
@@ -947,6 +959,17 @@ class MessageBusClient:
         waiter = MessageWaiter(self, message_type)  # Setup response handler
         # Send message and wait for its response
         self.emit(message)
+        if self._sender_queue is not None:
+            # With the async sender, emit() only enqueues -- the response
+            # window opened above would otherwise spend the caller's whole
+            # timeout budget waiting on the QUEUE, and report "no answer"
+            # for a request that never reached the socket. Bound the wait on
+            # the write itself against the same timeout the caller gave the
+            # response.
+            if not self.flush(timeout):
+                LOG.warning(f"{message.msg_type} was still queued for the "
+                            f"outbound sender after {timeout}s; the peer "
+                            f"may never have seen it")
         return waiter.wait(timeout)
 
     def on(self, event_name: str, func: Callable[[Message], Any]):

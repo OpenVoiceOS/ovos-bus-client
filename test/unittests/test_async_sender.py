@@ -5,10 +5,12 @@ measured ~23ms per emit under a 400-client load in a ~20-thread process vs
 ~1ms idle. With the async sender, emit() enqueues (microseconds) and one
 daemon thread owns the socket: ordering preserved, errors logged per frame.
 """
+import queue
 import threading
 import json
 import time
 import unittest
+from collections import defaultdict
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -92,16 +94,64 @@ class TestAsyncSenderOn(TestCase):
                          "the in-flight frame still completes after close")
 
     def test_order_preserved_across_threads(self):
-        sent = []
-        self.c.client.send.side_effect = lambda p: sent.append(p)
-        for i in range(50):
-            self.c.emit(Message("unit.test", {"seq": i}))
+        sent_by_thread = defaultdict(list)
+        lock = threading.Lock()
+
+        def record(payload):
+            data = json.loads(payload)["data"]
+            with lock:
+                sent_by_thread[data["thread"]].append(data["seq"])
+        self.c.client.send.side_effect = record
+
+        n_threads, n_msgs = 8, 50
+
+        def worker(tid):
+            for i in range(n_msgs):
+                self.c.emit(Message("unit.test", {"thread": tid, "seq": i}))
+
+        threads = [threading.Thread(target=worker, args=(tid,))
+                   for tid in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
         self.assertTrue(self.c.flush(5))
         deadline = time.monotonic() + 2
-        while len(sent) < 50 and time.monotonic() < deadline:
+        while (sum(len(v) for v in sent_by_thread.values()) < n_threads * n_msgs
+               and time.monotonic() < deadline):
             time.sleep(0.01)
-        seqs = [__import__("json").loads(p)["data"]["seq"] for p in sent]
-        self.assertEqual(seqs, list(range(50)), "FIFO order must hold")
+        for tid in range(n_threads):
+            self.assertEqual(sent_by_thread[tid], list(range(n_msgs)),
+                             f"thread {tid}'s frames arrived out of order")
+
+    def test_overflow_drops_without_blocking(self):
+        """A full queue must drop, not block, and must count the drop."""
+        # mutate maxsize in place -- the running sender thread holds a LOCAL
+        # reference to this same queue object, so swapping it for a new
+        # Queue() would leave the sender draining the old one forever
+        self.c._sender_queue.maxsize = 2
+        release = threading.Event()
+        self.c.client.send.side_effect = lambda payload: release.wait(5)
+
+        # occupies the sender thread inside the blocked send() above
+        self.c.emit(Message("unit.test", {"seq": 0}))
+        deadline = time.monotonic() + 2
+        while self.c._sender_queue.qsize() > 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        # fill the now-empty two-slot queue
+        self.c.emit(Message("unit.test", {"seq": 1}))
+        self.c.emit(Message("unit.test", {"seq": 2}))
+
+        with patch("ovos_bus_client.client.client.LOG.error") as mock_error:
+            t0 = time.monotonic()
+            self.c.emit(Message("unit.test", {"seq": 3}))
+            elapsed_ms = (time.monotonic() - t0) * 1000
+        self.assertLess(elapsed_ms, 100,
+                         "emit() must return immediately on overflow, "
+                         "not block waiting for room")
+        mock_error.assert_called_once()
+        self.assertEqual(self.c._sender_dropped, 1)
+        release.set()
 
     def test_send_error_does_not_kill_the_sender(self):
         calls = {"n": 0}
@@ -123,6 +173,28 @@ class TestAsyncSenderOn(TestCase):
         # a retry of the failed {"n": 1} frame followed by dropping {"n": 2}
         # would also leave exactly one frame here, so name which one landed
         self.assertEqual(json.loads(sent[0])["data"]["n"], 2)
+
+    def test_wait_for_response_survives_a_slow_write(self):
+        """The response window must cover the time the request itself
+        spends getting onto the wire, not just the caller's raw timeout.
+
+        A frame that takes 0.8s to reach the socket, waited on with a 0.5s
+        response timeout, must still be answered: wait_for_response has to
+        flush the outbound queue before it starts counting down the wait,
+        otherwise the timeout can expire while the request is still queued.
+        """
+        def slow_send(payload):
+            time.sleep(0.8)
+            if "probe.req" in payload:
+                self.c.emitter.emit("probe.req.response",
+                                    Message("probe.req.response", {"ok": True}))
+        self.c.client.send.side_effect = slow_send
+
+        result = self.c.wait_for_response(Message("probe.req"), timeout=0.5)
+        self.assertIsNotNone(
+            result, "wait_for_response must not report silence for a "
+                    "request that had not yet reached the socket")
+        self.assertTrue(result.data.get("ok"))
 
     def test_close_drains_pending_frames(self):
         sent = []
@@ -193,13 +265,32 @@ class TestAsyncSenderCloseOrdering(TestCase):
             sent.append(json.loads(payload)["data"]["seq"])
 
         self.c.client.send.side_effect = slow_send
+        q = self.c._sender_queue
         self.c.emit(Message("unit.test", {"seq": 0}))
+        # wait for the sender to pick seq 0 up (and block inside slow_send
+        # on it), so the queue is empty before close() adds its sentinel --
+        # otherwise the size checks below race the sender's own scheduling
+        deadline = time.monotonic() + 5
+        while q.qsize() > 0 and time.monotonic() < deadline:
+            time.sleep(0.001)
+        self.assertEqual(q.qsize(), 0, "sender never dequeued seq 0")
 
         closer = threading.Thread(target=self.c.close, daemon=True)
         closer.start()
-        time.sleep(0.2)
-        # nothing may join the queue behind the stop sentinel
+        # the queue reference is still live here: close() only clears it
+        # AFTER sender.join() returns, and the sender is stuck on `release`
+        deadline = time.monotonic() + 5
+        while (not (self.c._sender_closing and q.qsize() >= 1)
+               and time.monotonic() < deadline):
+            time.sleep(0.001)
+        self.assertTrue(self.c._sender_closing,
+                        "close() never set the admission gate")
+        size_before = q.qsize()
         self.c.emit(Message("unit.test", {"seq": 99}))
+        size_after = q.qsize()
+        self.assertEqual(size_after, size_before,
+                         "emit() must not enqueue once close() has started, "
+                         "not merely land behind the stop sentinel")
 
         release.set()
         closer.join(timeout=10)

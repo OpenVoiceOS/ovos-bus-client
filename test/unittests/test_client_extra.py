@@ -74,6 +74,10 @@ class TestEmit(TestCase):
     def test_emit_sends_serialized_message(self):
         # a non-migrated topic, so namespace translation does not add a second send
         self.client.emit(Message("test.message", {"utterance": "hi"}))
+        # with websocket.async_sender ON, emit() only enqueues -- the write
+        # itself happens on the sender thread, so it must be flushed before
+        # asserting on the socket mock
+        self.client.flush()
         self.assertTrue(self.client.client.send.called)
         payload = self.client.client.send.call_args[0][0]
         decoded = json.loads(payload)
@@ -232,6 +236,7 @@ class TestLifecycle(TestCase):
         client.client = MagicMock()
         client.client.send = MagicMock()
         client.on_open()
+        client.flush()
         self.assertTrue(client.connected_event.is_set())
         self.assertEqual(client.client.send.call_count, 1)
         sent = json.loads(client.client.send.call_args[0][0])
