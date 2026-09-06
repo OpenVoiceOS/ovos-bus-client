@@ -143,3 +143,48 @@ def test_handle_session_sync_data_carrier_named_session_untouched():
     SessionManager.handle_session_sync(
         Message("ovos.session.sync", {"session": snap.serialize()}))
     assert "s9" not in SessionManager.sessions
+
+
+def test_handle_session_sync_data_carrier_wins_over_context_carrier():
+    # OVOS-SESSION-2 §2.7: only the data carrier is folded per §5.1; a
+    # context-carried session is a decoy and must never be applied, even
+    # when it names a different session than the data carrier
+    snap = Session("default")
+    snap.lang = "pt-PT"
+    decoy = Session("s7")
+    decoy.lang = "de-DE"
+    SessionManager.handle_session_sync(
+        Message("ovos.session.sync", {"session": snap.serialize()},
+                {"session": decoy.serialize()}))
+    assert SessionManager.get_default_session().lang == "pt-PT"
+    assert "s7" not in SessionManager.sessions
+
+
+def test_handle_session_sync_data_carrier_merges_into_held_named_session():
+    # a named-session push on the data carrier merges only into a session
+    # this process holds, per §2.2/§2.5, exactly as the context-carrier
+    # case above already covers
+    held = Session("s1")
+    held.intent_context = {"a": {"value": 1}, "b": {"value": 2}}
+    SessionManager.bus = SimpleNamespace(session=held)
+    try:
+        snap = Session("s1")
+        snap.intent_context = {"b": None, "c": {"value": 3}}  # delete b, add c
+        SessionManager.handle_session_sync(
+            Message("ovos.session.sync", {"session": snap.serialize()}))
+        assert held.intent_context == {"a": {"value": 1}, "c": {"value": 3}}
+    finally:
+        SessionManager.bus = None
+
+    # the same push for a named id this process does not hold changes nothing
+    held2 = Session("s1")
+    SessionManager.bus = SimpleNamespace(session=held2)
+    try:
+        snap2 = Session("s9")
+        snap2.intent_context = {"k": {"value": 9}}
+        SessionManager.handle_session_sync(
+            Message("ovos.session.sync", {"session": snap2.serialize()}))
+        assert held2.intent_context == {}
+        assert "s9" not in SessionManager.sessions
+    finally:
+        SessionManager.bus = None
