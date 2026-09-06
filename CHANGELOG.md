@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.13a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.13a4) (2026-09-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.13a3...2.11.13a4)
+
+**Merged pull requests:**
+
+- perf: optional single-writer outbound queue \(websocket.async\_sender\) [\#285](https://github.com/OpenVoiceOS/ovos-bus-client/pull/285) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [2.11.13a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.13a3) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.13a2...2.11.13a3)
@@ -170,15 +178,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
@@ -370,10 +378,6 @@
 ## [2.4.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.4.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.4.0a1...2.4.1a1)
-
-**Merged pull requests:**
-
-- fix: keep an unset site\_id absent instead of fabricating "unknown" \(BRIDGE-1 §3.3\) [\#237](https://github.com/OpenVoiceOS/ovos-bus-client/pull/237) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.4.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.4.0a1) (2026-06-27)
 
