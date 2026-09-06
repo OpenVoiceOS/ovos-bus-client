@@ -86,6 +86,7 @@ class TestSyncClientConnectRequestsDefaultSession(unittest.TestCase):
         client.client.send = MagicMock()
         with patch("ovos_bus_client.client.client.log_deprecation") as mock_warn:
             client.on_open()
+        client.flush()
         self.assertEqual(client.client.send.call_count, 1)
         sent = json.loads(client.client.send.call_args[0][0])
         self.assertEqual(sent["type"], "ovos.session.sync")

@@ -91,8 +91,8 @@ itself does not expose an `sslopt` argument.
 ## When config is wrong
 
 If `mycroft.conf` exists but has no `websocket` section,
-`load_message_bus_config` raises `KeyError` (`conf.py:33`). If you want to be
-robust against missing config, either:
+`load_message_bus_config` raises `KeyError` (`conf.py:33`). To tolerate
+missing config, either:
 
 - Catch the exception and fall back to defaults yourself, or
 - Construct `MessageBusClient(host="127.0.0.1", port=8181, route="/core",
@@ -118,8 +118,38 @@ authentication and encryption at a higher layer.
 See [The client → Deprecated transport-edge encryption](client.md#deprecated-transport-edge-encryption)
 for implementation details.
 
+## `websocket.async_sender`: optional single-writer outbound queue
+
+By default every call to `emit()` serializes its message and writes it to the
+WebSocket on the calling thread, so writes from concurrent emitters serialize
+on the socket's own send lock. Setting `websocket.async_sender` (or the
+environment variable `OVOS_BUS_ASYNC_SENDER`) to a truthy value changes this:
+`emit()` serializes the message and hands it to a bounded queue, and a single
+daemon thread owns the socket and writes queued frames one at a time. Ordering
+is preserved per emitting thread, since each thread's frames land on the queue
+in the order it produced them and the single writer drains it strictly FIFO.
+The flag is off by default.
+
+`wait_for_response()` flushes the queue before it starts waiting for the
+reply, so the response timeout still covers the time the request itself
+spends waiting to reach the socket rather than starting to count down before
+the frame has even left the process.
+
+The queue holds up to 5000 frames. Once it is full, `emit()` drops the new
+frame immediately instead of blocking the caller, increments a per-client
+drop counter, and logs an error at most once per second naming the message
+type and the cumulative count, so an operator under sustained overflow gets
+one line a second rather than a flood. `close()` waits for the queue to drain
+before closing the socket, up to a bounded timeout. If the sender has not
+finished by then, the socket closes anyway and any frames still queued are
+lost. Under overflow, a message and its legacy namespace or intent twin (see
+[the namespace migration docs](namespace-migration.md)) are two separate
+frames on the same queue, so one can be written while the other is dropped.
+
 ## Environment variables
 
-`ovos-bus-client` does not read environment variables directly. `ovos-config`
-does — see its own documentation if you want env-based overrides for
-`mycroft.conf` values.
+`ovos-bus-client` reads environment variables for a handful of transport
+flags, `OVOS_BUS_ASYNC_SENDER` among them — see the section above and
+[the namespace migration docs](namespace-migration.md) for the others.
+Everything else in `mycroft.conf` is read by `ovos-config`; see its own
+documentation for env-based overrides of arbitrary config values.

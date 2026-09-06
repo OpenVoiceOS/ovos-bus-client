@@ -145,6 +145,31 @@ class TestReceiveSideBridge(unittest.TestCase):
         c.on_message(Message("ovos.utterance.speak", {"utterance": "hi"}).serialize())
         c.client.send.assert_not_called()
 
+    def test_counterpart_snapshots_context_before_handler_dispatch(self):
+        """Async handlers cannot race counterpart context construction."""
+        c = _recv_client()
+        counterpart_seen = []
+
+        def mutate_original(message):
+            message.context["request_id"] = "handler-mutated"
+
+        c.emitter.on("speak", mutate_original)
+        c.emitter.on(
+            "ovos.utterance.speak",
+            lambda message: counterpart_seen.append(message),
+        )
+        c.on_message(Message(
+            "speak",
+            {"utterance": "hi"},
+            {"request_id": "wire-value"},
+        ).serialize())
+
+        self.assertEqual(len(counterpart_seen), 1)
+        self.assertEqual(
+            counterpart_seen[0].context["request_id"],
+            "wire-value",
+        )
+
 
 class TestReceiveSidePayloadTranslation(unittest.TestCase):
     """The locally-dispatched counterpart carries the counterpart topic's PAYLOAD

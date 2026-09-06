@@ -9,6 +9,19 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.11.14a1
+
+`websocket.async_sender` (env `OVOS_BUS_ASYNC_SENDER`) is a new, off-by-default
+flag that moves outbound writes onto a single dedicated thread instead of the
+calling thread — see [the configuration docs](configuration.md#websocketasync_sender-optional-single-writer-outbound-queue)
+for what it changes. The trade-off worth knowing before turning it on: under
+sustained overflow, a message and its legacy twin (the compatibility frame
+sent alongside a migrated namespace or intent topic) are two separate frames
+on the same bounded queue, so one can be written while the other is silently
+dropped. A consumer that only understands the legacy topic can therefore miss
+a frame that a canonical-topic consumer received. Leave the flag off on any
+deployment that still depends on legacy topics under sustained load.
+
 ## 2.11.13a1 - 2.11.13a2
 
 `SessionManager` owns the pre-spec session shims outright instead of

@@ -5,6 +5,7 @@ from copy import deepcopy
 from ovos_utils import json_dumps
 
 from os import getpid
+import queue as _queue
 from threading import Event, Thread
 from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
@@ -301,6 +302,16 @@ class MessageBusClient:
     """
     # minimize reading of the .conf
     _config_cache = None
+    # class-level defaults so instances built without __init__ (tests,
+    # partial constructions) keep the synchronous sender
+    _sender_queue = None
+    _sender_thread = None
+    _sender_closing = False
+    _sender_dropped = 0
+    _sender_dropped_logged_at = 0.0
+    #: how long close() lets the sender finish draining before the socket is
+    #: closed underneath it
+    SENDER_CLOSE_TIMEOUT_S = 5.0
     # class-level default so a test double built via __new__ (bypassing
     # __init__) still reads a real bool instead of raising AttributeError.
     _closing = False
@@ -322,6 +333,27 @@ class MessageBusClient:
         self.retry = 5
         self.connected_event = Event()
         self.started_running = False
+        # Optional single-writer outbound queue (``websocket.async_sender``).
+        # Every emitter thread otherwise serializes on the websocket's send
+        # lock: in a process with many worker threads (ovos-core runs ~20)
+        # each emit costs GIL churn plus lock wait -- measured ~23ms per emit
+        # under a 400-client load vs ~1ms idle. With the async sender, emit()
+        # enqueues the serialized frame (microseconds) and one daemon thread
+        # owns the socket; ordering is preserved (writes were serialized
+        # anyway) and total throughput is unchanged. Trade-off: send errors
+        # surface in the sender thread's log instead of the caller -- which
+        # matches the real delivery contract (a successful socket write never
+        # guaranteed processing).
+        self._sender_queue = None
+        self._sender_thread = None
+        self._sender_closing = False
+        self._sender_dropped = 0
+        self._sender_dropped_logged_at = 0.0
+        if _bus_flag("OVOS_BUS_ASYNC_SENDER", "async_sender", default=False):
+            self._sender_queue = _queue.Queue(maxsize=5000)
+            self._sender_thread = Thread(target=self._drain_sender,
+                                         name="bus-sender", daemon=True)
+            self._sender_thread.start()
         # Set by close() to short-circuit the reconnect-backoff recursion in
         # on_error(): that handler sleeps, recreates the websocket and
         # recurses into run_forever() on the SAME thread run_in_thread()
@@ -533,24 +565,36 @@ class MessageBusClient:
         # to the suffixed spelling is only ever served from this frame, RULE
         # 2 does not translate canonical -> suffixed) -- only the firehose
         # double-count is what this gate closes.
+        # namespace migration bridge: also dispatch the counterpart topic(s) to
+        # LOCAL listeners so a handler on either namespace receives the event
+        # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
+        # convenience, not a second logical bus message: the counterpart is NOT put
+        # back on the wire and does NOT re-fire the 'message' firehose, so one
+        # logical emit yields exactly one captured message. The mirrored payload is
+        # reshaped into the counterpart topic's shape (identity for payload-compatible
+        # renames, a per-topic transform for shape-changing ones).
+        #
+        # Every counterpart is built BEFORE ``parsed_message`` is dispatched. The
+        # default ExecutorEventEmitter runs handlers concurrently and handlers may
+        # mutate Message data/context, so deep-copying the original context inside
+        # ``Message.forward`` after dispatch can race a handler and raise
+        # ``RuntimeError: dictionary changed size during iteration``, which
+        # websocket-client then treats as a transport failure.
+        counterparts = []
+        if not is_namespace_twin:
+            for topic in self._translator.counterpart_topics(parsed_message.msg_type):
+                translated = self._translator.translate_payload(
+                    from_topic=parsed_message.msg_type, to_topic=topic,
+                    data=parsed_message.data)
+                counterparts.append((topic, parsed_message.forward(topic, translated)))
+
         try:
             if not is_namespace_twin and not is_intent_twin:
                 self.emitter.emit('message', message)
             if not is_namespace_twin:
                 self.emitter.emit(parsed_message.msg_type, parsed_message)
-                # namespace migration bridge: also dispatch the counterpart topic(s) to
-                # LOCAL listeners so a handler on either namespace receives the event
-                # (consumers dedupe via the on() mirror-guard). This is a listener-delivery
-                # convenience, not a second logical bus message: the counterpart is NOT put
-                # back on the wire and does NOT re-fire the 'message' firehose, so one
-                # logical emit yields exactly one captured message. The mirrored payload is
-                # reshaped into the counterpart topic's shape (identity for payload-compatible
-                # renames, a per-topic transform for shape-changing ones).
-                for topic in self._translator.counterpart_topics(parsed_message.msg_type):
-                    translated = self._translator.translate_payload(
-                        from_topic=parsed_message.msg_type, to_topic=topic,
-                        data=parsed_message.data)
-                    self.emitter.emit(topic, parsed_message.forward(topic, translated))
+                for topic, counterpart in counterparts:
+                    self.emitter.emit(topic, counterpart)
             # else: a marked namespace twin is a REAL second wire frame that only
             # exists to reach an old pre-spec-tools client with no translator of
             # its own. A modern receiver already got both spellings delivered
@@ -737,6 +781,25 @@ class MessageBusClient:
         else:
             msg = json_dumps(message.__dict__)
         msg = _maybe_encrypt(msg)
+        if self._sender_queue is not None:
+            if self._sender_closing:
+                LOG.warning(f"bus client is closing; dropping {message.msg_type}")
+                return
+            try:
+                # bounded and non-blocking: a stuck socket must apply
+                # backpressure by DROPPING, not by parking the caller --
+                # emit() has to return in microseconds regardless of queue
+                # state, that is the whole point of the async sender.
+                self._sender_queue.put_nowait((msg, message.msg_type))
+            except _queue.Full:
+                self._sender_dropped += 1
+                now = time.monotonic()
+                if now - self._sender_dropped_logged_at >= 1.0:
+                    self._sender_dropped_logged_at = now
+                    LOG.error(f"outbound bus queue full; dropping "
+                              f"{message.msg_type} ({self._sender_dropped} "
+                              f"dropped total)")
+            return
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
@@ -744,6 +807,58 @@ class MessageBusClient:
                         'has been closed')
         except Exception as e:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
+
+    _SENDER_STOP = object()
+
+    def _drain_sender(self):
+        """Single-writer loop for the optional async sender.
+
+        Mirrors the synchronous error handling: connection loss and send
+        failures are logged per frame and never kill the thread. Holds a
+        LOCAL reference to the queue so a concurrent close() clearing the
+        attribute can never crash the loop mid-drain, and acknowledges each
+        frame via task_done() only after the socket write completed or
+        failed -- which is what flush() waits on.
+        """
+        q = self._sender_queue
+        while True:
+            item = q.get()
+            try:
+                if item is self._SENDER_STOP:
+                    return
+                msg, msg_type = item
+                try:
+                    self.connected_event.wait(10)
+                    self.client.send(msg)
+                except WebSocketConnectionClosedException:
+                    LOG.warning(f'Could not send {msg_type} message because '
+                                'connection has been closed')
+                except Exception:
+                    LOG.exception(f"failed to emit message {msg_type} "
+                                  f"with len {len(msg)}")
+            finally:
+                q.task_done()
+
+    def flush(self, timeout: float = 5.0) -> bool:
+        """Block until queued outbound frames completed their socket write.
+
+        Waits on the queue's unfinished-task count (acknowledged by the
+        sender AFTER ``client.send()`` returns or fails), not on queue
+        emptiness -- a dequeued frame may still be inside the socket write.
+        Returns True if everything was acknowledged within ``timeout``.
+        No-op (True) for the default synchronous sender.
+        """
+        q = self._sender_queue
+        if q is None:
+            return True
+        deadline = time.monotonic() + timeout
+        with q.all_tasks_done:
+            while q.unfinished_tasks:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                q.all_tasks_done.wait(remaining)
+        return True
 
     def collect_responses(self, message: Message,
                           min_timeout: Union[int, float] = 0.2,
@@ -844,6 +959,17 @@ class MessageBusClient:
         waiter = MessageWaiter(self, message_type)  # Setup response handler
         # Send message and wait for its response
         self.emit(message)
+        if self._sender_queue is not None:
+            # With the async sender, emit() only enqueues -- the response
+            # window opened above would otherwise spend the caller's whole
+            # timeout budget waiting on the QUEUE, and report "no answer"
+            # for a request that never reached the socket. Bound the wait on
+            # the write itself against the same timeout the caller gave the
+            # response.
+            if not self.flush(timeout):
+                LOG.warning(f"{message.msg_type} was still queued for the "
+                            f"outbound sender after {timeout}s; the peer "
+                            f"may never have seen it")
         return waiter.wait(timeout)
 
     def on(self, event_name: str, func: Callable[[Message], Any]):
@@ -1084,6 +1210,33 @@ class MessageBusClient:
         object, and the receiver thread survives close() indefinitely.
         """
         self._closing = True
+        sender = self._sender_thread
+        if sender is not None:
+            # Stop admitting first, so nothing new joins the queue behind the
+            # sentinel while we are draining.
+            self._sender_closing = True
+            try:
+                # The sentinel goes to the BACK of the queue, so the sender
+                # reaching it means it already wrote every frame ahead of it.
+                # Joining on the sender is therefore the drain: a separate
+                # emptiness check would not prove the last write completed.
+                self._sender_queue.put_nowait(self._SENDER_STOP)
+            except _queue.Full:
+                LOG.warning("outbound bus queue still full at close(); "
+                            "sender thread will not be stopped explicitly")
+            # The socket must stay open while the sender still owns frames:
+            # closing it underneath a blocked write means the next queued
+            # frame is written to a closed socket and silently dropped.
+            sender.join(timeout=self.SENDER_CLOSE_TIMEOUT_S)
+            if sender.is_alive():
+                LOG.warning(
+                    "bus sender still draining after %.1fs; closing the socket "
+                    "anyway, queued frames may be lost",
+                    self.SENDER_CLOSE_TIMEOUT_S)
+            # the drain loop keeps a local queue reference, so clearing the
+            # attributes is safe even if the thread is still finishing
+            self._sender_thread = None
+            self._sender_queue = None
         self.client.close()
         self.connected_event.clear()
         if self._run_thread is not None:
