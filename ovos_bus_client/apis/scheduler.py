@@ -246,8 +246,7 @@ class SchedulerClient:
     def _request(self, topic: str, data: dict,
                  timeout: float = DEFAULT_TIMEOUT,
                  context: Optional[dict] = None) -> dict:
-        message = self._get_source_message(context).forward(
-            topic, dict(data, owner=self.skill_id))
+        message = self._get_source_message(context).forward(topic, data)
         answer = self.bus.wait_for_response(message,
                                             reply_type=f"{topic}.response",
                                             timeout=timeout)

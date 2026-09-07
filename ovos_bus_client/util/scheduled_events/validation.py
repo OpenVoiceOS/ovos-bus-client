@@ -14,14 +14,16 @@ from ovos_bus_client.util.scheduled_events.records import (
 from ovos_bus_client.util.scheduled_events.timing import next_occurrence
 
 
-def validate_record(request: dict, namespaced: bool = True,
+def validate_record(request: dict, skill_id: str, namespaced: bool = True,
                     previous: Optional[dict] = None) -> dict:
     """Check a request against §3.1 and return the record to store.
 
-    ``namespaced`` is false only for the legacy adapter, whose event names
-    predate the ``<owner>.<name>`` rule. ``previous`` is the stored record of
-    the same identity, if any; it is what lets an unchanged recurrence keep
-    its anchor.
+    ``skill_id`` is the owning component, taken by the caller from the
+    request message's ``context["skill_id"]`` (§3.1); it is never read from
+    the request body. ``namespaced`` is false only for the legacy adapter,
+    whose event names predate the ``<skill_id>.<name>`` rule. ``previous`` is
+    the stored record of the same identity, if any; it is what lets an
+    unchanged recurrence keep its anchor.
 
     The requesting message's ``context`` is kept as it arrived (§3.5), so
     that the occurrence can be emitted with it. It is not part of the
@@ -31,10 +33,9 @@ def validate_record(request: dict, namespaced: bool = True,
     if not isinstance(request, dict):
         raise ScheduleError("invalid_record", "request data must be an object")
 
-    owner = _required_name(request.get("owner"), "owner")
     record = {"id": _required_name(request.get("id"), "id"),
-              "owner": owner,
-              "event": _validated_event(request.get("event"), owner, namespaced),
+              "skill_id": skill_id,
+              "event": _validated_event(request.get("event"), skill_id, namespaced),
               "data": _validated_payload(request.get("data"))}
 
     context = _validated_context(request.get("context"))
@@ -78,10 +79,10 @@ def _required_name(value, field: str) -> str:
     return value
 
 
-def _validated_event(event, owner: str, namespaced: bool) -> str:
+def _validated_event(event, skill_id: str, namespaced: bool) -> str:
     """The message type each occurrence fires (§6.1).
 
-    The ``<owner>.<name>`` shape makes a fired event attributable to its
+    The ``<skill_id>.<name>`` shape makes a fired event attributable to its
     owner, and the ban on ``:`` keeps it clear of the dispatch shape of
     MSG-1 §2.1.1, so a schedule can never address another component's
     registered handler.
@@ -90,13 +91,13 @@ def _validated_event(event, owner: str, namespaced: bool) -> str:
         raise ScheduleError("bad_event", "event is required")
     if not namespaced:
         return event
-    prefix = f"{owner}."
+    prefix = f"{skill_id}."
     name = event[len(prefix):] if event.startswith(prefix) else ""
     if not name or ":" in name:
         raise ScheduleError(
             "bad_event",
-            f"event must be <owner>.<name> for owner {owner}, with a "
-            f"non-empty name free of ':'; got {event}")
+            f"event must be <skill_id>.<name> for skill_id {skill_id}, with "
+            f"a non-empty name free of ':'; got {event}")
     return event
 
 

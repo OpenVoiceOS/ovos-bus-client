@@ -68,14 +68,13 @@ def legacy_record(name: str, when: float, repeat: Optional[float],
     specified protocol.
     """
     instant = format_instant(datetime.fromtimestamp(when, timezone.utc))
-    record = {"id": name, "owner": legacy_owner(name), "event": name,
-              "data": data or {}}
+    record = {"id": name, "event": name, "data": data or {}}
     if repeat:
         record["every"] = {"seconds": repeat, "start": instant}
     else:
         record["at"] = instant
     record["context"] = context or {}
-    return validate_record(record, namespaced=False)
+    return validate_record(record, skill_id=legacy_owner(name), namespaced=False)
 
 
 def pending_migration_path() -> Optional[str]:

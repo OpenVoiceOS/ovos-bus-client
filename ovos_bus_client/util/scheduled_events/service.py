@@ -192,11 +192,11 @@ class ScheduledEventService(Thread):
     def handle_schedule(self, message: Message):
         """Create or replace a schedule (§4.1)."""
         try:
-            owner = self._authorized_owner(message, message.data.get("owner"))
+            skill_id = self._owning_skill_id(message)
             with self.lock:
-                previous = self.schedules.get((owner, message.data.get("id")))
+                previous = self.schedules.get((skill_id, message.data.get("id")))
                 record = validate_record(
-                    dict(message.data, context=message.context),
+                    dict(message.data, context=message.context), skill_id,
                     previous=previous.record if previous else None)
                 schedule = self._continuing(record, previous)
                 self._put_schedule(schedule, previous)
@@ -205,53 +205,74 @@ class ScheduledEventService(Thread):
             return self._refuse(message, err)
         except OSError as err:
             return self._refuse(message, _unwritable_store(err))
-        self._answer(message, {"ok": True, "id": record["id"], "owner": owner,
+        self._answer(message, {"ok": True, "id": record["id"],
+                               "skill_id": skill_id,
                                "next": format_instant(upcoming) if upcoming else None,
                                "replaced": previous is not None})
 
     def handle_cancel(self, message: Message):
-        """Delete a schedule. Cancelling one that does not exist is not an
-        error; the answer simply says it did not exist (§4.1)."""
+        """Delete a schedule. Cancelling one that does not exist under the
+        caller's scope is not an error; the answer simply says it did not
+        exist (§4.1). One that exists under another skill_id is outside that
+        scope and is refused, not reported as absent (§6.2)."""
         try:
-            owner = self._authorized_owner(message, message.data.get("owner"),
-                                           wildcard=True)
+            skill_id = self._scoped_skill_id(message, wildcard=True)
             schedule_id = _required_id(message)
             with self.lock:
-                existed = self._drop_matching(owner, schedule_id)
+                existed = self._drop_matching(skill_id, schedule_id)
+                if not existed:
+                    self._reject_if_out_of_scope(schedule_id, skill_id)
         except ScheduleError as err:
             return self._refuse(message, err)
         except OSError as err:
             return self._refuse(message, _unwritable_store(err))
-        self._answer(message, {"ok": True, "id": schedule_id, "owner": owner,
-                               "existed": existed})
+        self._answer(message, {"ok": True, "id": schedule_id,
+                               "skill_id": skill_id, "existed": existed})
 
     def handle_get(self, message: Message):
-        """Read one schedule as stored, plus its computed state (§4.1)."""
+        """Read one schedule as stored, plus its computed state (§4.1). One
+        that exists under another skill_id is outside the caller's scope and
+        is refused, not reported as absent (§6.2)."""
         try:
-            owner = self._authorized_owner(message, message.data.get("owner"))
+            skill_id = self._owning_skill_id(message)
             schedule_id = _required_id(message)
             with self.lock:
-                schedule = self.schedules.get((owner, schedule_id))
+                schedule = self.schedules.get((skill_id, schedule_id))
+                if schedule is None:
+                    self._reject_if_out_of_scope(schedule_id, skill_id)
                 view = self._view(schedule) if schedule else None
         except ScheduleError as err:
             return self._refuse(message, err)
-        self._answer(message, {"ok": True, "id": schedule_id, "owner": owner,
+        self._answer(message, {"ok": True, "id": schedule_id,
+                               "skill_id": skill_id,
                                "existed": view is not None,
                                "record": view["record"] if view else None,
                                "state": view["state"] if view else None})
 
+    def _reject_if_out_of_scope(self, schedule_id: str, skill_id: str):
+        """Refuse with skill_id_mismatch when ``schedule_id`` names a
+        schedule that exists, but under a different owner (§6.2); an id
+        that exists nowhere stays a plain not-found answer."""
+        if skill_id == "*":
+            return
+        if any(key[1] == schedule_id and key[0] != skill_id
+              for key in self.schedules):
+            raise ScheduleError(
+                "skill_id_mismatch",
+                f"{schedule_id} does not belong to {skill_id}")
+
     def handle_list(self, message: Message):
         """Read the caller's schedules, or every schedule under ``*``."""
         try:
-            owner = self._authorized_owner(message, message.data.get("owner"),
-                                           wildcard=True)
+            skill_id = self._scoped_skill_id(message, wildcard=True)
             with self.lock:
                 views = [self._view(schedule)
                          for key, schedule in self.schedules.items()
-                         if owner == "*" or key[0] == owner]
+                         if skill_id == "*" or key[0] == skill_id]
         except ScheduleError as err:
             return self._refuse(message, err)
-        self._answer(message, {"ok": True, "owner": owner, "schedules": views})
+        self._answer(message, {"ok": True, "skill_id": skill_id,
+                               "schedules": views})
 
     def _view(self, schedule: Schedule) -> dict:
         return {"record": dict(schedule.record),
@@ -267,35 +288,43 @@ class ScheduledEventService(Thread):
 
     # --- ownership --------------------------------------------------------
 
-    def _authorized_owner(self, message: Message, owner,
-                          wildcard: bool = False) -> str:
-        """The owner a request may act as, or a refusal (§6.2).
-
-        Where the bus carries an authenticated component identity, it must
-        match the request's owner. Where it does not, the owner field still
-        scopes the request, so that a component cannot reach another
-        component's schedules by omission.
-        """
-        if not isinstance(owner, str) or not owner:
-            raise ScheduleError("invalid_record", "owner is required")
+    def _requesting_skill_id(self, message: Message) -> str:
+        """The caller's identity, taken from ``context["skill_id"]`` alone
+        (§3.1). A request that carries none is invalid: the scheduler has
+        nothing to own or scope it by."""
         identity = message.context.get("skill_id")
-        if owner == "*":
-            return self._authorized_administrator(identity, wildcard)
-        if identity and identity != owner:
-            raise ScheduleError("not_owner",
-                                f"{identity} may not act on schedules of {owner}")
-        return owner
+        if not isinstance(identity, str) or not identity:
+            raise ScheduleError("invalid_record",
+                                "the request carries no context[\"skill_id\"]")
+        return identity
 
-    def _authorized_administrator(self, identity, wildcard: bool) -> str:
-        if not wildcard:
-            raise ScheduleError("not_owner",
+    def _owning_skill_id(self, message: Message) -> str:
+        """The skill_id a ``schedule`` or ``get`` request acts as.
+
+        ``*`` is a scope granted for ``list``/``cancel`` only (§6.2); it owns
+        no schedule of its own.
+        """
+        identity = self._requesting_skill_id(message)
+        if identity == "*":
+            raise ScheduleError("skill_id_mismatch",
                                 "* is not an owner a schedule can belong to")
-        if not identity or identity not in self.admins:
-            raise ScheduleError(
-                "not_owner",
-                f"{identity or 'an anonymous caller'} is not allowed to act "
-                f"across every owner")
-        return "*"
+        return identity
+
+    def _scoped_skill_id(self, message: Message, wildcard: bool = False) -> str:
+        """The skill_id that scopes a ``list`` or ``cancel`` request.
+
+        A component allowlisted in ``scheduler.admins`` is granted the
+        pseudo value ``*`` (§6.2), which reaches every owner's schedules; how
+        that grant is made beyond the allowlist is a deployment matter this
+        service does not police further.
+        """
+        identity = self._requesting_skill_id(message)
+        if identity == "*":
+            raise ScheduleError("skill_id_mismatch",
+                                "* is a granted scope, not a caller identity")
+        if wildcard and identity in self.admins:
+            return "*"
+        return identity
 
     # --- the schedules the scheduler holds --------------------------------
 
@@ -310,7 +339,7 @@ class ScheduledEventService(Thread):
     def replace_schedule(self, record: dict) -> Schedule:
         """Put a validated record in place of whatever shares its identity."""
         with self.lock:
-            previous = self.schedules.get((record["owner"], record["id"]))
+            previous = self.schedules.get((record["skill_id"], record["id"]))
             schedule = self._continuing(record, previous)
             self._put_schedule(schedule, previous)
             return schedule
@@ -378,13 +407,13 @@ class ScheduledEventService(Thread):
                 self.schedules.pop(key, None)
             raise
 
-    def _drop_matching(self, owner: str, schedule_id: str) -> bool:
-        """Remove the schedules an owner and id name, rolling back on a failed
-        write. Under ``*`` that is the id under every owner."""
-        if owner == "*":
+    def _drop_matching(self, skill_id: str, schedule_id: str) -> bool:
+        """Remove the schedules a skill_id and id name, rolling back on a
+        failed write. Under ``*`` that is the id under every owner."""
+        if skill_id == "*":
             keys = [key for key in self.schedules if key[1] == schedule_id]
         else:
-            keys = [(owner, schedule_id)] if (owner, schedule_id) in self.schedules else []
+            keys = [(skill_id, schedule_id)] if (skill_id, schedule_id) in self.schedules else []
         if not keys:
             return False
         dropped = {key: self.schedules.pop(key) for key in keys}
@@ -518,7 +547,7 @@ class ScheduledEventService(Thread):
         upcoming = self._next_occurrence_after(batch)
         self.bus.emit(Message(topics.SCHEDULER_MISSED, {
             "id": schedule.record["id"],
-            "owner": schedule.record["owner"],
+            "skill_id": schedule.record["skill_id"],
             "missed": [format_instant(when)
                        for when in batch.to_report[:MAX_REPORTED]],
             "fired_late": [format_instant(when)
@@ -580,7 +609,7 @@ class ScheduledEventService(Thread):
         record = schedule.record
         context = dict(record.get("context") or {})
         context["scheduler"] = {"id": record["id"],
-                                "owner": record["owner"],
+                                "skill_id": record["skill_id"],
                                 "due": format_instant(due),
                                 "fired": format_instant(self.now()),
                                 "remaining": schedule.remaining()}

@@ -66,7 +66,7 @@ your restarts and the scheduler's.
 
 ## Identity and replacement
 
-A schedule is identified by the pair (owner, id). Scheduling the same
+A schedule is identified by the pair (skill_id, id). Scheduling the same
 identity again replaces it atomically — there is no update request, and there
 are no duplicates. If you do not pass `schedule_id`, the client derives one
 from the event name alone. That means a component keeps one schedule per
@@ -93,13 +93,13 @@ The client owns the handler it registers. `cancel(schedule_id)` removes the
 handler that `schedule` put in place, and re-scheduling the same id with a
 handler replaces the old one instead of leaving a second subscription behind.
 
-An administrative component can read or cancel across every owner by sending
-`owner: "*"`, but only when its component id appears in the
-`scheduler.admins` allowlist in the configuration, which is empty by default.
-No schedule can be created under `*`. The allowlist is a misconfiguration
-guard, not a security boundary: on an unauthenticated bus any process can
-claim any component id, so it stops an honest component reaching across
-owners by accident and nothing more.
+A component allowlisted in `scheduler.admins`, which is empty by default, is
+granted the scope `*` for `list` and `cancel`: those two requests then reach
+every owner's schedules instead of only the caller's own. No schedule can be
+created or read under `*`; the grant does not extend to `schedule` or `get`.
+The allowlist is a misconfiguration guard, not a security boundary: on an
+unauthenticated bus any process can claim any `skill_id`, so it stops an
+honest component reaching across owners by accident and nothing more.
 
 Read schedules back with `events.get(schedule_id)` and `events.list()`. Both
 return the stored record alongside computed state: the next occurrence, the
@@ -134,14 +134,14 @@ The message the scheduler emits carries the record's `data`, and the context
 of the request that created the schedule, unchanged, with one block added:
 
 ```python
-message.context["scheduler"]  # {"id", "owner", "due", "fired", "remaining"}
+message.context["scheduler"]  # {"id", "skill_id", "due", "fired", "remaining"}
 ```
 
 The context comes back whole because it is routing you already wrote — where
 the request came from, where its answers go, which session it belongs to. A
 handler that speaks when the alarm rings speaks to the right device without
 doing anything, and a schedule made outside any request fires with nothing
-but its owner and the scheduler block: nothing is invented for it.
+but its owning `skill_id` and the scheduler block: nothing is invented for it.
 
 Whether that routing is still good is your business, not the scheduler's. A
 session captured when the alarm was set may be long finished by the time it
@@ -213,7 +213,7 @@ The `mycroft.scheduler.*` topics and the `schedule_event`,
 `cancel_scheduled_event` and `get_scheduled_event_status` client methods
 still work and are answered by the same service, which maps an epoch float to
 an instant, `repeat` to a fixed period, and the `skill_id:` prefix of the
-event name to an owner. They emit a deprecation notice naming the release
+event name to the owning `skill_id`. They emit a deprecation notice naming the release
 that drops them. New code uses the methods above.
 
 A schedule created this way fires with the context its request carried, whole

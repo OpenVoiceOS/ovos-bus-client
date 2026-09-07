@@ -18,6 +18,7 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.util.scheduled_events import (
     LEGACY_REMOVAL_VERSION, MAX_DATA_BYTES, MAX_REPORTED, Schedule,
     ScheduledEventService, format_instant, topics, validate_record)
+from ovos_bus_client.util.scheduled_events.store import STORE_VERSION
 
 
 def iso(when: datetime) -> str:
@@ -65,16 +66,23 @@ class SchedulerTestCase(unittest.TestCase):
             if os.path.isfile(path):
                 os.unlink(path)
 
-    def request(self, topic, data, context=None):
-        """Deliver a request to the scheduler and return its answer."""
-        self.bus.emit(Message(topic, data, context or {}))
+    def request(self, topic, data, context=None, skill_id="skill.a"):
+        """Deliver a request to the scheduler and return its answer.
+
+        ``skill_id`` becomes ``context["skill_id"]`` (§3.1); pass ``None`` to
+        send a request with no owning identity at all.
+        """
+        request_context = dict(context or {})
+        if skill_id is not None:
+            request_context.setdefault("skill_id", skill_id)
+        self.bus.emit(Message(topic, data, request_context))
         return self.recorder.last(f"{topic}.response")
 
-    def schedule(self, request_context=None, **data):
-        data.setdefault("owner", "skill.a")
+    def schedule(self, request_context=None, owner="skill.a", **data):
         data.setdefault("id", "one")
-        data.setdefault("event", "skill.a.ring")
-        return self.request(topics.SCHEDULER_SCHEDULE, data, request_context)
+        data.setdefault("event", f"{owner}.ring" if owner else "skill.a.ring")
+        return self.request(topics.SCHEDULER_SCHEDULE, data, request_context,
+                            skill_id=owner)
 
     def new_scheduler(self):
         """A second scheduler over the same store, as a restart would be."""
@@ -95,7 +103,7 @@ class TestValidationAndAnswers(SchedulerTestCase):
         self.schedule(at=iso(datetime.now(timezone.utc) + timedelta(hours=1)))
         self.assertEqual(
             len(self.recorder.of(topics.SCHEDULER_SCHEDULE_RESPONSE)), 1)
-        self.request(topics.SCHEDULER_GET, {"owner": "skill.a", "id": "one"})
+        self.request(topics.SCHEDULER_GET, {"id": "one"}, skill_id="skill.a")
         self.assertEqual(len(self.recorder.of(topics.SCHEDULER_GET_RESPONSE)), 1)
 
     def test_naive_instant_is_rejected(self):
@@ -167,7 +175,7 @@ class TestValidationAndAnswers(SchedulerTestCase):
 
     def test_cancelling_an_absent_schedule_is_not_an_error(self):
         answer = self.request(topics.SCHEDULER_CANCEL,
-                              {"owner": "skill.a", "id": "nope"})
+                              {"id": "nope"}, skill_id="skill.a")
         self.assertTrue(answer.data["ok"])
         self.assertFalse(answer.data["existed"])
 
@@ -178,20 +186,20 @@ class TestValidationAndAnswers(SchedulerTestCase):
         self.assertEqual(created.data["next"], iso(when))
 
         read = self.request(topics.SCHEDULER_GET,
-                            {"owner": "skill.a", "id": "one"})
+                            {"id": "one"}, skill_id="skill.a")
         self.assertEqual(read.data["record"]["event"], "skill.a.ring")
         self.assertEqual(read.data["state"]["next"], iso(when))
         self.assertIsNone(read.data["state"]["last_fired"])
         self.assertEqual(read.data["state"]["missed"], [])
 
-        listed = self.request(topics.SCHEDULER_LIST, {"owner": "skill.a"})
+        listed = self.request(topics.SCHEDULER_LIST, {}, skill_id="skill.a")
         self.assertEqual(
             [s["record"]["id"] for s in listed.data["schedules"]], ["one"])
 
         cancelled = self.request(topics.SCHEDULER_CANCEL,
-                                 {"owner": "skill.a", "id": "one"})
+                                 {"id": "one"}, skill_id="skill.a")
         self.assertTrue(cancelled.data["existed"])
-        listed = self.request(topics.SCHEDULER_LIST, {"owner": "skill.a"})
+        listed = self.request(topics.SCHEDULER_LIST, {}, skill_id="skill.a")
         self.assertEqual(listed.data["schedules"], [])
 
 
@@ -255,12 +263,12 @@ class TestPersistence(SchedulerTestCase):
         self.schedule(at=iso(datetime.now(timezone.utc) + timedelta(hours=1)))
         with patch("os.replace", side_effect=OSError("read-only")):
             answer = self.request(topics.SCHEDULER_CANCEL,
-                                  {"owner": "skill.a", "id": "one"})
+                                  {"id": "one"}, skill_id="skill.a")
         self.assertEqual(answer.data["error"], "internal")
         self.assertIn(("skill.a", "one"), self.service.schedules)
         # and it is still cancellable once the store is writable again
         self.assertTrue(self.request(topics.SCHEDULER_CANCEL,
-                                     {"owner": "skill.a", "id": "one"}
+                                     {"id": "one"}, skill_id="skill.a"
                                      ).data["existed"])
 
     def test_an_unstorable_wildcard_cancel_keeps_every_schedule(self):
@@ -270,7 +278,7 @@ class TestPersistence(SchedulerTestCase):
         self.service.admins = ["admin.panel"]
         with patch("os.replace", side_effect=OSError("read-only")):
             answer = self.request(topics.SCHEDULER_CANCEL,
-                                  {"owner": "*", "id": "one"},
+                                  {"id": "one"}, skill_id="*",
                                   context={"skill_id": "admin.panel"})
         self.assertEqual(answer.data["error"], "internal")
         self.assertEqual(len(self.service.schedules), 2)
@@ -350,7 +358,7 @@ class TestPersistence(SchedulerTestCase):
 
         # and the scheduler is a working one, writing a store of its own
         revived.replace_schedule(
-            {"id": "two", "owner": "skill.a", "event": "skill.a.ring",
+            {"id": "two", "skill_id": "skill.a", "event": "skill.a.ring",
              "data": {}, "at": iso(datetime.now(timezone.utc) +
                                    timedelta(hours=1)),
              "misfire": "late", "grace_s": 60, "ephemeral": False})
@@ -412,6 +420,50 @@ class TestPersistence(SchedulerTestCase):
             ["kept"])
         self.assertEqual([key[1] for key in self.new_scheduler().schedules],
                          ["kept"])
+
+
+class TestUpgradeFromOwnerKeyedStore(SchedulerTestCase):
+    """§9.4 / §5.1 — a persisted store is read on start; entries the
+    service cannot honour are set aside, never fatal.
+
+    A store written by ovos-bus-client 2.11.13a5 or earlier keys a record's
+    identity by ``owner``, not ``skill_id``. Starting over such a store must
+    not be fatal to the whole service.
+    """
+
+    def write_raw_store(self, schedules: list):
+        with open(self.store, "w") as handle:
+            json.dump({"version": STORE_VERSION,
+                       "written_at": iso(datetime.now(timezone.utc)),
+                       "schedules": schedules}, handle)
+
+    def owner_keyed_entry(self, record_fields: dict, **entry_fields) -> dict:
+        record = {"id": "one", "owner": "skill.a", "event": "skill.a.ring",
+                  "data": {}, "misfire": "late", "grace_s": 60,
+                  "ephemeral": False}
+        record.update(record_fields)
+        entry = {"record": record, "cursor": iso(datetime.now(timezone.utc)),
+                 "consumed": 0, "anchored": True, "missed": [],
+                 "estimate": None, "last_fired": None}
+        entry.update(entry_fields)
+        return entry
+
+    def test_an_owner_keyed_entry_is_read_as_skill_id(self):
+        when = iso(datetime.now(timezone.utc) + timedelta(hours=1))
+        self.write_raw_store([self.owner_keyed_entry({"at": when})])
+        revived = self.new_scheduler()
+        self.assertIn(("skill.a", "one"), revived.schedules)
+        self.assertEqual(revived.schedules["skill.a", "one"].record["skill_id"],
+                         "skill.a")
+        self.assertNotIn("owner", revived.schedules["skill.a", "one"].record)
+
+    def test_a_record_with_neither_key_is_set_aside_not_fatal(self):
+        when = iso(datetime.now(timezone.utc) + timedelta(hours=1))
+        entry = self.owner_keyed_entry({"at": when})
+        del entry["record"]["owner"]
+        self.write_raw_store([entry])
+        revived = self.new_scheduler()
+        self.assertEqual(revived.schedules, {})
 
 
 class TestIdempotency(SchedulerTestCase):
@@ -613,11 +665,11 @@ class TestReplay(SchedulerTestCase):
     def _persist_and_restart(self, **record_fields):
         """Store one schedule, then start a fresh scheduler over that store."""
         record = validate_record(dict(
-            {"id": "one", "owner": "skill.a", "event": "skill.a.ring"},
-            **record_fields))
+            {"id": "one", "event": "skill.a.ring"},
+            **record_fields), skill_id="skill.a")
         writer = ScheduledEventService(self.bus, store_path=self.store,
                                        autostart=False)
-        writer.schedules[record["owner"], record["id"]] = Schedule(record)
+        writer.schedules[record["skill_id"], record["id"]] = Schedule(record)
         writer._persist()
         writer.shutdown()
         self.recorder.messages.clear()
@@ -674,8 +726,8 @@ class TestReplay(SchedulerTestCase):
                                        autostart=False)
         for name, when in (("overdue", now - timedelta(minutes=30)),
                            ("later", now + timedelta(hours=1))):
-            record = validate_record({"id": name, "owner": "skill.a",
-                                      "event": "skill.a.ring", "at": iso(when)})
+            record = validate_record({"id": name, "event": "skill.a.ring",
+                                      "at": iso(when)}, skill_id="skill.a")
             writer.schedules["skill.a", name] = Schedule(record)
         writer._persist()
         writer.shutdown()
@@ -724,17 +776,20 @@ class TestFiredMessage(SchedulerTestCase):
         fired = self.recorder.last("skill.a.ring")
         self.assertEqual(set(fired.context) - set(given), {"scheduler"})
         self.assertEqual(fired.context["scheduler"]["id"], "one")
-        self.assertEqual(fired.context["scheduler"]["owner"], "skill.a")
+        self.assertEqual(fired.context["scheduler"]["skill_id"], "skill.a")
         self.assertEqual(fired.context["scheduler"]["due"], iso(due))
 
     def test_a_request_with_no_context_fires_with_none_invented(self):
+        # a request must carry context["skill_id"] to be accepted at all
+        # (§3.1); "no context" beyond that fires with nothing invented
         due = datetime.now(timezone.utc) - timedelta(seconds=1)
         self.schedule(at=iso(due))
         self.service._evaluate()
         fired = self.recorder.last("skill.a.ring")
-        # only the scheduler block, and the default session the bus stamps on
-        # any message that names none
-        self.assertEqual(set(fired.context) - {"session"}, {"scheduler"})
+        # the requester's skill_id, the scheduler block, and the default
+        # session the bus stamps on any message that names none
+        self.assertEqual(set(fired.context) - {"session"},
+                         {"skill_id", "scheduler"})
 
     def test_the_context_survives_a_restart_with_the_store(self):
         given = self.requested_with()
@@ -792,8 +847,8 @@ class TestRecurrence(SchedulerTestCase):
     @staticmethod
     def _schedule(**record_fields):
         return Schedule(validate_record(
-            dict({"id": "x", "owner": "skill.a", "event": "skill.a.x"},
-                 **record_fields)))
+            dict({"id": "x", "event": "skill.a.x"}, **record_fields),
+            skill_id="skill.a"))
 
     def test_a_late_fire_does_not_shift_the_following_occurrences(self):
         start = datetime(2031, 1, 1, 0, 0, tzinfo=timezone.utc)
@@ -853,45 +908,87 @@ class TestRecurrence(SchedulerTestCase):
 
 
 class TestOwnership(SchedulerTestCase):
-    """§9.8 — the event namespace and owner scoping."""
+    """§9.8 and item 14 (SCHEDULER-1, merged) — the owning ``skill_id`` comes
+    from the request's ``context["skill_id"]`` alone, never the body."""
 
     def test_an_event_outside_the_owner_namespace_is_rejected(self):
         answer = self.schedule(event="mycroft.stop",
                                at=iso(datetime.now(timezone.utc)))
         self.assertEqual(answer.data["error"], "bad_event")
 
-    def test_an_authenticated_identity_may_not_act_for_another_owner(self):
+    def test_a_request_with_no_context_skill_id_is_invalid(self):
         answer = self.request(
             topics.SCHEDULER_SCHEDULE,
-            {"owner": "skill.a", "id": "one", "event": "skill.a.ring",
+            {"id": "one", "event": "skill.a.ring",
              "at": iso(datetime.now(timezone.utc) + timedelta(hours=1))},
-            context={"skill_id": "skill.b"})
-        self.assertEqual(answer.data["error"], "not_owner")
+            skill_id=None)
+        self.assertEqual(answer.data["error"], "invalid_record")
 
-    def test_cancel_and_get_are_scoped_by_owner(self):
+    def test_a_body_owner_field_is_not_the_owning_identity(self):
+        # §3.1: the owning component is not a field of the body; a body
+        # "owner" that disagrees with context["skill_id"] changes nothing
+        answer = self.request(
+            topics.SCHEDULER_SCHEDULE,
+            {"id": "one", "owner": "skill.b", "event": "skill.a.ring",
+             "at": iso(datetime.now(timezone.utc) + timedelta(hours=1))},
+            skill_id="skill.a")
+        self.assertTrue(answer.data["ok"])
+        self.assertEqual(answer.data["skill_id"], "skill.a")
+        self.assertIn(("skill.a", "one"), self.service.schedules)
+        self.assertNotIn(("skill.b", "one"), self.service.schedules)
+
+    def test_an_unknown_id_is_not_found_not_refused(self):
         self.schedule(at=iso(datetime.now(timezone.utc) + timedelta(hours=1)))
         cancelled = self.request(topics.SCHEDULER_CANCEL,
-                                 {"owner": "skill.b", "id": "one"})
+                                 {"id": "nope"}, skill_id="skill.b")
+        self.assertTrue(cancelled.data["ok"])
         self.assertFalse(cancelled.data["existed"])
-        self.assertIn(("skill.a", "one"), self.service.schedules)
 
         read = self.request(topics.SCHEDULER_GET,
-                            {"owner": "skill.b", "id": "one"})
+                            {"id": "nope"}, skill_id="skill.b")
+        self.assertTrue(read.data["ok"])
         self.assertIsNone(read.data["record"])
         self.assertFalse(read.data["existed"])
+
+    def test_cancelling_across_scope_is_refused_not_reported_absent(self):
+        # §6.2: a request that names a schedule outside its scope is refused
+        # with skill_id_mismatch, not answered as though it did not exist
+        when = iso(datetime.now(timezone.utc) - timedelta(seconds=1))
+        self.schedule(owner="skill.a", event="skill.a.ring", at=when)
+        cancelled = self.request(topics.SCHEDULER_CANCEL,
+                                 {"id": "one"}, skill_id="skill.b")
+        self.assertFalse(cancelled.data["ok"])
+        self.assertEqual(cancelled.data["error"], "skill_id_mismatch")
+        self.assertNotIn("record", cancelled.data)
+        # the refusal did not touch skill.a's schedule: it still fires
+        self.assertIn(("skill.a", "one"), self.service.schedules)
+        self.service._evaluate()
+        self.assertEqual(len(self.recorder.of("skill.a.ring")), 1)
+
+    def test_getting_across_scope_is_refused_not_reported_absent(self):
+        self.schedule(owner="skill.a", event="skill.a.ring",
+                      at=iso(datetime.now(timezone.utc) + timedelta(hours=1)))
+        read = self.request(topics.SCHEDULER_GET,
+                            {"id": "one"}, skill_id="skill.b")
+        self.assertFalse(read.data["ok"])
+        self.assertEqual(read.data["error"], "skill_id_mismatch")
+        self.assertNotIn("record", read.data)
+        self.assertIn(("skill.a", "one"), self.service.schedules)
 
     def test_list_shows_only_the_callers_schedules(self):
         when = iso(datetime.now(timezone.utc) + timedelta(hours=1))
         self.schedule(owner="skill.a", event="skill.a.ring", at=when)
         self.schedule(owner="skill.b", event="skill.b.ring", at=when)
-        listed = self.request(topics.SCHEDULER_LIST, {"owner": "skill.b"})
+        listed = self.request(topics.SCHEDULER_LIST, {}, skill_id="skill.b")
         self.assertEqual(
-            [s["record"]["owner"] for s in listed.data["schedules"]],
+            [s["record"]["skill_id"] for s in listed.data["schedules"]],
             ["skill.b"])
 
 
 class TestAdministrativeOwner(SchedulerTestCase):
-    """``*`` reaches every owner, and only for a configured administrator."""
+    """``*`` reaches every owner, and only for a configured administrator
+    (§6.2). The scope comes from allowlist membership of the caller's own
+    ``context["skill_id"]``; there is no body field to ask for it."""
 
     def populate(self):
         when = iso(datetime.now(timezone.utc) + timedelta(hours=1))
@@ -901,44 +998,60 @@ class TestAdministrativeOwner(SchedulerTestCase):
     def test_the_allowlist_is_empty_unless_configured(self):
         self.assertEqual(self.service.admins, [])
 
-    def test_an_anonymous_caller_may_not_use_the_wildcard(self):
+    def test_an_unlisted_caller_only_reaches_its_own_schedules(self):
         self.populate()
-        listed = self.request(topics.SCHEDULER_LIST, {"owner": "*"})
-        self.assertEqual(listed.data["error"], "not_owner")
+        listed = self.request(topics.SCHEDULER_LIST, {}, skill_id="skill.a")
+        self.assertEqual(
+            [s["record"]["id"] for s in listed.data["schedules"]], ["one"])
         cancelled = self.request(topics.SCHEDULER_CANCEL,
-                                 {"owner": "*", "id": "one"})
-        self.assertEqual(cancelled.data["error"], "not_owner")
+                                 {"id": "nope"}, skill_id="skill.b")
+        self.assertFalse(cancelled.data["existed"])
+        self.assertIn(("skill.a", "one"), self.service.schedules)
         self.assertEqual(len(self.service.schedules), 2)
 
-    def test_an_identified_caller_outside_the_allowlist_may_not_either(self):
+    def test_the_literal_wildcard_identity_is_refused(self):
+        # "*" is a scope granted through the allowlist, never a caller's own
+        # claimed identity
         self.populate()
-        listed = self.request(topics.SCHEDULER_LIST, {"owner": "*"},
-                              context={"skill_id": "skill.a"})
-        self.assertEqual(listed.data["error"], "not_owner")
+        listed = self.request(topics.SCHEDULER_LIST, {}, skill_id="*")
+        self.assertEqual(listed.data["error"], "skill_id_mismatch")
+        cancelled = self.request(topics.SCHEDULER_CANCEL,
+                                 {"id": "one"}, skill_id="*")
+        self.assertEqual(cancelled.data["error"], "skill_id_mismatch")
+        self.assertEqual(len(self.service.schedules), 2)
 
     def test_an_allowlisted_administrator_lists_and_cancels_everything(self):
         self.populate()
         self.service.admins = ["admin.panel"]
-        listed = self.request(topics.SCHEDULER_LIST, {"owner": "*"},
-                              context={"skill_id": "admin.panel"})
+        listed = self.request(topics.SCHEDULER_LIST, {}, skill_id="admin.panel")
         self.assertEqual(len(listed.data["schedules"]), 2)
-        self.request(topics.SCHEDULER_CANCEL, {"owner": "*", "id": "one"},
-                     context={"skill_id": "admin.panel"})
+        self.request(topics.SCHEDULER_CANCEL, {"id": "one"},
+                     skill_id="admin.panel")
         self.assertEqual(self.service.schedules, {})
+
+    def test_an_administrator_still_only_reads_its_own_schedules_through_get(self):
+        # the grant of §6.2 names list and cancel only; "one" exists under
+        # skill.a and skill.b, neither of which is admin.panel's own scope
+        self.populate()
+        self.service.admins = ["admin.panel"]
+        read = self.request(topics.SCHEDULER_GET, {"id": "one"},
+                            skill_id="admin.panel")
+        self.assertFalse(read.data["ok"])
+        self.assertEqual(read.data["error"], "skill_id_mismatch")
 
     def test_no_schedule_may_be_created_under_the_wildcard(self):
         answer = self.schedule(owner="*", event="*.ring",
                                at=iso(datetime.now(timezone.utc)))
-        self.assertEqual(answer.data["error"], "not_owner")
+        self.assertEqual(answer.data["error"], "skill_id_mismatch")
 
     def test_an_administrator_may_not_create_under_the_wildcard_either(self):
         self.service.admins = ["admin.panel"]
         answer = self.request(
             topics.SCHEDULER_SCHEDULE,
-            {"owner": "*", "id": "one", "event": "*.ring",
+            {"id": "one", "event": "*.ring",
              "at": iso(datetime.now(timezone.utc) + timedelta(hours=1))},
-            context={"skill_id": "admin.panel"})
-        self.assertEqual(answer.data["error"], "not_owner")
+            skill_id="*")
+        self.assertEqual(answer.data["error"], "skill_id_mismatch")
 
 
 class TestClock(SchedulerTestCase):
@@ -1084,7 +1197,7 @@ class TestMisfireBounds(SchedulerTestCase):
                       every={"seconds": 86400, "start": iso(due)})
         self.service._evaluate()
         read = self.request(topics.SCHEDULER_GET,
-                            {"owner": "skill.a", "id": "tick"})
+                            {"id": "tick"}, skill_id="skill.a")
         self.assertEqual(read.data["state"]["missed"], [iso(due)])
 
     def test_a_fire_clears_the_missed_dues_that_precede_it(self):
@@ -1093,7 +1206,7 @@ class TestMisfireBounds(SchedulerTestCase):
                       grace_s=0, every={"seconds": 10, "start": iso(start)})
         self.service._evaluate()
         read = self.request(topics.SCHEDULER_GET,
-                            {"owner": "skill.a", "id": "tick"})
+                            {"id": "tick"}, skill_id="skill.a")
         self.assertEqual(read.data["state"]["missed"], [])
         self.assertEqual(read.data["state"]["last_fired"],
                          iso(start + timedelta(seconds=20)))
@@ -1296,8 +1409,8 @@ class TestInstants(unittest.TestCase):
         self.assertEqual(format_instant(when), "2031-03-29T07:30:00+00:00")
 
     def test_a_zulu_suffix_is_accepted(self):
-        record = validate_record({"id": "x", "owner": "s", "event": "s.e",
-                                  "at": "2031-03-29T07:30:00Z"})
+        record = validate_record({"id": "x", "event": "s.e",
+                                  "at": "2031-03-29T07:30:00Z"}, skill_id="s")
         self.assertEqual(record["at"], "2031-03-29T07:30:00+00:00")
 
 

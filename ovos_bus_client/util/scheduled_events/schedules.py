@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 from ovos_bus_client.util.scheduled_events.records import (
-    format_instant, parse_instant)
+    ScheduleError, format_instant, parse_instant)
 from ovos_bus_client.util.scheduled_events.timing import next_occurrence
 
 #: instants reported in one missed message, and the length of the missed
@@ -50,8 +50,8 @@ class Schedule:
 
     @property
     def key(self) -> Tuple[str, str]:
-        """The (owner, id) pair a schedule is identified by (§3.3)."""
-        return self.record["owner"], self.record["id"]
+        """The (skill_id, id) pair a schedule is identified by (§3.3)."""
+        return self.record["skill_id"], self.record["id"]
 
     @property
     def is_one_shot(self) -> bool:
@@ -175,10 +175,22 @@ class Schedule:
 
         A relative delay comes back without its monotonic deadline: across a
         restart it is an ``at`` on the estimate that was written (§3.4.3).
+
+        A record written by a release that still keyed identity by ``owner``
+        is read as ``skill_id`` at this one boundary (§9.4, §5.1: a store the
+        service cannot honour outright is set aside, never fatal), so every
+        reader past this point sees one field name.
         """
+        record = dict(entry["record"])
+        if "skill_id" not in record:
+            if "owner" not in record:
+                raise ScheduleError(
+                    "invalid_record", "stored record carries neither "
+                    "skill_id nor owner")
+            record["skill_id"] = record.pop("owner")
         last_fired = entry.get("last_fired")
         estimate = entry.get("estimate")
-        return cls(entry["record"],
+        return cls(record,
                    cursor=parse_instant(entry["cursor"], "cursor"),
                    consumed=entry.get("consumed", 0),
                    anchored=entry.get("anchored", True),
