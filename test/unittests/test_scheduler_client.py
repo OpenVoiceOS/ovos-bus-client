@@ -100,7 +100,7 @@ class TestSchedulingAndReading(ClientTestCase):
         when = self.in_an_hour()
         self.client.schedule("ring", at=when)
         self.make_client("skill.b").schedule("ring", at=when)
-        self.assertEqual([s["record"]["owner"] for s in self.client.list()],
+        self.assertEqual([s["record"]["skill_id"] for s in self.client.list()],
                          ["skill.a"])
 
 
