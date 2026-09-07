@@ -375,10 +375,6 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a1...2.5.1a2)
 
-**Merged pull requests:**
-
-- test: repoint shape-changing reshape tests off the handler trio [\#243](https://github.com/OpenVoiceOS/ovos-bus-client/pull/243) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.5.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.0a1...2.5.1a1)
