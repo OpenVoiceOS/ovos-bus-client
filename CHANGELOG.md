@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.14a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.14a1) (2026-09-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.13a5...2.11.14a1)
+
+**Merged pull requests:**
+
+- fix: scheduler identifies the owning component by context skill\_id \(OVOS-SCHEDULER-1\) [\#351](https://github.com/OpenVoiceOS/ovos-bus-client/pull/351) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.13a5](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.13a5) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.13a4...2.11.13a5)
