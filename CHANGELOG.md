@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.11.15a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.15a1) (2026-09-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.14a2...2.11.15a1)
+
+**Merged pull requests:**
+
+- fix: bound emit\(\) wait so a dead connection cannot block forever [\#355](https://github.com/OpenVoiceOS/ovos-bus-client/pull/355) ([JarbasAl](https://github.com/JarbasAl))
+
+## [2.11.14a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.14a2) (2026-09-07)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.14a1...2.11.14a2)
+
 ## [2.11.14a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.14a1) (2026-09-07)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.13a5...2.11.14a1)
@@ -194,23 +206,23 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
 
-## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+
+## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
 
 **Merged pull requests:**
 
@@ -359,17 +371,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a3...2.6.0a1)
 
-**Merged pull requests:**
-
-- feat: shared HandlerLifecycle done-signal helper for in-process dispatchers [\#246](https://github.com/OpenVoiceOS/ovos-bus-client/pull/246) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.5.1a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a3) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.5.1a2...2.5.1a3)
-
-**Merged pull requests:**
-
-- refactor: use SpecMessage.SESSION\_SYNC for the ovos.session.sync topic [\#245](https://github.com/OpenVoiceOS/ovos-bus-client/pull/245) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.5.1a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.5.1a2) (2026-06-28)
 
