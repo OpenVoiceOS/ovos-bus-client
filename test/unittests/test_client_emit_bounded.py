@@ -17,7 +17,7 @@ from ovos_bus_client.client import client as client_module
 from ovos_bus_client.client.client import MessageBusClient
 from ovos_bus_client.message import Message
 
-BOUND_S = 25  # 10s first wait + 10s second wait + margin
+BOUND_S = 25  # 10s first wait + SEND_RECONNECT_TIMEOUT_S + margin
 
 
 def _disconnected_client():
@@ -25,7 +25,9 @@ def _disconnected_client():
     bus.client = MagicMock()
     bus.client.keep_running = False
     bus.started_running = True
-    bus._sender_queue = None
+    # the sender queue is left as __init__ built it: nulling it while
+    # _sender_thread stays set is a state no real client is ever in, and
+    # close() would then tear down a thread whose queue is already gone.
     # connected_event is left UNSET: this models the connection being gone.
     return bus
 
