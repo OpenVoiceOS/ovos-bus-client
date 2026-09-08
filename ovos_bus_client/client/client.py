@@ -789,7 +789,15 @@ class MessageBusClient:
             # so every other process -- a capture, a HiveMind bridge -- would
             # see the answer before the question.
             self._remember_local_echo(message)
-            self._send(message)
+            try:
+                delivered = self._send(message)
+            except BaseException:
+                self._forget_local_echo(message)
+                raise
+            if not delivered:
+                # Nothing went out, so nothing will come back: keeping the
+                # fingerprint would suppress someone else's identical frame.
+                self._forget_local_echo(message)
             self._dispatch_local_echo(message)
         else:
             self._send(message)
@@ -864,6 +872,21 @@ class MessageBusClient:
             self._local_echo_sent.append(
                 (_local_echo_fingerprint(message), time.monotonic()))
 
+    def _forget_local_echo(self, message: Message):
+        """Release a fingerprint for a frame that never reached the wire.
+
+        Left in place it would suppress the next byte-identical frame from
+        another process as if it were our echo -- for a frame we never sent.
+        """
+        if not self._local_echo_sent:
+            return
+        fingerprint = _local_echo_fingerprint(message)
+        with self._local_echo_lock:
+            for index in range(len(self._local_echo_sent) - 1, -1, -1):
+                if self._local_echo_sent[index][0] == fingerprint:
+                    del self._local_echo_sent[index]
+                    return
+
     def _is_own_local_echo(self, message: Message) -> bool:
         """True when this frame is the wire copy of something we just echoed.
 
@@ -900,8 +923,14 @@ class MessageBusClient:
         except Exception:
             LOG.exception("local echo dispatch failed for %s", message.msg_type)
 
-    def _send(self, message: Message):
-        """Serialize and send a single message over the websocket."""
+    def _send(self, message: Message) -> bool:
+        """Serialize and send a single message over the websocket.
+
+        Returns whether the frame was handed to the wire (or to the async
+        sender, which will write it). ``False`` means it was definitely
+        dropped -- queue full, client closing, socket gone -- and nothing will
+        ever come back for it.
+        """
         if not self.connected_event.wait(10):
             if not self.started_running:
                 raise ValueError('You must execute run_forever() '
@@ -916,7 +945,7 @@ class MessageBusClient:
         if self._sender_queue is not None:
             if self._sender_closing:
                 LOG.warning(f"bus client is closing; dropping {message.msg_type}")
-                return
+                return False
             try:
                 # bounded and non-blocking: a stuck socket must apply
                 # backpressure by DROPPING, not by parking the caller --
@@ -931,14 +960,18 @@ class MessageBusClient:
                     LOG.error(f"outbound bus queue full; dropping "
                               f"{message.msg_type} ({self._sender_dropped} "
                               f"dropped total)")
-            return
+                return False
+            return True
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
             LOG.warning(f'Could not send {message.msg_type} message because connection '
                         'has been closed')
+            return False
         except Exception as e:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
+            return False
+        return True
 
     _SENDER_STOP = object()
 

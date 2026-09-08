@@ -28,7 +28,10 @@ def _client(topics=(ECHO_TOPIC,)):
     client._local_echo_sent = deque(maxlen=LOCAL_ECHO_RING_SIZE)
     client._local_echo_lock = Lock()
     client.sent = []
-    client._send = lambda message: client.sent.append(message.serialize())
+    def _send(message):
+        client.sent.append(message.serialize())
+        return True  # _send reports whether the frame reached the wire
+    client._send = _send
     client._send_legacy_intent_twin = lambda message: None
     client._send_legacy_namespace_twin = lambda message: None
     client._own_session = lambda: Mock(serialize=lambda: {"session_id": "test"})
@@ -136,3 +139,34 @@ def test_reply_preserves_unknown_context_keys():
         .context["__some_unknown_marker"] == "ORIGINATOR"
     assert original.forward("some.other.topic", {}) \
         .context["__some_unknown_marker"] == "ORIGINATOR"
+
+
+def test_a_dropped_frame_leaves_no_fingerprint_behind():
+    """A frame the sender rejected never reaches the wire, so nothing will
+    come back for it -- and a lingering fingerprint would suppress the next
+    identical frame from another process as if it were our echo."""
+    client = _client()
+    client._send = lambda message: False  # queue full / closing / socket gone
+    message = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
+    client.emit(message)
+
+    assert client.emitter.emit.call_count == 1, "local delivery still happens"
+    assert len(client._local_echo_sent) == 0, "no fingerprint for a frame never sent"
+
+    # the identical frame arriving from elsewhere must be delivered
+    client.emitter.reset_mock()
+    client.on_message(message.serialize())
+    assert client.emitter.emit.called
+
+
+def test_a_send_that_raises_also_releases_the_fingerprint():
+    client = _client()
+
+    def explode(message):
+        raise ValueError("not connected")
+
+    client._send = explode
+    import pytest
+    with pytest.raises(ValueError):
+        client.emit(Message(ECHO_TOPIC, {"x": 1}))
+    assert len(client._local_echo_sent) == 0
