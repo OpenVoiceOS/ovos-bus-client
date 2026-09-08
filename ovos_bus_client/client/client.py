@@ -312,6 +312,11 @@ class MessageBusClient:
     #: how long close() lets the sender finish draining before the socket is
     #: closed underneath it
     SENDER_CLOSE_TIMEOUT_S = 5.0
+    #: Bound on _send()'s wait for a connection that went away after
+    #: startup. A frame still unsent when it expires is dropped.
+    SEND_RECONNECT_TIMEOUT_S = 10.0
+    #: Bound on the initial wait for the first connection.
+    CONNECT_WAIT_S = 10.0
     # class-level default so a test double built via __new__ (bypassing
     # __init__) still reads a real bool instead of raising AttributeError.
     _closing = False
@@ -768,20 +773,62 @@ class MessageBusClient:
         if twin is not None:
             self._send(twin)
 
+    def _await_connection(self, message: Message) -> bool:
+        """Wait a bounded time for the connection before sending.
+
+        ``False`` means the frame must be dropped. OVOS-MSG-1 puts delivery
+        guarantees and retry behaviour out of scope, so dropping is
+        spec-compatible; raising is not an option once the client has run,
+        since ``emit()`` has never raised on that path and skills call it
+        unguarded.
+
+        The closing flag is polled rather than waited on, and it is polled
+        for the whole wait rather than only the second half. ``close()``
+        clears ``connected_event``, and a thread already parked in
+        ``wait()`` is not woken by ``clear()``; signalling it with
+        ``set()`` instead would wake it as if the connection were back,
+        and it would go on to write to a socket and a queue that
+        ``close()`` is tearing down underneath it.
+        """
+        deadline = time.monotonic() + self.CONNECT_WAIT_S
+        raised = False
+        while True:
+            if self._closing:
+                LOG.warning(f"bus client is closing; "
+                            f"dropping {message.msg_type}")
+                return False
+            if self.connected_event.wait(0.05):
+                return True
+            if time.monotonic() >= deadline:
+                if not raised:
+                    # the pre-existing contract: a client that never ran is
+                    # a programming error, not a dead connection
+                    if not self.started_running:
+                        raise ValueError('You must execute run_forever() '
+                                         'before emitting messages')
+                    raised = True
+                    deadline = (time.monotonic()
+                                + self.SEND_RECONNECT_TIMEOUT_S)
+                    continue
+                LOG.warning(f"bus client did not reconnect; "
+                            f"dropping {message.msg_type}")
+                return False
+
     def _send(self, message: Message):
         """Serialize and send a single message over the websocket."""
-        if not self.connected_event.wait(10):
-            if not self.started_running:
-                raise ValueError('You must execute run_forever() '
-                                 'before emitting messages')
-            self.connected_event.wait()
+        if not self.connected_event.is_set():
+            if not self._await_connection(message):
+                return
 
         if hasattr(message, 'serialize'):
             msg = message.serialize()
         else:
             msg = json_dumps(message.__dict__)
         msg = _maybe_encrypt(msg)
-        if self._sender_queue is not None:
+        # one read: close() nulls the attribute from another thread, and
+        # unblocking a parked _send() is exactly when that races
+        queue = self._sender_queue
+        if queue is not None:
             if self._sender_closing:
                 LOG.warning(f"bus client is closing; dropping {message.msg_type}")
                 return
@@ -790,7 +837,7 @@ class MessageBusClient:
                 # backpressure by DROPPING, not by parking the caller --
                 # emit() has to return in microseconds regardless of queue
                 # state, that is the whole point of the async sender.
-                self._sender_queue.put_nowait((msg, message.msg_type))
+                queue.put_nowait((msg, message.msg_type))
             except _queue.Full:
                 self._sender_dropped += 1
                 now = time.monotonic()
@@ -1211,7 +1258,8 @@ class MessageBusClient:
         """
         self._closing = True
         sender = self._sender_thread
-        if sender is not None:
+        queue = self._sender_queue
+        if sender is not None and queue is not None:
             # Stop admitting first, so nothing new joins the queue behind the
             # sentinel while we are draining.
             self._sender_closing = True
@@ -1220,7 +1268,7 @@ class MessageBusClient:
                 # reaching it means it already wrote every frame ahead of it.
                 # Joining on the sender is therefore the drain: a separate
                 # emptiness check would not prove the last write completed.
-                self._sender_queue.put_nowait(self._SENDER_STOP)
+                queue.put_nowait(self._SENDER_STOP)
             except _queue.Full:
                 LOG.warning("outbound bus queue still full at close(); "
                             "sender thread will not be stopped explicitly")
