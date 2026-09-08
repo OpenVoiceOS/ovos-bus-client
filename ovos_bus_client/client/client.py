@@ -774,7 +774,16 @@ class MessageBusClient:
             if not self.started_running:
                 raise ValueError('You must execute run_forever() '
                                  'before emitting messages')
-            self.connected_event.wait()
+            # bounded, not indefinite: a connection that never comes back
+            # (eg. close() ran while this thread was waiting) must not park
+            # the caller forever. OVOS-MSG-1 explicitly puts delivery
+            # guarantees and retry behaviour out of scope, so dropping the
+            # frame here -- same idiom as the queue-full drop above -- is
+            # spec-compatible; raising here is not an option, emit() has
+            # never raised on this path and skills call it unguarded.
+            if not self.connected_event.wait(10):
+                LOG.warning(f"bus client never connected; dropping {message.msg_type}")
+                return
 
         if hasattr(message, 'serialize'):
             msg = message.serialize()
@@ -1238,6 +1247,12 @@ class MessageBusClient:
             self._sender_thread = None
             self._sender_queue = None
         self.client.close()
+        self.connected_event.clear()
+        # wake any thread parked in _send()'s wait(): clear() only affects
+        # future waiters, a thread already blocked in wait() only unblocks
+        # on set(). set()-then-clear() lets it return, see the connection is
+        # gone, and drop the frame instead of parking for another 10s.
+        self.connected_event.set()
         self.connected_event.clear()
         if self._run_thread is not None:
             self._run_thread.join(timeout=2)
