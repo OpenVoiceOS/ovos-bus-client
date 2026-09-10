@@ -1,4 +1,7 @@
 
+import errno
+import random
+import socket
 import time
 from copy import deepcopy
 
@@ -6,7 +9,7 @@ from ovos_utils import json_dumps
 
 from os import getpid
 import queue as _queue
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Union, Callable, Any, List, Optional
 from uuid import uuid4
 
@@ -17,8 +20,9 @@ except (ImportError, ModuleNotFoundError):
     from pyee.executor import ExecutorEventEmitter
 
 from websocket import (WebSocketApp,
+                       WebSocketAddressException,
                        WebSocketConnectionClosedException,
-                       WebSocketException)
+                       WebSocketTimeoutException)
 
 from ovos_bus_client.client.collector import MessageCollector
 from ovos_bus_client.client.waiter import MessageWaiter
@@ -292,6 +296,35 @@ def _compute_legacy_namespace_twin(message: Message,
     return twin
 
 
+# errno values connect()/send()/recv() return when the peer, or the route to
+# it, is gone. Every one of them means "the bus is not reachable right now",
+# which a reconnect cures -- exactly like ECONNREFUSED/ECONNRESET, which
+# on_error() already treats as routine. EPERM is on the list because a
+# Kubernetes service mesh (Cilium's socket load balancer) answers connect()
+# with EPERM while a Service has no ready endpoint, i.e. for the whole time
+# the messagebus pod is being recreated.
+_TRANSPORT_ERRNOS = frozenset(
+    getattr(errno, name) for name in (
+        "EPERM", "EACCES", "EHOSTUNREACH", "ENETUNREACH", "ENETDOWN",
+        "EHOSTDOWN", "ETIMEDOUT", "EPIPE", "ENOTCONN", "EBADF",
+        "ECONNABORTED", "EADDRNOTAVAIL")
+    if hasattr(errno, name))
+
+
+def _is_transport_error(error: BaseException) -> bool:
+    """True for socket-level failures that mean the bus is unreachable.
+
+    These are logged as a one-line warning and answered with a reconnect;
+    anything else is an unexpected exception that keeps its traceback and
+    the ``error`` event.
+    """
+    if isinstance(error, (ConnectionError, socket.timeout, socket.gaierror,
+                          WebSocketAddressException,
+                          WebSocketTimeoutException)):
+        return True
+    return isinstance(error, OSError) and error.errno in _TRANSPORT_ERRNOS
+
+
 class MessageBusClient:
     """The Mycroft Messagebus Client
 
@@ -320,6 +353,17 @@ class MessageBusClient:
     # class-level default so a test double built via __new__ (bypassing
     # __init__) still reads a real bool instead of raising AttributeError.
     _closing = False
+    #: Reconnect backoff: the wait before the next attempt starts at
+    #: RECONNECT_INITIAL_S, doubles after every failed attempt up to
+    #: RECONNECT_MAX_S, and carries +/-RECONNECT_JITTER (a fraction) so that
+    #: clients that lost the bus together do not retry in lockstep. A
+    #: successful connect resets the wait to RECONNECT_INITIAL_S.
+    RECONNECT_INITIAL_S = 5.0
+    RECONNECT_MAX_S = 60.0
+    RECONNECT_JITTER = 0.2
+    # Set by on_error() when a disconnect needs a reconnect, consumed by the
+    # run_forever() loop once the websocket callback has unwound.
+    _reconnect_delay = None
 
     def __init__(self, host=None, port=None, route=None, ssl=None,
                  emitter=None, cache=False, session=None):
@@ -335,7 +379,7 @@ class MessageBusClient:
                                            config.route, config.ssl)
         self.emitter = emitter or ExecutorEventEmitter()
         self.client = self.create_client()
-        self.retry = 5
+        self.retry = self.RECONNECT_INITIAL_S
         self.connected_event = Event()
         self.started_running = False
         # Optional single-writer outbound queue (``websocket.async_sender``).
@@ -359,13 +403,17 @@ class MessageBusClient:
             self._sender_thread = Thread(target=self._drain_sender,
                                          name="bus-sender", daemon=True)
             self._sender_thread.start()
-        # Set by close() to short-circuit the reconnect-backoff recursion in
-        # on_error(): that handler sleeps, recreates the websocket and
-        # recurses into run_forever() on the SAME thread run_in_thread()
-        # started, so close()ing only the currently-active websocket object
-        # does not stop a client that is mid-backoff -- it just reconnects
-        # again after close() has already returned control to the caller.
+        # Set by close() to stop run_forever()'s reconnect loop: closing only
+        # the currently-active websocket object does not stop a client that
+        # is mid-backoff -- it would just reconnect again after close() has
+        # already returned control to the caller.
         self._closing = False
+        # Serialises close() against run_forever()'s client replacement.
+        # Without it close() can land while create_client() is still
+        # building the next websocket: it closes the one the loop is
+        # holding, the loop then installs the new one and starts it, and
+        # a client that was told to close is left running.
+        self._client_lock = Lock()
         self._run_thread = None
         self.wrapped_funcs = {}
         # namespace translation on emit (orthogonal, both ON by default during
@@ -429,8 +477,8 @@ class MessageBusClient:
         except RuntimeError as e:
             LOG.debug(f'Emitter refused open event during shutdown: {e}')
             return
-        # Restore reconnect timer to 5 seconds on sucessful connect
-        self.retry = 5
+        # a successful connect restores the initial reconnect wait
+        self.retry = self.RECONNECT_INITIAL_S
         # DEPRECATED: ovos.session.sync's bare-request/echo round trip is a
         # pre-spec surface OVOS-SESSION-2 §2.7/§7 retires. It is still the
         # only way a pre-spec-tools core (e.g. stable 1.3.1) ever answers
@@ -480,6 +528,9 @@ class MessageBusClient:
             LOG.warning('Connection Refused. Is Messagebus Service running?')
         elif isinstance(error, ConnectionResetError):
             LOG.warning('Connection Reset. Did the Messagebus Service stop?')
+        elif _is_transport_error(error):
+            LOG.warning('Connection failed (%s). Is the Messagebus Service '
+                        'reachable?', error)
         else:
             LOG.exception('=== %s ===', repr(error))
             try:
@@ -498,24 +549,36 @@ class MessageBusClient:
         if self._closing:
             return
 
+        delay = self._next_reconnect_delay()
         LOG.warning("Message Bus Client "
-                    "will reconnect in %.1f seconds.", self.retry)
-        time.sleep(self.retry)
-        if self._closing:
-            return
-        self.retry = min(self.retry * 2, 60)
-        try:
-            if self._closing:
+                    "will reconnect in %.1f seconds.", delay)
+        # The wait and the reconnect happen in run_forever()'s loop, after
+        # the websocket-client callback that invoked us has unwound.
+        # Reconnecting from inside this callback used to nest the new
+        # receive loop in the stack frame of the failed one: every failed
+        # attempt added another level, nothing ever unwound while the bus
+        # stayed up, each logged traceback carried every earlier failure, and
+        # once the recursion limit was reached the receive thread died and
+        # the client never reconnected again.
+        self._reconnect_delay = delay
+
+    def _next_reconnect_delay(self) -> float:
+        """Return the wait before the next reconnect and advance the backoff."""
+        base = self.retry
+        self.retry = min(self.retry * 2, self.RECONNECT_MAX_S)
+        if base <= 0:
+            return 0.0
+        jitter = self.RECONNECT_JITTER
+        return base * (1 + random.uniform(-jitter, jitter))
+
+    def _wait_before_reconnect(self, delay: float) -> None:
+        """Sleep ``delay`` seconds in short slices so close() interrupts it."""
+        deadline = time.monotonic() + delay
+        while not self._closing:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 return
-            self.emitter.emit('reconnecting')
-            if self._closing:
-                return
-            self.client = self.create_client()
-            self.run_forever()
-        except RuntimeError as e:
-            LOG.debug(f'Emitter refused reconnecting event during shutdown: {e}')
-        except WebSocketException:
-            pass
+            time.sleep(min(remaining, 0.5))
 
     def on_message(self, *args):
         """
@@ -1241,22 +1304,56 @@ class MessageBusClient:
 
     def run_forever(self):
         """
-        Start the websocket handling.
+        Run the websocket receive loop until close() is called.
+
+        Every disconnect on_error() reports is answered here, on this same
+        thread and at this same stack depth, after the failed websocket's
+        run_forever() has returned: wait out the backoff, emit
+        ``reconnecting``, and start a fresh websocket. Nothing recurses.
         """
         self.started_running = True
-        self.client.run_forever()
+        while True:
+            self._reconnect_delay = None
+            self.client.run_forever()
+            delay = self._reconnect_delay
+            if self._closing or delay is None:
+                return
+            self._wait_before_reconnect(delay)
+            if self._closing:
+                return
+            try:
+                self.emitter.emit('reconnecting')
+            except RuntimeError as e:
+                LOG.debug(f'Emitter refused reconnecting event during shutdown: {e}')
+                return
+            replacement = self.create_client()
+            # Publish the replacement only if close() has not run while it was
+            # being built. close() closed the websocket this loop was holding,
+            # which is no longer the one about to start, so the check and the
+            # assignment have to be atomic against it.
+            with self._client_lock:
+                closing = self._closing
+                if not closing:
+                    self.client = replacement
+            if closing:
+                try:
+                    replacement.close()
+                except Exception as e:
+                    LOG.debug(f'Exception closing superseded websocket: {e}')
+                return
 
     def close(self):
         """
         Close the websocket connection.
 
-        Also stops a client that is currently inside on_error()'s
-        reconnect-backoff (sleep -> recreate websocket -> recurse into
-        run_forever(), all on the same thread): without this flag that
-        recursion is unaffected by closing the momentarily-active websocket
-        object, and the receiver thread survives close() indefinitely.
+        Also stops a client that is currently waiting out a reconnect
+        backoff in run_forever()'s loop: without this flag that loop is
+        unaffected by closing the momentarily-active websocket object, and
+        the receiver thread survives close() indefinitely.
         """
-        self._closing = True
+        with self._client_lock:
+            self._closing = True
+            client = self.client
         sender = self._sender_thread
         queue = self._sender_queue
         if sender is not None and queue is not None:
@@ -1285,7 +1382,9 @@ class MessageBusClient:
             # attributes is safe even if the thread is still finishing
             self._sender_thread = None
             self._sender_queue = None
-        self.client.close()
+        # the client read under the lock above, so a replacement installed
+        # between then and now cannot leave this closing the wrong websocket
+        client.close()
         self.connected_event.clear()
         if self._run_thread is not None:
             self._run_thread.join(timeout=2)

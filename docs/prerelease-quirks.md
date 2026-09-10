@@ -9,6 +9,31 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.11.16a1
+
+`MessageBusClient` reconnects from `run_forever()`'s loop instead of
+recursing into a new `run_forever()` from inside `on_error()`. The old shape
+nested every reconnect attempt inside the stack frame of the failed one, so
+on a bus that stayed away for a while (a messagebus pod being recreated) each
+failed attempt added a few frames that never unwound while the bus stayed
+up, every logged traceback repeated every earlier failure, and after enough
+attempts the receive thread hit the recursion limit and died silently: the
+client never reconnected again. Observable differences: the stack depth in
+callbacks is constant across reconnects, `close()` interrupts a reconnect
+wait immediately, a `close` event is delivered on every disconnect (before
+`reconnecting`), and `on_error()` returns without sleeping.
+
+Socket-level failures (`EPERM`, `EACCES`, `EHOSTUNREACH`, `ENETUNREACH`,
+`ENETDOWN`, `EHOSTDOWN`, `ETIMEDOUT`, `EPIPE`, `ENOTCONN`, `EBADF`,
+`ECONNABORTED`, `EADDRNOTAVAIL`, DNS and websocket timeouts) are now handled
+like `ECONNREFUSED`/`ECONNRESET`: one warning line, no traceback, no `error`
+event. A listener on `error` that relied on receiving `PermissionError` or
+`OSError` from a failed connect will no longer see it.
+
+The reconnect backoff carries a random +/-20 % jitter and its bounds are
+class attributes (`RECONNECT_INITIAL_S`, `RECONNECT_MAX_S`,
+`RECONNECT_JITTER`); the defaults keep the 5 s -> 60 s ramp.
+
 ## 2.11.13a4
 
 `websocket.async_sender` (env `OVOS_BUS_ASYNC_SENDER`) is a new, off-by-default

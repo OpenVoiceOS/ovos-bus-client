@@ -138,17 +138,34 @@ details and the multi-handler `collect_responses` flow.
 |---|---|
 | `bus.close()` | Initiate disconnect; safe to call multiple times (`client.py:365`). |
 | Socket dropped by server | `on_close` clears `connected_event`. `run_forever` returns. |
-| `on_error` | Closes the client, waits, and reconnects itself (see below). |
+| `on_error` | Clears `connected_event`, closes the client and schedules a reconnect (see below). |
 
-`MessageBusClient` auto-reconnects on any socket error (`client.py:202-246`,
-`on_error`): it closes the client, sleeps `self.retry` seconds, then calls
-`create_client()` again. The retry delay starts at 5 seconds, doubles on each
-further failure up to a 60-second cap, and resets to 5 seconds after a
-successful reconnect. You do not need to wrap construction in your own retry
-loop for this. See the manual's
+`MessageBusClient` auto-reconnects on any socket error (`on_error`). The
+reconnect itself runs in `run_forever()`'s loop, on the receive thread, once
+the failed websocket has unwound: the loop waits out the backoff, emits
+`reconnecting`, then calls `create_client()` and runs the new websocket at
+the same stack depth as the first one, however many attempts it takes. The
+wait starts at `RECONNECT_INITIAL_S` (5 seconds), doubles on each further
+failure up to `RECONNECT_MAX_S` (60 seconds), carries `RECONNECT_JITTER`
+(20 %) of random spread so clients that lost the bus together do not retry
+in lockstep, and resets after a successful reconnect. All three are class
+attributes, so an embedder can tune them for its deployment (`MessageBusClient.RECONNECT_MAX_S = 15`).
+`close()` interrupts the wait. You do not need to wrap construction in your
+own retry loop for this. See the manual's
 [Bus Service: reconnect behavior](https://tigregotico.github.io/ovos-technical-manual/bus-service/#bus-restart-reconnect-behavior)
 for the full backoff details, including what happens to in-flight calls and
 messages sent during an outage.
+
+Socket-level failures are routine during an outage and are logged as a single
+warning line, without a traceback and without an `error` event:
+`ECONNREFUSED`, `ECONNRESET`, and every errno in `_TRANSPORT_ERRNOS` —
+`EPERM` and `EACCES` (what a Kubernetes service mesh such as Cilium answers
+while a Service has no ready endpoint), `EHOSTUNREACH`, `ENETUNREACH`,
+`ENETDOWN`, `EHOSTDOWN`, `ETIMEDOUT`, `EPIPE`, `ENOTCONN`, `EBADF`,
+`ECONNABORTED`, `EADDRNOTAVAIL` — plus DNS failures and websocket timeouts.
+Any other exception reaching `on_error` keeps its traceback and is delivered
+as an `error` event before the reconnect.
+Every disconnect also delivers a `close` event, before `reconnecting`.
 
 ## `GUIWebsocketClient` — `client.py:380`
 
