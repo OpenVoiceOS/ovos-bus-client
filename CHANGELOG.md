@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.11.15a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.15a2) (2026-09-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.15a1...2.11.15a2)
+
+**Merged pull requests:**
+
+- fix: reconnect from run\_forever\(\)'s loop instead of recursing from on\_error\(\) [\#357](https://github.com/OpenVoiceOS/ovos-bus-client/pull/357) ([goldyfruit](https://github.com/goldyfruit))
+- build: allow pyee 13.x, keep the ceiling below 14 [\#354](https://github.com/OpenVoiceOS/ovos-bus-client/pull/354) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.15a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.15a1) (2026-09-08)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.14a2...2.11.15a1)
@@ -362,10 +371,6 @@
 ## [2.6.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.1a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.0a1...2.6.1a1)
-
-**Merged pull requests:**
-
-- fix: SessionManager keeps one live Session per id \(singleton\) [\#249](https://github.com/OpenVoiceOS/ovos-bus-client/pull/249) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.0a1) (2026-06-28)
 
