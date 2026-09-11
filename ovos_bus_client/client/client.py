@@ -1,8 +1,11 @@
 
 import errno
+import hashlib
+import json
 import random
 import socket
 import time
+from collections import deque
 from copy import deepcopy
 
 from ovos_utils import json_dumps
@@ -127,6 +130,45 @@ INTENT_COMPAT_TWIN_KEY = "_intent_compat_twin"
 # already delivered locally when the canonical frame that came before it was
 # received. See on_message.
 NAMESPACE_COMPAT_TWIN_KEY = "_namespace_compat_twin"
+
+#: Opt-in same-process fast delivery (``websocket.local_echo_topics``).
+#:
+#: For the listed message types ``emit()`` dispatches to THIS process's own
+#: listeners directly, while the frame still goes out on the wire for every
+#: other process. ovos-core's intent dispatcher waits on handler acks that
+#: skills in the SAME process emit; without the echo each ack pays a full bus
+#: round trip (~20-60ms under load) to arrive back where it started.
+#:
+#: The wire frame is left BYTE-IDENTICAL to an un-echoed emit. An earlier
+#: version tagged it with a source marker and dropped the tagged copy on the
+#: way back in, which works only while every process runs a bus-client that
+#: knows the marker. An older one keeps it (MSG-1 §2.3: unknown context keys
+#: are ignored) and ``reply()``/``forward()`` preserve context unchanged
+#: (§5.1, §5.2) -- so the answer came back carrying the originator's own
+#: marker and the originator discarded its own reply, silently. The dedup
+#: therefore stays on the sender: a bounded ring of recently emitted
+#: fingerprints, matched against the returning frame.
+LOCAL_ECHO_RING_SIZE = 512
+
+#: How long a sent fingerprint stays eligible to suppress an echo. The echo is
+#: the same frame coming back off the broadcast, so it returns in milliseconds;
+#: this only bounds how long an unmatched entry can shadow an identical frame
+#: emitted by a different process.
+LOCAL_ECHO_TTL_SECONDS = 10.0
+
+
+def _local_echo_fingerprint(message: Message) -> str:
+    """Identify a frame by content, independent of serialization.
+
+    Matching the raw wire string would be simpler, but the broadcast server is
+    free to re-serialize (key order, separators) and any difference would let
+    the echo through and double-deliver.
+    """
+    return hashlib.sha256(json.dumps(
+        {"type": message.msg_type, "data": message.data,
+         "context": message.context},
+        sort_keys=True, separators=(",", ":"), default=str,
+    ).encode("utf-8")).hexdigest()
 
 #: Escape-hatch flag (env var ``OVOS_BUS_WIRE_LEGACY_TWINS`` / config key
 #: ``websocket.wire_legacy_twins``) gating :meth:`MessageBusClient.
@@ -333,6 +375,13 @@ class MessageBusClient:
     like the pyee EventEmitter and tries to offer as much convenience as
     possible to the developer.
     """
+
+    # Class-level defaults: an instance built without __init__ (tests, partial
+    # constructions) skips local echo entirely rather than raising.
+    _local_echo_topics = frozenset()
+    _local_echo_sent = None
+    _local_echo_lock = None
+
     # minimize reading of the .conf
     _config_cache = None
     # class-level defaults so instances built without __init__ (tests,
@@ -398,6 +447,13 @@ class MessageBusClient:
         self._sender_closing = False
         self._sender_dropped = 0
         self._sender_dropped_logged_at = 0.0
+        # Opt-in same-process fast delivery. Reading it here rather than per
+        # emit keeps the hot path to a frozenset membership test.
+        self._local_echo_topics = frozenset(
+            str(topic) for topic in (config.get("local_echo_topics") or [])
+        ) if isinstance(config, dict) else self._read_local_echo_topics()
+        self._local_echo_sent = deque(maxlen=LOCAL_ECHO_RING_SIZE)
+        self._local_echo_lock = Lock()
         if _bus_flag("OVOS_BUS_ASYNC_SENDER", "async_sender", default=False):
             self._sender_queue = _queue.Queue(maxsize=5000)
             self._sender_thread = Thread(target=self._drain_sender,
@@ -600,6 +656,14 @@ class MessageBusClient:
             # otherwise trigger an endless reconnect loop.
             LOG.warning("discarding malformed bus message: %s", e)
             return
+        # Our own local-echo frame coming back off the broadcast: the listeners
+        # already ran at emit time, so dispatching again would double-deliver.
+        # Recognised by content on the sender rather than by a marker on the
+        # wire, so the frame every other process sees -- including one running
+        # a bus-client that knows nothing of this -- is byte-identical to an
+        # ordinary emit.
+        if self._local_echo_sent and self._is_own_local_echo(parsed_message):
+            return
         try:
             self._take_inbound_session(parsed_message)
         except MalformedSession as e:
@@ -786,7 +850,25 @@ class MessageBusClient:
         # (see on_message) in every process, so both namespaces are delivered
         # without a second wire copy that the broadcast server would echo back
         # and double in the capture firehose.
-        self._send(message)
+        if message.msg_type in self._local_echo_topics:
+            # Remember the frame, put it on the wire, and only then hand it to
+            # this process's listeners. Dispatching first would let a handler's
+            # synchronous reply reach the wire ahead of the frame it answers,
+            # so every other process -- a capture, a HiveMind bridge -- would
+            # see the answer before the question.
+            self._remember_local_echo(message)
+            try:
+                delivered = self._send(message)
+            except BaseException:
+                self._forget_local_echo(message)
+                raise
+            if not delivered:
+                # Nothing went out, so nothing will come back: keeping the
+                # fingerprint would suppress someone else's identical frame.
+                self._forget_local_echo(message)
+            self._dispatch_local_echo(message)
+        else:
+            self._send(message)
         # ... with TWO exceptions: the legacy intent twin and the legacy
         # namespace twin, which must reach a process whose bus-client is too
         # old to bridge anything. Both go after the canonical dispatch, so a
@@ -836,6 +918,89 @@ class MessageBusClient:
         if twin is not None:
             self._send(twin)
 
+    @staticmethod
+    def _read_local_echo_topics() -> frozenset:
+        """Topics that ``emit()`` also delivers to this process directly."""
+        try:
+            from ovos_config import Configuration
+            configured = Configuration().get("websocket", {}).get("local_echo_topics") or []
+        except Exception:
+            return frozenset()
+        return frozenset(str(topic) for topic in configured)
+
+    def _remember_local_echo(self, message: Message):
+        """Record a frame so its echo can be recognised on the way back in.
+
+        Recorded BEFORE the wire write: the broadcast can return the frame
+        before ``_send`` has finished on a fast loopback.
+        """
+        if self._local_echo_sent is None:
+            return
+        with self._local_echo_lock:
+            self._local_echo_sent.append(
+                (_local_echo_fingerprint(message), time.monotonic()))
+
+    def _forget_local_echo(self, message: Message):
+        """Release a fingerprint for a frame that never reached the wire.
+
+        Left in place it would suppress the next byte-identical frame from
+        another process as if it were our echo -- for a frame we never sent.
+        """
+        if not self._local_echo_sent:
+            return
+        self._release_local_echo(_local_echo_fingerprint(message))
+
+    def _release_local_echo(self, fingerprint):
+        """Release a recorded fingerprint by value.
+
+        The async sender only carries the serialized frame, so a write that
+        fails in the drain thread has no Message to hand back; it releases the
+        fingerprint the frame was queued with instead.
+        """
+        if not fingerprint or not self._local_echo_sent:
+            return
+        with self._local_echo_lock:
+            for index in range(len(self._local_echo_sent) - 1, -1, -1):
+                if self._local_echo_sent[index][0] == fingerprint:
+                    del self._local_echo_sent[index]
+                    return
+
+    def _is_own_local_echo(self, message: Message) -> bool:
+        """True when this frame is the wire copy of something we just echoed.
+
+        The matching entry is consumed, so two identical emits are suppressed
+        exactly twice and no more -- and an unmatched entry ages out rather
+        than shadowing an identical frame from another process for ever.
+        """
+        if not self._local_echo_sent:
+            return False
+        fingerprint = _local_echo_fingerprint(message)
+        cutoff = time.monotonic() - LOCAL_ECHO_TTL_SECONDS
+        with self._local_echo_lock:
+            for index, (seen, stamp) in enumerate(self._local_echo_sent):
+                if stamp < cutoff:
+                    continue
+                if seen == fingerprint:
+                    del self._local_echo_sent[index]
+                    return True
+        return False
+
+    def _dispatch_local_echo(self, message: Message):
+        """Deliver a frame to this process's listeners without a round trip.
+
+        A deserialized copy, so a handler mutating the message cannot reach
+        the frame that went to the wire.
+        """
+        try:
+            local_copy = Message.deserialize(message.serialize())
+        except Exception:
+            LOG.exception("local echo could not copy %s", message.msg_type)
+            return
+        try:
+            self.emitter.emit(local_copy.msg_type, local_copy)
+        except Exception:
+            LOG.exception("local echo dispatch failed for %s", message.msg_type)
+
     def _await_connection(self, message: Message) -> bool:
         """Wait a bounded time for the connection before sending.
 
@@ -877,11 +1042,20 @@ class MessageBusClient:
                             f"dropping {message.msg_type}")
                 return False
 
-    def _send(self, message: Message):
-        """Serialize and send a single message over the websocket."""
+    def _send(self, message: Message) -> bool:
+        """Serialize and send a single message over the websocket.
+
+        Returns whether the frame was handed to the wire (or to the async
+        sender, which will write it). ``False`` means it was definitely
+        dropped -- queue full, client closing, socket gone -- and nothing will
+        ever come back for it, so a recorded local-echo fingerprint has to be
+        released rather than left to suppress somebody else's frame.
+        """
         if not self.connected_event.is_set():
             if not self._await_connection(message):
-                return
+                return False
+        echo_fingerprint = (_local_echo_fingerprint(message)
+                            if self._local_echo_sent is not None else None)
 
         if hasattr(message, 'serialize'):
             msg = message.serialize()
@@ -894,13 +1068,16 @@ class MessageBusClient:
         if queue is not None:
             if self._sender_closing:
                 LOG.warning(f"bus client is closing; dropping {message.msg_type}")
-                return
+                return False
             try:
                 # bounded and non-blocking: a stuck socket must apply
                 # backpressure by DROPPING, not by parking the caller --
                 # emit() has to return in microseconds regardless of queue
                 # state, that is the whole point of the async sender.
-                queue.put_nowait((msg, message.msg_type))
+                # the fingerprint rides with the frame: a write that fails in
+                # the drain thread has to release it there, and that thread
+                # never sees the Message
+                queue.put_nowait((msg, message.msg_type, echo_fingerprint))
             except _queue.Full:
                 self._sender_dropped += 1
                 now = time.monotonic()
@@ -909,14 +1086,18 @@ class MessageBusClient:
                     LOG.error(f"outbound bus queue full; dropping "
                               f"{message.msg_type} ({self._sender_dropped} "
                               f"dropped total)")
-            return
+                return False
+            return True
         try:
             self.client.send(msg)
         except WebSocketConnectionClosedException:
             LOG.warning(f'Could not send {message.msg_type} message because connection '
                         'has been closed')
+            return False
         except Exception as e:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
+            return False
+        return True
 
     _SENDER_STOP = object()
 
@@ -936,16 +1117,18 @@ class MessageBusClient:
             try:
                 if item is self._SENDER_STOP:
                     return
-                msg, msg_type = item
+                msg, msg_type, echo_fingerprint = item
                 try:
                     self.connected_event.wait(10)
                     self.client.send(msg)
                 except WebSocketConnectionClosedException:
                     LOG.warning(f'Could not send {msg_type} message because '
                                 'connection has been closed')
+                    self._release_local_echo(echo_fingerprint)
                 except Exception:
                     LOG.exception(f"failed to emit message {msg_type} "
                                   f"with len {len(msg)}")
+                    self._release_local_echo(echo_fingerprint)
             finally:
                 q.task_done()
 
