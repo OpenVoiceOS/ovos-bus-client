@@ -948,7 +948,17 @@ class MessageBusClient:
         """
         if not self._local_echo_sent:
             return
-        fingerprint = _local_echo_fingerprint(message)
+        self._release_local_echo(_local_echo_fingerprint(message))
+
+    def _release_local_echo(self, fingerprint):
+        """Release a recorded fingerprint by value.
+
+        The async sender only carries the serialized frame, so a write that
+        fails in the drain thread has no Message to hand back; it releases the
+        fingerprint the frame was queued with instead.
+        """
+        if not fingerprint or not self._local_echo_sent:
+            return
         with self._local_echo_lock:
             for index in range(len(self._local_echo_sent) - 1, -1, -1):
                 if self._local_echo_sent[index][0] == fingerprint:
@@ -1044,6 +1054,8 @@ class MessageBusClient:
         if not self.connected_event.is_set():
             if not self._await_connection(message):
                 return False
+        echo_fingerprint = (_local_echo_fingerprint(message)
+                            if self._local_echo_sent is not None else None)
 
         if hasattr(message, 'serialize'):
             msg = message.serialize()
@@ -1062,7 +1074,10 @@ class MessageBusClient:
                 # backpressure by DROPPING, not by parking the caller --
                 # emit() has to return in microseconds regardless of queue
                 # state, that is the whole point of the async sender.
-                queue.put_nowait((msg, message.msg_type))
+                # the fingerprint rides with the frame: a write that fails in
+                # the drain thread has to release it there, and that thread
+                # never sees the Message
+                queue.put_nowait((msg, message.msg_type, echo_fingerprint))
             except _queue.Full:
                 self._sender_dropped += 1
                 now = time.monotonic()
@@ -1102,16 +1117,18 @@ class MessageBusClient:
             try:
                 if item is self._SENDER_STOP:
                     return
-                msg, msg_type = item
+                msg, msg_type, echo_fingerprint = item
                 try:
                     self.connected_event.wait(10)
                     self.client.send(msg)
                 except WebSocketConnectionClosedException:
                     LOG.warning(f'Could not send {msg_type} message because '
                                 'connection has been closed')
+                    self._release_local_echo(echo_fingerprint)
                 except Exception:
                     LOG.exception(f"failed to emit message {msg_type} "
                                   f"with len {len(msg)}")
+                    self._release_local_echo(echo_fingerprint)
             finally:
                 q.task_done()
 

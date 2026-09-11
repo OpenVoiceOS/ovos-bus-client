@@ -170,3 +170,60 @@ def test_a_send_that_raises_also_releases_the_fingerprint():
     with pytest.raises(ValueError):
         client.emit(Message(ECHO_TOPIC, {"x": 1}))
     assert len(client._local_echo_sent) == 0
+
+
+
+def _async_sender_client(send_raises=None):
+    """A client whose `_send` is the real one, backed by the async sender queue."""
+    import queue as _queue
+    from unittest.mock import Mock
+
+    client = _client()
+    del client._send  # use the real MessageBusClient._send
+    client._sender_queue = _queue.Queue()
+    client._sender_closing = False
+    client._sender_dropped = 0
+    client._sender_dropped_logged_at = 0.0
+    client.connected_event = Mock(is_set=lambda: True, wait=lambda *a, **k: True)
+    client.client = Mock()
+    if send_raises is not None:
+        client.client.send.side_effect = send_raises
+    return client
+
+
+def test_an_async_sender_write_failure_releases_the_fingerprint():
+    """The async sender accepts the frame and fails later, on its own thread.
+
+    `_send` returns True because the frame was queued, so nothing on the emit
+    path releases the fingerprint. Only the drain loop learns the write failed,
+    and it never sees the Message -- so the fingerprint has to travel with the
+    queued frame. Left behind it would suppress the next byte-identical frame
+    from another process for the whole echo TTL.
+    """
+    client = _async_sender_client(ValueError("socket went away mid-write"))
+    message = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
+
+    client.emit(message)
+    assert len(client._local_echo_sent) == 1, "a queued frame is still tracked"
+
+    client._sender_queue.put(client._SENDER_STOP)
+    MessageBusClient._drain_sender(client)
+
+    assert len(client._local_echo_sent) == 0, (
+        "a frame that never reached the wire must not keep its fingerprint")
+
+    client.emitter.reset_mock()
+    client.on_message(message.serialize())
+    assert client.emitter.emit.called, "the identical foreign frame is delivered"
+
+
+def test_an_async_sender_that_succeeds_keeps_the_fingerprint():
+    """The counterpart: a frame that did reach the wire still owes an echo,
+    so its fingerprint must survive the drain."""
+    client = _async_sender_client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+
+    client._sender_queue.put(client._SENDER_STOP)
+    MessageBusClient._drain_sender(client)
+
+    assert len(client._local_echo_sent) == 1
