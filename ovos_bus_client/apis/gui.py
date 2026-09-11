@@ -1,3 +1,5 @@
+import base64
+import mimetypes
 import os
 import shutil
 from os.path import splitext, isfile
@@ -395,12 +397,16 @@ class GUIInterface:
         self.bus.emit(Message("gui.value.set", data))
 
         # finally tell gui what to show
-        self.bus.emit(Message("gui.page.show",
-                              {"page_names": page_names,
-                               "index": index,
-                               "__from": self.skill_id,
-                               "__idle": override_idle,
-                               "__animations": override_animations}))
+        # OVOS-GUI-1 §3.3 / §4.1: omit the reserved __idle key when unset
+        # rather than emitting it as null (an absent __idle means "use the
+        # namespace default", §4.3).
+        show_data = {"page_names": page_names,
+                     "index": index,
+                     "__from": self.skill_id,
+                     "__animations": override_animations}
+        if override_idle is not None:
+            show_data["__idle"] = override_idle
+        self.bus.emit(Message("gui.page.show", show_data))
 
     def remove_page(self, page: str):
         """
@@ -592,7 +598,8 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         self["text"] = text
-        self["title"] = title
+        if title is not None:
+            self["title"] = title
         self.show_page("SYSTEM_TextFrame", override_idle,
                        override_animations)
 
@@ -628,6 +635,31 @@ class GUIInterface:
                         return gui_cache
         return url
 
+    @staticmethod
+    def _to_wire_image(url: str) -> str:
+        """Coerce an image reference to an OVOS-GUI-1 §3.5 wire form.
+
+        §3.5 / §8.1: an image-bearing key carries **either** an ``http(s)`` URL
+        or a ``data:`` URI. A producer that holds a **local** asset MUST resolve
+        it to a ``data:`` URI before emission and MUST NOT place a bare
+        filesystem path on the wire (a render backend MUST NOT be required to
+        read the producer's filesystem). ``http(s)`` URLs and pre-formed
+        ``data:`` URIs pass through unchanged; a local file is base64-encoded
+        into a ``data:`` URI.
+        """
+        if not url or not isinstance(url, str):
+            return url
+        if url.startswith("http") or url.startswith("data:"):
+            return url
+        if os.path.isfile(url):
+            mime = mimetypes.guess_type(url)[0] or "application/octet-stream"
+            with open(url, "rb") as f:
+                payload = base64.b64encode(f.read()).decode("ascii")
+            return f"data:{mime};base64,{payload}"
+        # not resolvable to a self-contained wire form; return as-is so the
+        # caller's existence check can reject it
+        return url
+
     def show_image(self, url: str, caption: Optional[str] = None,
                    title: Optional[str] = None,
                    fill: str = None, background_color: str = None,
@@ -656,7 +688,9 @@ class GUIInterface:
         if not url.startswith("http") and not os.path.isfile(url):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
-        self["image"] = url
+        # OVOS-GUI-1 §3.5: never put a bare filesystem path on the wire — a
+        # local asset is resolved to a self-contained data: URI.
+        self["image"] = self._to_wire_image(url)
         self["title"] = title
         self["caption"] = caption
         self["fill"] = fill
@@ -692,7 +726,9 @@ class GUIInterface:
         if not url.startswith("http") and not os.path.isfile(url):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
-        self["image"] = url
+        # OVOS-GUI-1 §3.5: never put a bare filesystem path on the wire — a
+        # local asset is resolved to a self-contained data: URI.
+        self["image"] = self._to_wire_image(url)
         self["title"] = title
         self["caption"] = caption
         self["fill"] = fill
