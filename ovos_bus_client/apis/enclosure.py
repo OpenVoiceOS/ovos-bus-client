@@ -1,20 +1,37 @@
+import warnings
+
+from ovos_utils.log import deprecated
+
 from ovos_bus_client.message import Message, dig_for_message
+from ovos_bus_client.version import VERSION_MAJOR
+
+_REMOVED_IN = f"{VERSION_MAJOR + 1}.0.0"
+_MOVED_TO = ("EnclosureAPI moved to ovos-gui-api-client; import it from "
+             "`ovos_gui_api_client` instead")
 
 
 class EnclosureAPI:
     """
-    This API is intended to be used to interface with the hardware
-    that is running Mycroft.  It exposes all possible commands which
-    can be sent to a Mycroft enclosure implementation.
+    DEPRECATED — use ``EnclosureAPI`` from ``ovos-gui-api-client``.
 
-    Different enclosure implementations may implement this differently
-    and/or may ignore certain API calls completely.  For example,
-    the eyes_color() API might be ignore on a Mycroft that uses simple
-    LEDs which only turn on/off, or not at all on an implementation
-    where there is no face at all.
+    It lives there alongside ``GUIInterface`` so a skill's ``self.gui`` and
+    ``self.enclosure`` come from the same client::
+
+        from ovos_gui_api_client import EnclosureAPI
+
+    The Mark-1 ``enclosure.*`` protocol it drives is consumed by hardware
+    plugins via ``EnclosureProtocolListener`` (``ovos-ui-enclosure-protocol``);
+    visual output goes through ``GUIInterface`` (OVOS-GUI-1).
+
+    This API exposes all commands that can be sent to a Mycroft-style enclosure.
+    Different enclosure implementations may implement this differently and/or
+    may ignore certain API calls completely.
     """
 
+    @deprecated(_MOVED_TO, _REMOVED_IN)
     def __init__(self, bus=None, skill_id=""):
+        warnings.warn(f"{_MOVED_TO} (removed in ovos-bus-client {_REMOVED_IN})",
+                      DeprecationWarning, stacklevel=2)
         self.bus = bus
         self.skill_id = skill_id
 
@@ -25,14 +42,25 @@ class EnclosureAPI:
         self.skill_id = skill_id
 
     def _get_source_message(self):
+        """
+        Return a Message to use as the source for enclosure commands, reusing an existing inbound message when available.
+        
+        Returns:
+            Message: A message targeted to the enclosure — either an existing inbound message or a new Message with context {"destination": ["enclosure"], "skill_id": self.skill_id}.
+        """
         return dig_for_message() or \
-            Message("", context={"destination": ["enclosure"],
-                                 "skill_id": self.skill_id})
+            Message("",
+                    context={"destination": ["enclosure"],
+                             "skill_id": self.skill_id})
 
     def register(self, skill_id=""):
-        """Registers a skill as active. Used for speak() and speak_dialog()
-        to 'patch' a previous implementation. Somewhat hacky.
-        DEPRECATED - unused
+        """
+        Mark a skill as the active enclosure skill by emitting an `enclosure.active_skill` message.
+        
+        Parameters:
+            skill_id (str): Optional skill identifier to register; if omitted, `self.skill_id` is used.
+        
+        Deprecated: This method is unused and retained for compatibility.
         """
         source_message = self._get_source_message()
         skill_id = skill_id or self.skill_id
