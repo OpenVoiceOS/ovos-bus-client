@@ -380,6 +380,10 @@ class MessageBusClient:
     # constructions) skips local echo entirely rather than raising.
     _local_echo_topics = frozenset()
     _local_echo_sent = None
+    #: The socket and its generation are read together under this lock, so a
+    #: write is bound to the socket it actually used. __init__ gives each
+    #: instance its own; this default only covers a partial construction.
+    _client_lock = Lock()
     #: Bumped on every successful open. A fingerprint records the generation
     #: its frame was written on; the echo of a frame written on a connection
     #: that has since been replaced can never arrive, so a new connection
@@ -866,8 +870,11 @@ class MessageBusClient:
             # so every other process -- a capture, a HiveMind bridge -- would
             # see the answer before the question.
             self._remember_local_echo(message)
+            # One transport frame, built once: the wire and the local
+            # 'message' firehose must see the same bytes, encrypted or not.
+            frame = self._wire_frame(message)
             try:
-                delivered = self._send(message)
+                delivered = self._send(message, frame=frame)
             except BaseException:
                 self._forget_local_echo(message)
                 raise
@@ -875,7 +882,7 @@ class MessageBusClient:
                 # Nothing went out, so nothing will come back: keeping the
                 # fingerprint would suppress someone else's identical frame.
                 self._forget_local_echo(message)
-            self._dispatch_local_echo(message)
+            self._dispatch_local_echo(message, frame)
         else:
             self._send(message)
         # ... with TWO exceptions: the legacy intent twin and the legacy
@@ -994,19 +1001,27 @@ class MessageBusClient:
                     return True
         return False
 
-    def _mark_local_echo_written(self, fingerprint):
+    def _mark_local_echo_written(self, fingerprint, generation):
         """Stamp a recorded fingerprint with the connection its frame went out on.
 
-        Called by whichever thread completed the socket write. Only an entry
-        that is still unstamped is taken, the oldest first: two identical
-        frames in flight are stamped in the order they were written.
+        Called by whichever thread completed the socket write, with the
+        generation it captured together with the socket before writing.
+        Only an entry that is still unstamped is taken, the oldest first:
+        two identical frames in flight are stamped in the order they were
+        written. A write that completed on a socket run_forever() has since
+        replaced releases the entry instead: its echo cannot arrive on the
+        new connection, and stamped with the current generation it would
+        suppress somebody else's identical frame for the TTL.
         """
         if not fingerprint or not self._local_echo_sent:
             return
         with self._local_echo_lock:
-            for index, (seen, stamp, generation) in enumerate(self._local_echo_sent):
-                if seen == fingerprint and generation is None:
-                    self._local_echo_sent[index] = (seen, stamp, self._connection_generation)
+            for index, (seen, stamp, stamped) in enumerate(self._local_echo_sent):
+                if seen == fingerprint and stamped is None:
+                    if generation < self._connection_generation:
+                        del self._local_echo_sent[index]
+                    else:
+                        self._local_echo_sent[index] = (seen, stamp, generation)
                     return
 
     def _forget_local_echoes_of_the_previous_connection(self):
@@ -1030,15 +1045,15 @@ class MessageBusClient:
                 if generation is not None and generation < current:
                     del self._local_echo_sent[index]
 
-    def _dispatch_local_echo(self, message: Message):
+    def _dispatch_local_echo(self, message: Message, frame: str):
         """Deliver a frame to this process's listeners without a round trip.
 
-        A deserialized copy, so a handler mutating the message cannot reach
-        the frame that went to the wire.
+        ``frame`` is the transport frame that went to the wire. A
+        deserialized copy carries the topic dispatch, so a handler mutating
+        the message cannot reach the frame that went to the wire.
         """
         try:
-            wire = message.serialize()
-            local_copy = Message.deserialize(wire)
+            local_copy = Message.deserialize(message.serialize())
         except Exception:
             LOG.exception("local echo could not copy %s", message.msg_type)
             return
@@ -1048,9 +1063,10 @@ class MessageBusClient:
         # a listed topic 0 times out of 201 with the echo on), the topic, the
         # namespace counterparts, and the canonical spelling of a suffixed
         # intent. The returning wire copy is then dropped whole, so each is
-        # delivered exactly once. The firehose gets the plaintext frame:
-        # on_message hands it the frame as received, which is the same bytes
-        # on an unencrypted bus.
+        # delivered exactly once. The firehose gets the transport frame,
+        # exactly as on_message hands it the frame as received: on an
+        # encrypted bus that is the envelope, and a firehose listener never
+        # sees plaintext it would not see off the wire.
         counterparts = []
         try:
             for topic in self._translator.counterpart_topics(local_copy.msg_type):
@@ -1061,7 +1077,7 @@ class MessageBusClient:
         except Exception:
             LOG.exception("local echo could not bridge %s", message.msg_type)
         try:
-            self.emitter.emit('message', wire)
+            self.emitter.emit('message', frame)
             self.emitter.emit(local_copy.msg_type, local_copy)
             for topic, counterpart in counterparts:
                 self.emitter.emit(topic, counterpart)
@@ -1110,7 +1126,18 @@ class MessageBusClient:
                             f"dropping {message.msg_type}")
                 return False
 
-    def _send(self, message: Message) -> bool:
+    @staticmethod
+    def _wire_frame(message: Message) -> str:
+        """The transport frame for *message*: serialized, encrypted if the
+        bus is. Built once per emit so the wire and the local firehose see
+        the same bytes."""
+        if hasattr(message, 'serialize'):
+            msg = message.serialize()
+        else:
+            msg = json_dumps(message.__dict__)
+        return _maybe_encrypt(msg)
+
+    def _send(self, message: Message, frame: Optional[str] = None) -> bool:
         """Serialize and send a single message over the websocket.
 
         Returns whether the frame was handed to the wire (or to the async
@@ -1118,6 +1145,7 @@ class MessageBusClient:
         dropped -- queue full, client closing, socket gone -- and nothing will
         ever come back for it, so a recorded local-echo fingerprint has to be
         released rather than left to suppress somebody else's frame.
+        ``frame`` is the transport frame when the caller already built it.
         """
         if not self.connected_event.is_set():
             if not self._await_connection(message):
@@ -1125,11 +1153,7 @@ class MessageBusClient:
         echo_fingerprint = (_local_echo_fingerprint(message)
                             if self._local_echo_sent is not None else None)
 
-        if hasattr(message, 'serialize'):
-            msg = message.serialize()
-        else:
-            msg = json_dumps(message.__dict__)
-        msg = _maybe_encrypt(msg)
+        msg = frame if frame is not None else self._wire_frame(message)
         # one read: close() nulls the attribute from another thread, and
         # unblocking a parked _send() is exactly when that races
         queue = self._sender_queue
@@ -1156,8 +1180,15 @@ class MessageBusClient:
                               f"dropped total)")
                 return False
             return True
+        # The socket and its generation, read together: run_forever() may
+        # install a replacement while this write is in flight, and the
+        # fingerprint must be bound to the socket the frame actually went
+        # out on, not to whichever one is current when the write returns.
+        with self._client_lock:
+            client = self.client
+            generation = self._connection_generation
         try:
-            self.client.send(msg)
+            client.send(msg)
         except WebSocketConnectionClosedException:
             LOG.warning(f'Could not send {message.msg_type} message because connection '
                         'has been closed')
@@ -1165,7 +1196,7 @@ class MessageBusClient:
         except Exception as e:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
             return False
-        self._mark_local_echo_written(echo_fingerprint)
+        self._mark_local_echo_written(echo_fingerprint, generation)
         return True
 
     _SENDER_STOP = object()
@@ -1189,8 +1220,11 @@ class MessageBusClient:
                 msg, msg_type, echo_fingerprint = item
                 try:
                     self.connected_event.wait(10)
-                    self.client.send(msg)
-                    self._mark_local_echo_written(echo_fingerprint)
+                    with self._client_lock:
+                        client = self.client
+                        generation = self._connection_generation
+                    client.send(msg)
+                    self._mark_local_echo_written(echo_fingerprint, generation)
                 except WebSocketConnectionClosedException:
                     LOG.warning(f'Could not send {msg_type} message because '
                                 'connection has been closed')

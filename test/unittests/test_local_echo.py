@@ -28,8 +28,8 @@ def _client(topics=(ECHO_TOPIC,)):
     client._local_echo_sent = deque(maxlen=LOCAL_ECHO_RING_SIZE)
     client._local_echo_lock = Lock()
     client.sent = []
-    def _send(message):
-        client.sent.append(message.serialize())
+    def _send(message, frame=None):
+        client.sent.append(frame if frame is not None else message.serialize())
         return True  # _send reports whether the frame reached the wire
     client._send = _send
     client._send_legacy_intent_twin = lambda message: None
@@ -148,7 +148,7 @@ def test_a_dropped_frame_leaves_no_fingerprint_behind():
     come back for it -- and a lingering fingerprint would suppress the next
     identical frame from another process as if it were our echo."""
     client = _client()
-    client._send = lambda message: False  # queue full / closing / socket gone
+    client._send = lambda message, frame=None: False  # queue full / closing / socket gone
     message = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
     client.emit(message)
 
@@ -165,7 +165,7 @@ def test_a_dropped_frame_leaves_no_fingerprint_behind():
 def test_a_send_that_raises_also_releases_the_fingerprint():
     client = _client()
 
-    def explode(message):
+    def explode(message, frame=None):
         raise ValueError("not connected")
 
     client._send = explode
@@ -282,7 +282,7 @@ def test_a_reconnect_forgets_the_echo_of_a_frame_the_old_connection_took():
     client = _client()
     frame = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
     client.emit(frame)
-    client._mark_local_echo_written(_local_echo_fingerprint(frame))  # the write completed
+    client._mark_local_echo_written(_local_echo_fingerprint(frame), client._connection_generation)
     assert client._local_echo_sent[0][2] == client._connection_generation
     client._forget_local_echoes_of_the_previous_connection()  # the socket was replaced
     assert not client._local_echo_sent
@@ -307,3 +307,74 @@ def test_a_reconnect_keeps_the_echo_of_a_frame_still_waiting_to_be_written():
     before = client.emitter.emit.call_count
     client.on_message(wire)
     assert client.emitter.emit.call_count == before, "our own echo, suppressed"
+
+
+# The review at c1ed6ed --------------------------------------------------------
+
+
+def test_a_write_that_finished_on_a_replaced_socket_releases_its_fingerprint():
+    """run_forever() may swap the socket while a write is in flight. The
+    write completes on the old one, whose echo can never arrive; stamped
+    with the new generation, the entry would shadow an identical frame from
+    another process for the TTL."""
+    from ovos_bus_client.client.client import _local_echo_fingerprint
+
+    client = _client()
+    frame = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
+    client.emit(frame)
+    captured = client._connection_generation  # read together with the socket, before the write
+    client._forget_local_echoes_of_the_previous_connection()  # the socket was replaced meanwhile
+    client._mark_local_echo_written(_local_echo_fingerprint(frame), captured)  # the old write returns
+    assert not client._local_echo_sent, "released, not stamped with the new generation"
+    client.emitter.reset_mock()
+    client.on_message(client.sent[0])  # somebody else's identical frame, on the new connection
+    assert ECHO_TOPIC in [call.args[0] for call in client.emitter.emit.call_args_list]
+
+
+def test_the_sync_writer_binds_the_write_to_the_socket_it_used():
+    from threading import Lock
+    from unittest.mock import Mock
+
+    client = _client()
+    del client._send  # the real one
+    client._client_lock = Lock()
+    client.connected_event = Mock(is_set=lambda: True)
+    old_socket, new_socket = Mock(), Mock()
+    client.client = old_socket
+
+    def send(msg):
+        # the socket is replaced while this write is in flight
+        client.client = new_socket
+        client._forget_local_echoes_of_the_previous_connection()
+    old_socket.send.side_effect = send
+    client.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+    old_socket.send.assert_called_once()
+    new_socket.send.assert_not_called()
+    assert not client._local_echo_sent, "written on the old socket: no echo to wait for"
+
+
+def test_the_firehose_gets_the_transport_frame_on_an_encrypted_bus(monkeypatch):
+    """on_message hands the firehose the frame as received. On an encrypted
+    bus that is the envelope; the local echo must not hand it plaintext."""
+    import warnings
+
+    import pytest
+
+    pytest.importorskip("Cryptodome")
+    from ovos_bus_client.client import client as module
+
+    monkeypatch.setattr(module, "_encryption_keys", lambda: ("0123456789abcdef", False))
+    client = _client()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        client.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+    wire = client.sent[0]
+    assert "ciphertext" in json.loads(wire), "the wire frame is the envelope"
+    firehose = client.emitter.emit.call_args_list[0]
+    assert firehose.args == ("message", wire), "the same frame, not plaintext"
+    delivered = client.emitter.emit.call_args_list[1].args[1]
+    assert delivered.msg_type == ECHO_TOPIC and delivered.data == {"x": 1}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        client.on_message(wire)  # our echo, still recognised through the envelope
+    assert client.emitter.emit.call_count == 2
