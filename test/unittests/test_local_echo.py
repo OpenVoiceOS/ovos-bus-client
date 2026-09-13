@@ -78,7 +78,8 @@ def test_our_own_echo_is_suppressed_once():
     client = _client()
     message = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
     client.emit(message)
-    assert client.emitter.emit.call_count == 1, "local listeners fire at emit time"
+    topics = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert topics == ["message", ECHO_TOPIC], "local listeners fire at emit time, once"
 
     client.emitter.reset_mock()
     client.on_message(client.sent[0])
@@ -112,7 +113,8 @@ def test_the_wire_copy_is_isolated_from_local_handler_mutation():
     message = Message(ECHO_TOPIC, {"x": 1})
     client.emit(message)
 
-    delivered[0].data["x"] = "mutated by a handler"
+    topic_copy = [item for item in delivered if isinstance(item, Message)][0]
+    topic_copy.data["x"] = "mutated by a handler"
     assert json.loads(client.sent[0])["data"]["x"] == 1
 
 
@@ -150,7 +152,8 @@ def test_a_dropped_frame_leaves_no_fingerprint_behind():
     message = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
     client.emit(message)
 
-    assert client.emitter.emit.call_count == 1, "local delivery still happens"
+    topics = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert topics == ["message", ECHO_TOPIC], "local delivery still happens"
     assert len(client._local_echo_sent) == 0, "no fingerprint for a frame never sent"
 
     # the identical frame arriving from elsewhere must be delivered
@@ -227,3 +230,80 @@ def test_an_async_sender_that_succeeds_keeps_the_fingerprint():
     MessageBusClient._drain_sender(client)
 
     assert len(client._local_echo_sent) == 1
+
+
+# What the echo must deliver, and what a reconnect must forget ------------------
+#
+# Live run against a real messagebus (PR review at 0893ea7): a listed topic
+# reached the emitting client's 'message' listener 0 of 201 times with the
+# echo on (201 with it off), a MIGRATION_MAP counterpart 0 of 201, and after a
+# write lost its echo to a reconnect an identical frame from another process
+# arrived 0 times in 10 s.
+
+
+def _bridged_client():
+    """A client whose translator bridges ECHO_TOPIC to a legacy spelling."""
+    client = _client()
+    client._translator.counterpart_topics = (
+        lambda topic: ["legacy.handler.complete"] if topic == ECHO_TOPIC else [])
+    client._translator.translate_payload = (
+        lambda from_topic, to_topic, data: dict(data, bridged=True))
+    return client
+
+
+def test_the_echo_reaches_the_firehose_and_the_counterpart_exactly_once():
+    client = _bridged_client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+    names = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert names == ["message", ECHO_TOPIC, "legacy.handler.complete"]
+    firehose = client.emitter.emit.call_args_list[0].args[1]
+    assert firehose == client.sent[0], "the firehose carries the frame that went to the wire"
+    counterpart = client.emitter.emit.call_args_list[2].args[1]
+    assert counterpart.msg_type == "legacy.handler.complete"
+    assert counterpart.data == {"x": 1, "bridged": True}
+    # the wire copy comes back and is dropped whole: nothing is delivered twice
+    client.on_message(client.sent[0])
+    assert client.emitter.emit.call_count == 3
+
+
+def test_a_topic_not_opted_in_still_gets_its_firehose_from_the_wire():
+    client = _bridged_client()
+    client.emit(Message("something.else", {"x": 1}, {"source": "core"}))
+    client.emitter.emit.assert_not_called()
+    client.on_message(client.sent[0])
+    names = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert names[0] == "message" and "something.else" in names
+
+
+def test_a_reconnect_forgets_the_echo_of_a_frame_the_old_connection_took():
+    """The echo was lost with the socket; the fingerprint must not outlive it."""
+    from ovos_bus_client.client.client import _local_echo_fingerprint
+
+    client = _client()
+    frame = Message(ECHO_TOPIC, {"x": 1}, {"source": "core"})
+    client.emit(frame)
+    client._mark_local_echo_written(_local_echo_fingerprint(frame))  # the write completed
+    assert client._local_echo_sent[0][2] == client._connection_generation
+    client._forget_local_echoes_of_the_previous_connection()  # the socket was replaced
+    assert not client._local_echo_sent
+    # the same frame from another process on the new connection is delivered
+    client.on_message(client.sent[0])
+    assert ECHO_TOPIC in [call.args[0] for call in client.emitter.emit.call_args_list[1:]]
+
+
+def test_a_reconnect_keeps_the_echo_of_a_frame_still_waiting_to_be_written():
+    """The async sender writes a queued frame on the new connection; its echo
+    will come back there, and must still be recognised as our own."""
+    client = _async_sender_client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+    assert client._local_echo_sent[0][2] is None, "queued, not written"
+    client._forget_local_echoes_of_the_previous_connection()
+    assert len(client._local_echo_sent) == 1, "an unwritten frame is not forgotten"
+    # the drain thread writes it on the new connection and stamps it
+    client._sender_queue.put(client._SENDER_STOP)
+    client._drain_sender()
+    assert client._local_echo_sent[0][2] == client._connection_generation
+    wire = client.client.send.call_args.args[0]
+    before = client.emitter.emit.call_count
+    client.on_message(wire)
+    assert client.emitter.emit.call_count == before, "our own echo, suppressed"

@@ -380,6 +380,12 @@ class MessageBusClient:
     # constructions) skips local echo entirely rather than raising.
     _local_echo_topics = frozenset()
     _local_echo_sent = None
+    #: Bumped on every successful open. A fingerprint records the generation
+    #: its frame was written on; the echo of a frame written on a connection
+    #: that has since been replaced can never arrive, so a new connection
+    #: expires those entries rather than letting them shadow another
+    #: process's identical frame for the TTL.
+    _connection_generation = 0
     _local_echo_lock = None
 
     # minimize reading of the .conf
@@ -527,6 +533,9 @@ class MessageBusClient:
         A Basic message with the name "open" is forwarded to the emitter.
         """
         LOG.debug("Connected")
+        # Before the event: the async sender writes as soon as it is set, and
+        # a frame written on this connection must be stamped with it.
+        self._forget_local_echoes_of_the_previous_connection()
         self.connected_event.set()
         try:
             self.emitter.emit("open")
@@ -938,7 +947,7 @@ class MessageBusClient:
             return
         with self._local_echo_lock:
             self._local_echo_sent.append(
-                (_local_echo_fingerprint(message), time.monotonic()))
+                (_local_echo_fingerprint(message), time.monotonic(), None))
 
     def _forget_local_echo(self, message: Message):
         """Release a fingerprint for a frame that never reached the wire.
@@ -977,13 +986,49 @@ class MessageBusClient:
         fingerprint = _local_echo_fingerprint(message)
         cutoff = time.monotonic() - LOCAL_ECHO_TTL_SECONDS
         with self._local_echo_lock:
-            for index, (seen, stamp) in enumerate(self._local_echo_sent):
+            for index, (seen, stamp, _generation) in enumerate(self._local_echo_sent):
                 if stamp < cutoff:
                     continue
                 if seen == fingerprint:
                     del self._local_echo_sent[index]
                     return True
         return False
+
+    def _mark_local_echo_written(self, fingerprint):
+        """Stamp a recorded fingerprint with the connection its frame went out on.
+
+        Called by whichever thread completed the socket write. Only an entry
+        that is still unstamped is taken, the oldest first: two identical
+        frames in flight are stamped in the order they were written.
+        """
+        if not fingerprint or not self._local_echo_sent:
+            return
+        with self._local_echo_lock:
+            for index, (seen, stamp, generation) in enumerate(self._local_echo_sent):
+                if seen == fingerprint and generation is None:
+                    self._local_echo_sent[index] = (seen, stamp, self._connection_generation)
+                    return
+
+    def _forget_local_echoes_of_the_previous_connection(self):
+        """A new connection cannot return the echo of a frame written on the old one.
+
+        The broadcast server does not replay: an echo that had not arrived
+        when the socket died is gone, and its fingerprint would otherwise
+        suppress the next identical frame from another process until the
+        TTL ran out. Measured on a real bus: an identical frame within 10 s
+        of the reconnect arrived 0 times out of 1. Frames still queued for
+        the async sender are unstamped and are kept; they will be written on
+        the new connection and stamped with it.
+        """
+        self._connection_generation += 1
+        if not self._local_echo_sent:
+            return
+        current = self._connection_generation
+        with self._local_echo_lock:
+            for index in range(len(self._local_echo_sent) - 1, -1, -1):
+                generation = self._local_echo_sent[index][2]
+                if generation is not None and generation < current:
+                    del self._local_echo_sent[index]
 
     def _dispatch_local_echo(self, message: Message):
         """Deliver a frame to this process's listeners without a round trip.
@@ -992,12 +1037,35 @@ class MessageBusClient:
         the frame that went to the wire.
         """
         try:
-            local_copy = Message.deserialize(message.serialize())
+            wire = message.serialize()
+            local_copy = Message.deserialize(wire)
         except Exception:
             LOG.exception("local echo could not copy %s", message.msg_type)
             return
+        # Everything on_message would have delivered for this frame had it
+        # come back off the wire, in the same order: the 'message' firehose
+        # (a relay such as hivemind-ovos-agent-plugin listens there and heard
+        # a listed topic 0 times out of 201 with the echo on), the topic, the
+        # namespace counterparts, and the canonical spelling of a suffixed
+        # intent. The returning wire copy is then dropped whole, so each is
+        # delivered exactly once. The firehose gets the plaintext frame:
+        # on_message hands it the frame as received, which is the same bytes
+        # on an unencrypted bus.
+        counterparts = []
         try:
+            for topic in self._translator.counterpart_topics(local_copy.msg_type):
+                translated = self._translator.translate_payload(
+                    from_topic=local_copy.msg_type, to_topic=topic,
+                    data=local_copy.data)
+                counterparts.append((topic, local_copy.forward(topic, translated)))
+        except Exception:
+            LOG.exception("local echo could not bridge %s", message.msg_type)
+        try:
+            self.emitter.emit('message', wire)
             self.emitter.emit(local_copy.msg_type, local_copy)
+            for topic, counterpart in counterparts:
+                self.emitter.emit(topic, counterpart)
+            self._modernize_intent_topic(local_copy, is_twin=False)
         except Exception:
             LOG.exception("local echo dispatch failed for %s", message.msg_type)
 
@@ -1097,6 +1165,7 @@ class MessageBusClient:
         except Exception as e:
             LOG.exception(f"failed to emit message {message.msg_type} with len {len(msg)}")
             return False
+        self._mark_local_echo_written(echo_fingerprint)
         return True
 
     _SENDER_STOP = object()
@@ -1121,6 +1190,7 @@ class MessageBusClient:
                 try:
                     self.connected_event.wait(10)
                     self.client.send(msg)
+                    self._mark_local_echo_written(echo_fingerprint)
                 except WebSocketConnectionClosedException:
                     LOG.warning(f'Could not send {msg_type} message because '
                                 'connection has been closed')
