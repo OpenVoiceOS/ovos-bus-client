@@ -21,7 +21,7 @@ classifiers = [
 dependencies = [
     "ovos-config>=1.0.0,<4.0.0",
     "ovos-utils>=0.8.2,<1.0.0",
-    "ovos-spec-tools[langcodes]>=1.10.5a1",  # OVOS-SESSION-1 §3.5 `location` registered field
+    "ovos-spec-tools[langcodes]>=1.12.0a1",  # FALLBACK-1 twins in MIGRATION_MAP; OVOS-SESSION-1 §3.5 `location` registered field
     "websocket-client>=0.54.0",
     "pyee>=8.1.0,<14.0.0",
 ]
