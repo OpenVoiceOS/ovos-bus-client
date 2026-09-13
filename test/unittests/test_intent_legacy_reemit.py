@@ -706,5 +706,47 @@ class TestFirehoseIsNotDoubledByTheIntentTwin(unittest.TestCase):
         self.assertEqual(len(got), 1)
 
 
+class TestPairGuardStarvesAHandlerOnTheOtherSpelling(unittest.TestCase):
+    """The accepted cost of the per-pair guard, pinned so a change to it is
+    seen (see ``MessageBusClient._mirror_guard_for``).
+
+    One client holds a skill bound to ONE spelling and an unrelated listener
+    on the OTHER spelling of the same dispatch topic. The listener's frame
+    arms the shared guard and the skill's frame is dropped as the mirror.
+    This is reachable when a test harness or an observer shares the skill's
+    client: an ovos-workshop <= 9.3.1 skill binds only the suffixed spelling,
+    and >= 9.3.11a2 binds only the canonical one.
+    """
+
+    def test_canonical_listener_starves_a_suffixed_only_skill(self):
+        core, skill_client = _client(), _client()
+        skill, observer = [], []
+        skill_client.on(LEGACY, skill.append)
+        skill_client.on(CANONICAL, observer.append)
+        core.emit(Message(CANONICAL, {"a": 1}))
+        _relay(core, skill_client)
+        self.assertEqual((len(skill), len(observer)), (0, 1))
+
+    def test_suffixed_listener_starves_a_canonical_only_skill(self):
+        skill_client = _client()
+        skill, observer = [], []
+        skill_client.on(CANONICAL, skill.append)
+        skill_client.on(LEGACY, observer.append)
+        _deliver(skill_client, LEGACY, {"a": 1})
+        self.assertEqual((len(skill), len(observer)), (0, 1))
+
+    def test_a_message_firehose_observer_does_not_starve_the_skill(self):
+        # the safe way for a same-client observer to see dispatches
+        core, skill_client = _client(), _client()
+        skill, observed = [], []
+        skill_client.on(LEGACY, skill.append)
+        skill_client.emitter.on(
+            "message", lambda raw: observed.append(json.loads(raw)["type"]))
+        core.emit(Message(CANONICAL, {"a": 1}))
+        _relay(core, skill_client)
+        self.assertEqual(len(skill), 1)
+        self.assertEqual(len(observed), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
