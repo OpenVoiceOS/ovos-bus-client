@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.16a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.16a1) (2026-09-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.15a2...2.11.16a1)
+
+**Merged pull requests:**
+
+- fix: raise the ovos-spec-tools floor to 1.12.0a1 for the FALLBACK-1 twins [\#361](https://github.com/OpenVoiceOS/ovos-bus-client/pull/361) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.15a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.15a2) (2026-09-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.15a1...2.11.15a2)
@@ -363,10 +371,6 @@
 ## [2.6.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.1a1...2.6.2a1)
-
-**Merged pull requests:**
-
-- fix: Session.update\_from applies SESSION-1 deserialization semantics [\#251](https://github.com/OpenVoiceOS/ovos-bus-client/pull/251) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.1a1) (2026-06-29)
 
