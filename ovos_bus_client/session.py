@@ -104,6 +104,39 @@ def _normalize_location_input(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return raw
 
 
+def _configured_location() -> Dict[str, Any]:
+    """Project the deployment-configured location into the §3.5 flat shape.
+
+    OVOS-SESSION-1 §3.5 makes ``location`` a client-owned field: the client
+    is the authoritative source, and an OMITTED ``location`` resolves at each
+    consumer against that consumer's own deployment default (§2.1). Across a
+    HiveMind link the consumer is the master, so a satellite that omits the
+    field has its own configured location replaced by the master's. The
+    session ORIGIN therefore declares its configured value here.
+
+    The mycroft.conf block keeps the legacy nested shape
+    (``city``/``coordinate``/``timezone``); only the three §3.5 keys are read
+    from it, and a non-numeric coordinate is dropped instead of being
+    declared. Returns ``{}`` when the deployment configures no location.
+    """
+    cfg = Configuration().get("location", {}) or {}
+    if not isinstance(cfg, dict):
+        return {}
+    coordinate = cfg.get("coordinate", {}) or {}
+    timezone = cfg.get("timezone", {}) or {}
+    location: Dict[str, Any] = {}
+    for key, raw in (("lat", coordinate.get("latitude")),
+                     ("lon", coordinate.get("longitude"))):
+        try:
+            location[key] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    code = timezone.get("code")
+    if isinstance(code, str) and code:
+        location["tz"] = code
+    return location
+
+
 def _get_default_lang() -> str:
     """Read the runtime-configured default lang.
 
@@ -703,6 +736,7 @@ class Session(_SpecSession):
                  blacklisted_pipelines: Optional[List[str]] = None,
                  persona_id: Optional[str] = None,
                  fallback_handlers: Optional[List[str]] = None,
+                 _from_wire: bool = False,
                  **canonical_kwargs):
         """
         Create a new Session with identifiers, preferences, state flags, and conversational context.
@@ -732,10 +766,12 @@ class Session(_SpecSession):
             tts_prefs (Dict): Deprecated; provided value will be ignored.
             location_prefs (Dict): OVOS-SESSION-1 §3.5 `location` -- either the wire shape
                 `{lat, lon, tz}` or the legacy nested mycroft.conf shape (normalized on
-                ingest, with a deprecation warning). Stored as given (key-wise validated);
-                since the deployment default for this field IS the deployment
-                configuration (§4.1), an omitted/empty/malformed value is stored as `{}`,
-                never materialized from configuration -- readers fall back at read time.
+                ingest, with a deprecation warning). Stored as given (key-wise validated).
+                When no usable value is given and this process ORIGINATES the session,
+                the deployment-configured location is stamped (§3.5 client-owned field,
+                ruling on §4.1 in T-2292), so the value crosses the wire instead of
+                resolving against the consumer's own configuration. A session rebuilt
+                from a received carrier passes `_from_wire=True` and keeps `{}`.
             system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
             time_format (str): Time format preference identifier.
             date_format (str): Date format preference identifier.
@@ -747,6 +783,10 @@ class Session(_SpecSession):
             persona_id (Optional[str]): Optional persona identifier associated with this session.
             fallback_handlers (Optional[List[str]]): OVOS-FALLBACK-1 §4 registered session field —
                 ordered skill-id strings. Inherited canonical field; forwarded to the parent.
+            _from_wire (bool): Private. True when this Session is rebuilt from a received
+                carrier (`deserialize`). It suppresses the origin location stamp above:
+                §4.1 forbids a component that did not originate the session from
+                synthesizing a field the carrier did not carry.
             **canonical_kwargs: Every remaining canonical ``ovos_spec_tools.Session``
                 SESSION-1 field — ``secondary_langs``, ``output_lang``, ``stt_lang``,
                 ``request_lang``, ``detected_lang``, ``intent_context``,
@@ -815,6 +855,16 @@ class Session(_SpecSession):
         location = (location_prefs if location_prefs is not None
                    else canonical_kwargs.pop("location", None))
         canonical_kwargs.pop("location", None)
+        # OVOS-SESSION-1 §3.5 / §4.1 (ruling T-2292): §4.1 binds a component
+        # DERIVING a Message for a session it did not originate. It does not
+        # reach the origin declaring its own session, and §3.5 makes the
+        # client the authoritative source for this client-owned field. A
+        # process that CONSTRUCTS the session it originates therefore stamps
+        # its configured location; a process that rebuilds a session from a
+        # received carrier (``deserialize``, ``from_message``, the session
+        # sync fold) passes ``_from_wire=True`` and never synthesizes one.
+        if not location and not _from_wire:
+            location = _configured_location() or None
 
         # --- canonical SESSION-1 fields / helpers (inherited) ----------------
         # Every registered field is forwarded to the canonical parent so the
@@ -849,16 +899,15 @@ class Session(_SpecSession):
         self.touch_time = int(time.time())
         self.expiration_seconds = expiration_seconds or \
                                   Configuration().get('session', {}).get("ttl", -1)
-        # OVOS-SESSION-1 §3.5: ``location``'s deployment default IS a
-        # deployment-configured value (the mycroft.conf location), so §4.1
-        # forbids materializing it into session state or onto the wire on
-        # the origin's behalf. `self.location` is set above via the parent
-        # constructor, which stores ONLY what was actually provided
-        # (key-wise validated, folded to `{}` by `_normalize_empty_containers`
-        # below when nothing valid was given); the configured fallback is
-        # applied at READ time only -- see `timezone` and
-        # `location_preferences` below, mirroring how `timezone` already
-        # falls back to config without storing it.
+        # OVOS-SESSION-1 §3.5 ``location`` is set above via the parent
+        # constructor, from what the caller provided or, for a session this
+        # process originates, from the deployment configuration (see the
+        # `_from_wire` stamp above). A session rebuilt from a received
+        # carrier keeps ONLY what the carrier carried (key-wise validated,
+        # folded to `{}` by `_normalize_empty_containers` below when nothing
+        # valid was given), and the configured fallback stays a READ-time
+        # projection there -- see `timezone` and `location_preferences`
+        # below.
         # Legacy back-compat: a caller (or a legacy wire payload via
         # deserialize) may hand an ``IntentContextManager`` frame stack. It is
         # NOT stored as a parallel object — its entities fold into the canonical
@@ -1326,10 +1375,11 @@ class Session(_SpecSession):
             # keeps working; _normalize_location_input on the read side
             # already accepts either shape under the same "location" key
             if "tz" in location:
-                log_deprecation(
-                    "session.location.timezone.code is a legacy nested "
-                    "mycroft.conf projection; read location.tz instead",
-                    _NEXT_MAJOR_VERSION)
+                # No deprecation warning on this side: the projection is a
+                # habit only a READER can have, and the producer cannot act
+                # on a warning about it. Since the origin now stamps its
+                # configured location, warning here would fire on every
+                # serialize of every session.
                 location["timezone"] = {"code": location["tz"]}
             data["location"] = location
         else:
@@ -1434,6 +1484,7 @@ class Session(_SpecSession):
                        pipeline=pipeline,
                        site_id=site_id,
                        location_prefs=location,
+                       _from_wire=True,
                        system_unit=system_unit,
                        date_format=date_format,
                        time_format=time_format,
