@@ -152,6 +152,30 @@ _CANONICAL_DICT_FIELDS = (
 _CONTEXT_LOCK = RLock()
 
 
+def _adapt_entity_type(key: str) -> str:
+    """Project an OVOS-CONTEXT-1 key to the adapt ``entity_type`` spelling.
+
+    A skill registers an adapt keyword under ``alphanumeric_skill_id + name``
+    (ovos-workshop ``OVOSSkill.alphanumeric_skill_id``, every non-alphanumeric
+    character replaced by ``_``), so a private entry ``<skill_id>:<name>`` is
+    read back by the adapt engine under that concatenation. This direction of
+    the munging is deterministic and total; the reverse is not, because the
+    concatenation has no separator and the mapping is lossy.
+
+    A bare (shared, §3) key is its own adapt spelling. A sub-key that already
+    starts with the munged owner is left alone: an emitter that predates
+    OVOS-CONTEXT-1 sends the munged spelling as the key itself, and prefixing
+    it a second time would name a keyword no skill registered.
+    """
+    if ":" not in key:
+        return key
+    owner, sub = key.split(":", 1)
+    munged = ''.join(c if c.isalnum() else '_' for c in owner)
+    if sub.startswith(munged):
+        return sub
+    return munged + sub
+
+
 class UtteranceState(str, enum.Enum):
     INTENT = "intent"  # includes converse
     RESPONSE = "response"
@@ -484,11 +508,14 @@ class _IntentContextView(IntentContextManager):
 
     Projection mapping (adapt entity <-> CONTEXT-1 entry):
 
-    - a context entity's ``data[0]`` is ``(value, entity_type)``; the
-      ``entity_type`` is the CONTEXT-1 **key** (bare == shared scope, §3) and
-      the ``value`` is the entry ``value``;
-    - a CONTEXT-1 entry projects back to the entity
-      ``{"key": value, "data": [(value, key)], "confidence": .., "origin": key}``;
+    - a context entity's ``data[0]`` is ``(value, entity_type)``. The
+      ``entity_type`` is the adapt spelling of a CONTEXT-1 key, NOT the key:
+      it resolves to the stored entry that carries that spelling, and falls
+      back to itself when no entry does;
+    - a CONTEXT-1 entry projects back to the entity ``{"key": value, "data":
+      [(value, adapt_spelling(key))], "confidence": .., "origin": key}``, where
+      the adapt spelling of a private ``<skill_id>:<name>`` is the munged
+      ``alphanumeric_skill_id + name`` the skill registered its keyword under;
     - decay is carried as ``expires_at = now + timeout`` on write; a dead entry
       (``expires_at`` in the past) is not projected into the frame stack and a
       ``value: null`` flag entry has no taggable surface form so it is omitted
@@ -515,8 +542,30 @@ class _IntentContextView(IntentContextManager):
         self.context_max_frames = config.get('max_frames', 3) if max_frames is None else max_frames
 
     # --- entity <-> CONTEXT-1 entry mapping ------------------------------
-    def _entity_to_entry(self, entity: Dict) -> Tuple[Optional[str], Optional[Dict]]:
-        """Map an adapt context entity to a ``(key, CONTEXT-1 entry)`` pair."""
+    def _canonical_key(self, entity_type: str) -> Optional[str]:
+        """Find the live CONTEXT-1 key an adapt ``entity_type`` stands for.
+
+        An ``entity_type`` is matched first as itself (a bare key an
+        ecosystem agreed on, OVOS-CONTEXT-1 §2), then against the adapt
+        spelling of every private key in the store. Returns ``None`` when no
+        stored entry carries that spelling.
+        """
+        ctx = self._session.intent_context or {}
+        if entity_type in ctx:
+            return entity_type
+        for key in ctx:
+            if ":" in key and _adapt_entity_type(key) == entity_type:
+                return key
+        return None
+
+    def _entity_to_entry(self, entity: Dict) \
+            -> Tuple[Optional[str], Optional[Dict]]:
+        """Map an adapt context entity to a ``(key, CONTEXT-1 entry)`` pair.
+
+        An ``entity_type`` is the adapt spelling of a key, not the key: it
+        resolves to the stored entry that carries that spelling, and falls
+        back to itself when no entry does.
+        """
         data = entity.get('data')
         value = key = None
         if isinstance(data, (list, tuple)) and data \
@@ -526,6 +575,14 @@ class _IntentContextView(IntentContextManager):
             key, value = data, entity.get('key')
         if not key:
             return None, None
+        # An entity this view projected carries the canonical key in
+        # ``origin``, so a stack read back and written again round-trips to
+        # the entry it came from rather than to its adapt spelling.
+        origin = entity.get('origin')
+        if isinstance(origin, str) and ":" in origin:
+            key = origin
+        elif ":" not in key:
+            key = self._canonical_key(key) or key
         entry: Dict[str, Any] = {"value": value}
         if self.timeout and self.timeout > 0:
             entry["expires_at"] = time.time() + self.timeout
@@ -534,10 +591,17 @@ class _IntentContextView(IntentContextManager):
     @staticmethod
     def _entry_to_entity(key: str, entry: Dict,
                          confidence: float = 1.0) -> Dict:
-        """Project a CONTEXT-1 entry back to an adapt context entity."""
+        """Project a CONTEXT-1 entry back to an adapt context entity.
+
+        The ``entity_type`` the adapt engine reads is the munged spelling the
+        skill registered its keyword under, recomputed from the private key
+        (see :func:`_adapt_entity_type`). ``origin`` keeps the canonical
+        CONTEXT-1 key, so a write back through this view reaches the entry
+        the projection came from.
+        """
         value = entry.get("value")
         return {"key": value,
-                "data": [(value, key)],
+                "data": [(value, _adapt_entity_type(key))],
                 "confidence": confidence,
                 "origin": key}
 
@@ -565,8 +629,17 @@ class _IntentContextView(IntentContextManager):
         """
         now = time.time()
         rows = []
-        for key, entry in (self._session.intent_context or {}).items():
+        entries = self._session.intent_context or {}
+        # A writer that predates OVOS-CONTEXT-1 stores the munged spelling as
+        # a bare key BESIDE the private entry the same turn writes. Both
+        # project to the one spelling the skill registered, so the bare
+        # duplicate is dropped and the private entry - the conforming one,
+        # §3 - carries the frame. One turn gives one frame.
+        shadowed = {_adapt_entity_type(key) for key in entries if ":" in key}
+        for key, entry in entries.items():
             if not isinstance(entry, dict):
+                continue
+            if ":" not in key and key in shadowed:
                 continue
             value = entry.get("value")
             # Only a non-null STRING value is a taggable surface form
@@ -609,6 +682,13 @@ class _IntentContextView(IntentContextManager):
         timestamp anchors the projected ``expires_at`` (``ts + timeout``) — a
         stale frame that legacy ``get_context`` would already have filtered out
         is **not** resurrected with a fresh window; it is skipped.
+
+        This path keeps ``mint=True``, unlike ``inject_context``: a stack that
+        arrives on the legacy ``context`` wire key is a peer's whole context
+        store, and the entry it describes exists nowhere else. Dropping a key
+        it names would lose the context instead of moving it. A stack this
+        view itself projected carries the canonical key in each entity's
+        ``origin``, so the round trip never re-spells an entry it owns.
         """
         payload: Dict[str, Any] = {}
         now = time.time()
@@ -627,6 +707,21 @@ class _IntentContextView(IntentContextManager):
 
     # --- write path overrides -------------------------------------------
     def inject_context(self, entity: Dict, metadata: Dict = None):
+        """Fold an adapt entity into ``intent_context``.
+
+        An entity this view projected carries the canonical key in ``origin``,
+        so a write back lands on the entry it came from rather than on a
+        second entry named by its adapt spelling.
+
+        An ``entity_type`` no stored entry carries still mints a bare key
+        here, which OVOS-CONTEXT-1 §3 reads as a SHARED entry although the
+        adapt context it carries is per-skill private. Removing that write is
+        the write-side half of this fix. It is held back: a writer that stops
+        minting, read by a peer that predates the read side below, hands the
+        tagger a spelling no skill registered, and adapt context tagging stops
+        with nothing logged on either side. The read side ships first, and the
+        write side follows behind a version floor.
+        """
         key, entry = self._entity_to_entry(entity)
         if key:
             self._write({key: entry})
@@ -635,8 +730,11 @@ class _IntentContextView(IntentContextManager):
         # a tombstone (null entry, §5.3) rather than a pop, so the removal
         # propagates when this session is serialized into a sync payload; a
         # missing key is a silent no-op, matching the canonical remover.
-        if context_id in (self._session.intent_context or {}):
-            self._write({context_id: None})
+        # ``context_id`` is an adapt spelling, so it resolves through the same
+        # projection the read side uses.
+        key = self._canonical_key(context_id)
+        if key is not None:
+            self._write({key: None})
 
     def clear_context(self):
         # every entry becomes a tombstone, in place: the map keeps its object
