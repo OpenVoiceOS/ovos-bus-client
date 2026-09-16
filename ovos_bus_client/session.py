@@ -1418,7 +1418,22 @@ class Session(_SpecSession):
         # modern peer that carries both keys is never overridden (canonical
         # wins, no double-count). ``from_dict`` above already populated
         # ``intent_context`` in ``canonical_kwargs`` when present.
-        context = IntentContextManager.deserialize(data.get("context", {}))
+        raw_context = data.get("context", {})
+        if raw_context is None:
+            # An explicit null is an absent context, not a malformed one:
+            # plenty of serializers emit the key with null rather than omitting
+            # it, and SESSION-1 §2.1 normalizes the map to a dict regardless.
+            raw_context = {}
+        try:
+            context = IntentContextManager.deserialize(raw_context)
+        except (AttributeError, TypeError, ValueError) as error:
+            # Same contract the carrier itself already has: a session that
+            # cannot be read is a MalformedSession, so the reader drops the one
+            # message. Letting the parser's own error escape takes down the
+            # handler instead -- a peer's bad frame closing our connection.
+            raise MalformedSession(
+                f"session carries a malformed intent context: {error}"
+            ) from error
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")

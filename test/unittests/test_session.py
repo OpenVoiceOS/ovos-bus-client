@@ -245,6 +245,25 @@ class TestSession(unittest.TestCase):
         got = Session.from_message(Message("test", context={}))
         self.assertIsInstance(got, Session)
 
+    def test_malformed_intent_context_is_a_malformed_session(self):
+        from ovos_bus_client.session import Session, MalformedSession
+
+        # The same contract as the carrier in test_from_message, one level
+        # down. The nested ``context`` went straight to
+        # IntentContextManager.deserialize, which raises AttributeError /
+        # TypeError / ValueError on a non-object -- and the inbound
+        # ovos.session.sync handler catches MalformedSession only, so a peer's
+        # bad frame escaped as an unhandled error instead of costing it that
+        # one message.
+        for bad in ("oops", 42, ["frame_stack"]):
+            with self.assertRaises(MalformedSession):
+                Session.deserialize({"session_id": "sid", "context": bad})
+
+        # ... and an explicit null context is absence, not malformation (§2.1).
+        got = Session.deserialize({"session_id": "sid", "context": None})
+        self.assertIsInstance(got, Session)
+        self.assertIsInstance(got.intent_context, dict)
+
 
 class TestSessionManager(unittest.TestCase):
     from ovos_bus_client.session import SessionManager
