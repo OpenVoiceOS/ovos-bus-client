@@ -94,6 +94,21 @@ class TestOriginStampsItsConfiguredLocation(unittest.TestCase):
             self.assertEqual(at_master.timezone, "Europe/Lisbon")
         self.assertEqual(at_master.location["lat"], 38.7167)
 
+    def test_explicit_empty_location_is_not_an_omission(self):
+        # The omitted/empty split lives in `location_prefs` itself: `None`
+        # is an omission and stamps, `{}` is a declaration of nothing and
+        # stays `{}`. deserialize() relies on this to keep a carrier that
+        # carried no location free of the reader's configuration (§4.1).
+        with patch.object(session_module, "Configuration",
+                          return_value=_CONFIG_WITH_LOCATION):
+            omitted = Session(location_prefs=None)
+            empty = Session(location_prefs={})
+            canonical_empty = Session(location={})
+        self.assertEqual(omitted.location["tz"], "Europe/Lisbon")
+        self.assertEqual(empty.location, {})
+        self.assertEqual(canonical_empty.location, {})
+        self.assertNotIn("location", empty.serialize())
+
     def test_explicit_location_wins_over_the_configured_one(self):
         with patch.object(session_module, "Configuration",
                           return_value=_CONFIG_WITH_LOCATION):

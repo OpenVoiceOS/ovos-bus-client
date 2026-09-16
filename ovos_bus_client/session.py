@@ -736,7 +736,6 @@ class Session(_SpecSession):
                  blacklisted_pipelines: Optional[List[str]] = None,
                  persona_id: Optional[str] = None,
                  fallback_handlers: Optional[List[str]] = None,
-                 _from_wire: bool = False,
                  **canonical_kwargs):
         """
         Create a new Session with identifiers, preferences, state flags, and conversational context.
@@ -767,11 +766,13 @@ class Session(_SpecSession):
             location_prefs (Dict): OVOS-SESSION-1 §3.5 `location` -- either the wire shape
                 `{lat, lon, tz}` or the legacy nested mycroft.conf shape (normalized on
                 ingest, with a deprecation warning). Stored as given (key-wise validated).
-                When no usable value is given and this process ORIGINATES the session,
-                the deployment-configured location is stamped (§3.5 client-owned field,
-                ruling on §4.1 in T-2292), so the value crosses the wire instead of
-                resolving against the consumer's own configuration. A session rebuilt
-                from a received carrier passes `_from_wire=True` and keeps `{}`.
+                `None` (omitted) means this process ORIGINATES the session and declares
+                nothing: the deployment-configured location is stamped (§3.5
+                client-owned field, ruling on §4.1 in T-2292), so the value crosses the
+                wire instead of resolving against the consumer's own configuration. An
+                explicit value, `{}` included, is stored as given: a session rebuilt
+                from a received carrier passes what the carrier carried (`{}` when it
+                carried nothing) and never receives a stamp.
             system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
             time_format (str): Time format preference identifier.
             date_format (str): Date format preference identifier.
@@ -783,10 +784,6 @@ class Session(_SpecSession):
             persona_id (Optional[str]): Optional persona identifier associated with this session.
             fallback_handlers (Optional[List[str]]): OVOS-FALLBACK-1 §4 registered session field —
                 ordered skill-id strings. Inherited canonical field; forwarded to the parent.
-            _from_wire (bool): Private. True when this Session is rebuilt from a received
-                carrier (`deserialize`). It suppresses the origin location stamp above:
-                §4.1 forbids a component that did not originate the session from
-                synthesizing a field the carrier did not carry.
             **canonical_kwargs: Every remaining canonical ``ovos_spec_tools.Session``
                 SESSION-1 field — ``secondary_langs``, ``output_lang``, ``stt_lang``,
                 ``request_lang``, ``detected_lang``, ``intent_context``,
@@ -859,11 +856,14 @@ class Session(_SpecSession):
         # DERIVING a Message for a session it did not originate. It does not
         # reach the origin declaring its own session, and §3.5 makes the
         # client the authoritative source for this client-owned field. A
-        # process that CONSTRUCTS the session it originates therefore stamps
-        # its configured location; a process that rebuilds a session from a
-        # received carrier (``deserialize``, ``from_message``, the session
-        # sync fold) passes ``_from_wire=True`` and never synthesizes one.
-        if not location and not _from_wire:
+        # process that CONSTRUCTS the session it originates and passes no
+        # location at all (``None``) therefore stamps its configured
+        # location. An explicit value, ``{}`` included, is what the caller
+        # declared: a session rebuilt from a received carrier
+        # (``deserialize``, ``from_message``, the session sync fold) passes
+        # the carrier's value, ``{}`` when it carried none, and so never has
+        # one synthesized for it.
+        if location is None:
             location = _configured_location() or None
 
         # --- canonical SESSION-1 fields / helpers (inherited) ----------------
@@ -901,8 +901,8 @@ class Session(_SpecSession):
                                   Configuration().get('session', {}).get("ttl", -1)
         # OVOS-SESSION-1 §3.5 ``location`` is set above via the parent
         # constructor, from what the caller provided or, for a session this
-        # process originates, from the deployment configuration (see the
-        # `_from_wire` stamp above). A session rebuilt from a received
+        # process originates with no location given, from the deployment
+        # configuration (see the stamp above). A session rebuilt from a received
         # carrier keeps ONLY what the carrier carried (key-wise validated,
         # folded to `{}` by `_normalize_empty_containers` below when nothing
         # valid was given), and the configured fallback stays a READ-time
@@ -1484,7 +1484,6 @@ class Session(_SpecSession):
                        pipeline=pipeline,
                        site_id=site_id,
                        location_prefs=location,
-                       _from_wire=True,
                        system_unit=system_unit,
                        date_format=date_format,
                        time_format=time_format,
