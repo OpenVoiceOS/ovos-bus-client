@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.17a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.17a1) (2026-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.16a2...2.11.17a1)
+
+**Merged pull requests:**
+
+- fix: emit destination as a string \(OVOS-MSG-1 §3.3\) [\#368](https://github.com/OpenVoiceOS/ovos-bus-client/pull/368) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.16a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.16a2) (2026-09-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.16a1...2.11.16a2)
@@ -239,15 +247,15 @@
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
-
-## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
 
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+
+## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
 
 **Merged pull requests:**
 
@@ -371,10 +379,6 @@
 ## [2.6.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a2) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.2a1...2.6.2a2)
-
-**Merged pull requests:**
-
-- refactor: SessionManager subclasses the ovos-spec-tools registry [\#254](https://github.com/OpenVoiceOS/ovos-bus-client/pull/254) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a1) (2026-06-29)
 
