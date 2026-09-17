@@ -1146,13 +1146,21 @@ class MessageBusClient:
         topic each still run once per dispatch.
 
         Sharing it across different handlers on DIFFERENT spellings is not
-        free. A process holding handler A on the canonical topic and an
-        unrelated handler B on the suffixed one starves B: A's canonical frame
-        arms the guard, and the twin B waits for is dropped as the mirror. This
-        is accepted. A skill container runs ONE workshop version, which binds
-        one spelling or both, so the mixed case is unreachable from a single
-        version; and the alternative — a per-handler guard — reintroduces the
-        double dispatch for the dual-binding case that is real and common.
+        free. A client holding handler A on one spelling and an unrelated
+        handler B on the other starves B: A's frame arms the guard, and the
+        frame B waits for is dropped as the mirror. It works in both
+        directions, and it is reachable: ``ovos-workshop`` <= 9.3.1 binds only
+        the suffixed spelling and >= 9.3.11a2 only the canonical one, so a test
+        harness or observer that listens on the other spelling on the SAME
+        client (or the same FakeBus) silences that skill. Such an observer must
+        listen on ``'message'``, which the guard does not wrap, or use its own
+        client.
+
+        This is accepted. The alternative, a per-handler guard, brings back the
+        double dispatch for ``ovos-workshop`` 9.3.2a1 to 9.3.11a1, which binds
+        one skill method to both spellings through two unrelated wrapper
+        closures that no receive-side key can tie together. See
+        test_intent_legacy_reemit.TestPairGuardStarvesAHandlerOnTheOtherSpelling.
         """
         counterpart = intent_topic_counterpart(event_name)
         if counterpart is not None:
