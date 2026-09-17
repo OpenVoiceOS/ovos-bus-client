@@ -458,11 +458,16 @@ class TestGUI1NoneKeyOmission(TestCase):
         self.assertEqual(data["text"], "hello")
         self.assertEqual(data["title"], "Greeting")
 
-    def test_page_show_omits_idle_when_unset(self):
+    def test_page_show_sends_idle_as_null_when_unset(self):
+        # OVOS-GUI-1 §4.1 allows an omitted __idle, but every released and
+        # dev ovos-gui reads message.data["__idle"] with no default and
+        # raises KeyError on an omitted key (ovos-gui#112, #117 fix that and
+        # are not merged). The key stays on the wire, null when unset, until
+        # a receiver that tolerates its absence ships.
         self.gui.show_page("SYSTEM_TextFrame")
         data = _page_shows(self.bus)[-1].data
-        self.assertNotIn("__idle", data)       # was null -> omitted
-        self.assertNotIn(None, data.values())
+        self.assertIn("__idle", data)
+        self.assertIsNone(data["__idle"])
 
     def test_page_show_keeps_idle_when_set(self):
         self.gui.show_page("SYSTEM_TextFrame", override_idle=30)
@@ -531,6 +536,16 @@ class TestGUI1ImageWireShape(TestCase):
             self.gui.show_image("https://example.com/a.png")
         img = _value_sets(self.bus)[-1].data["image"]
         self.assertEqual(img, "https://example.com/a.png")
+
+    def test_show_image_accepts_preformed_data_uri(self):
+        # a caller that already resolved its own data: URI must not be
+        # rejected by the local-file existence check
+        uri = "data:image/png;base64,Zm9v"
+        with patch("ovos_bus_client.apis.gui.GUIInterface._resolve_url",
+                   return_value=uri):
+            self.gui.show_image(uri)
+        img = _value_sets(self.bus)[-1].data["image"]
+        self.assertEqual(img, uri)
 
 
 if __name__ == "__main__":

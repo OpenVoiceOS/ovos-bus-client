@@ -397,16 +397,18 @@ class GUIInterface:
         self.bus.emit(Message("gui.value.set", data))
 
         # finally tell gui what to show
-        # OVOS-GUI-1 §3.3 / §4.1: omit the reserved __idle key when unset
-        # rather than emitting it as null (an absent __idle means "use the
-        # namespace default", §4.3).
-        show_data = {"page_names": page_names,
-                     "index": index,
-                     "__from": self.skill_id,
-                     "__animations": override_animations}
-        if override_idle is not None:
-            show_data["__idle"] = override_idle
-        self.bus.emit(Message("gui.page.show", show_data))
+        # OVOS-GUI-1 §3.3 / §4.1 allows an omitted __idle to mean "use the
+        # namespace default" (§4.3), but every released and dev ovos-gui
+        # reads message.data["__idle"] with no default and raises KeyError
+        # on an omitted key (ovos-gui#112, #117 add the .get() read and are
+        # not merged yet). Keep sending the key, null when unset, until a
+        # receiver that tolerates its absence ships.
+        self.bus.emit(Message("gui.page.show",
+                              {"page_names": page_names,
+                               "index": index,
+                               "__from": self.skill_id,
+                               "__idle": override_idle,
+                               "__animations": override_animations}))
 
     def remove_page(self, page: str):
         """
@@ -598,8 +600,11 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         self["text"] = text
-        if title is not None:
-            self["title"] = title
+        # OVOS-GUI-1 §3.3: a producer that wants a previously set key gone
+        # sends it as null; it does not omit the key. Skipping the
+        # assignment when title is None left the old title on the wire
+        # from a prior call, so always set it, null included.
+        self["title"] = title
         self.show_page("SYSTEM_TextFrame", override_idle,
                        override_animations)
 
@@ -685,11 +690,13 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         url = self._resolve_url(url)
-        if not url.startswith("http") and not os.path.isfile(url):
+        if (not url.startswith("http") and not url.startswith("data:")
+                and not os.path.isfile(url)):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
         # OVOS-GUI-1 §3.5: never put a bare filesystem path on the wire — a
-        # local asset is resolved to a self-contained data: URI.
+        # local asset is resolved to a self-contained data: URI; a pre-formed
+        # data: URI or http(s) URL passes through unchanged.
         self["image"] = self._to_wire_image(url)
         self["title"] = title
         self["caption"] = caption
@@ -723,11 +730,13 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         url = self._resolve_url(url)
-        if not url.startswith("http") and not os.path.isfile(url):
+        if (not url.startswith("http") and not url.startswith("data:")
+                and not os.path.isfile(url)):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
         # OVOS-GUI-1 §3.5: never put a bare filesystem path on the wire — a
-        # local asset is resolved to a self-contained data: URI.
+        # local asset is resolved to a self-contained data: URI; a pre-formed
+        # data: URI or http(s) URL passes through unchanged.
         self["image"] = self._to_wire_image(url)
         self["title"] = title
         self["caption"] = caption
