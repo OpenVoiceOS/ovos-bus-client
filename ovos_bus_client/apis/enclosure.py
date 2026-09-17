@@ -46,11 +46,11 @@ class EnclosureAPI:
         Return a Message to use as the source for enclosure commands, reusing an existing inbound message when available.
         
         Returns:
-            Message: A message targeted to the enclosure — either an existing inbound message or a new Message with context {"destination": ["enclosure"], "skill_id": self.skill_id}.
+            Message: A message targeted to the enclosure — either an existing inbound message or a new Message with context {"destination": "enclosure", "skill_id": self.skill_id}.
         """
         return dig_for_message() or \
             Message("",
-                    context={"destination": ["enclosure"],
+                    context={"destination": "enclosure",
                              "skill_id": self.skill_id})
 
     def register(self, skill_id=""):
