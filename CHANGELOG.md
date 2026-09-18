@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.18a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.18a1) (2026-09-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.17a1...2.11.18a1)
+
+**Merged pull requests:**
+
+- fix: the arrival hook only checks the session carrier \(SESSION-2 §2.6, §6.1\) [\#370](https://github.com/OpenVoiceOS/ovos-bus-client/pull/370) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.17a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.17a1) (2026-09-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.16a2...2.11.17a1)
@@ -347,10 +355,6 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.5a1...2.7.0a1)
 
-**Merged pull requests:**
-
-- feat: unify legacy Session.context onto canonical intent\_context [\#256](https://github.com/OpenVoiceOS/ovos-bus-client/pull/256) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.6.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.5a1) (2026-07-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.4a1...2.6.5a1)
@@ -363,10 +367,6 @@
 ## [2.6.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.4a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.3a1...2.6.4a1)
-
-**Merged pull requests:**
-
-- fix: always deserialize canonical Session list/dict fields to empty containers [\#257](https://github.com/OpenVoiceOS/ovos-bus-client/pull/257) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.3a1) (2026-07-03)
 
