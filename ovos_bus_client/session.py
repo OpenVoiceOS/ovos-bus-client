@@ -650,6 +650,56 @@ class _IntentContextView(IntentContextManager):
         self._session.touch()
 
 
+
+def _validate_legacy_context_shape(raw) -> None:
+    """Reject a legacy ``context`` the session fold cannot consume.
+
+    ``IntentContextManager.deserialize`` is lenient: it will happily build a
+    frame whose ``entities`` is a string, because it only unpacks pairs and
+    passes the frame dict through. The shape is not actually exercised until
+    ``Session.__init__`` folds the stack into ``intent_context``, and that fold
+    is outside every handler written for ``deserialize`` -- so a peer could put
+    an ``AttributeError`` on the reader's thread with a payload this function
+    had already accepted.
+
+    The accepted shape is exactly what ``IntentContextManager.serialize``
+    emits: ``frame_stack`` a list of ``(frame, timestamp)`` pairs, each frame a
+    mapping, its ``entities`` a list of mappings (``_entity_to_entry`` calls
+    ``.get`` on each), and each timestamp a number or null (the fold adds the
+    timeout to it). Tuples are accepted alongside lists because an in-process
+    round trip never passes through JSON.
+    """
+    if not isinstance(raw, dict):
+        raise TypeError(f"context must be a mapping, got {type(raw).__name__}")
+    frames = raw.get("frame_stack", [])
+    if not isinstance(frames, (list, tuple)):
+        raise TypeError(
+            f"frame_stack must be a list, got {type(frames).__name__}")
+    for frame in frames:
+        if not (isinstance(frame, (list, tuple)) and len(frame) == 2):
+            raise ValueError(
+                "each frame_stack item must be a (frame, timestamp) pair")
+        payload, timestamp = frame
+        # The fold adds the timeout to this: ``(ts if ts is not None else now)
+        # + self.timeout``. None is fine, the fold substitutes now; anything
+        # non-numeric raises TypeError there, which is outside the guard.
+        if timestamp is not None and not isinstance(timestamp, (int, float)):
+            raise TypeError(
+                f"frame timestamp must be a number or null, got "
+                f"{type(timestamp).__name__}")
+        if not isinstance(payload, dict):
+            raise TypeError(
+                f"frame must be a mapping, got {type(payload).__name__}")
+        entities = payload.get("entities", [])
+        if not isinstance(entities, (list, tuple)):
+            raise TypeError(
+                f"frame entities must be a list, got {type(entities).__name__}")
+        for entity in entities:
+            if not isinstance(entity, dict):
+                raise TypeError(
+                    f"each entity must be a mapping, got {type(entity).__name__}")
+
+
 class Session(_SpecSession):
     """OVOS-SESSION-1 carrier with the bus-client lifecycle layered on top.
 
@@ -1366,6 +1416,13 @@ class Session(_SpecSession):
 
         Returns:
             Session: A Session instance reconstructed from the provided data.
+
+        Raises:
+            MalformedSession: the carrier is not an object, or its intent
+                context cannot be parsed. Callers that already handle a
+                malformed carrier therefore handle a malformed context too,
+                rather than seeing the parser's own AttributeError/TypeError/
+                ValueError escape.
         """
         data = data or {}
         # Delegate canonical field extraction to the parent: from_dict() applies
@@ -1418,7 +1475,26 @@ class Session(_SpecSession):
         # modern peer that carries both keys is never overridden (canonical
         # wins, no double-count). ``from_dict`` above already populated
         # ``intent_context`` in ``canonical_kwargs`` when present.
-        context = IntentContextManager.deserialize(data.get("context", {}))
+        try:
+            raw_context = data.get("context", {})
+            if raw_context is None:
+                # An explicit null is an ABSENT context, not a malformed one.
+                # Plenty of serializers emit the key with null rather than
+                # omitting it, and §2.1 normalizes the map to a dict either
+                # way, so rejecting it would fail sessions that are fine.
+                raw_context = {}
+            _validate_legacy_context_shape(raw_context)
+            context = IntentContextManager.deserialize(raw_context)
+        except (AttributeError, TypeError, ValueError) as error:
+            # Same contract as the carrier itself (§2.5): a malformed session is
+            # rejected as MalformedSession, which callers already handle.
+            # Without this, the parser's own errors -- and the later fold's,
+            # which the shape check above brings forward to here -- escape every
+            # handler written for this function, killing a reader that was only
+            # meant to drop one message.
+            raise MalformedSession(
+                f"session carries a malformed intent context: {error}"
+            ) from error
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
