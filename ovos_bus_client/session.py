@@ -1,5 +1,7 @@
 import enum
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
@@ -102,6 +104,76 @@ def _normalize_location_input(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             legacy["tz"] = timezone["code"]
         return legacy
     return raw
+
+
+def _timezone_block(tz_code: str) -> Optional[Dict[str, Any]]:
+    """Build a legacy ``timezone`` block that agrees with ``tz_code``.
+
+    The pre-spec block carries ``code``, ``name``, ``offset`` and
+    ``dstOffset``. Only ``code`` lives in the OVOS-SESSION-1 §3.5 field, so
+    the other three have to come from somewhere. Copying them from the
+    reading box is what made the object self-contradictory: a session that
+    says ``Europe/Lisbon`` paired with the master's ``offset`` of -21600000.
+
+    They are derived from the code itself instead, through ``zoneinfo``, at
+    the current instant, because ``offset`` and ``dstOffset`` are only
+    defined against a moment. ``offset`` is the zone's standard offset and
+    ``dstOffset`` the daylight amount, both in milliseconds, which is the
+    convention the block already used.
+
+    ``name`` is the abbreviation ``zoneinfo`` supplies (``WEST``), not the
+    long Windows-style name the configuration file carries (``Western
+    European Summer Time``). An abbreviation that agrees with the code beats
+    a long name that does not.
+
+    Returns ``None`` when the code is not a zone this system knows, leaving
+    the caller to fall back rather than invent a block.
+    """
+    try:
+        zone = ZoneInfo(tz_code)
+    except Exception:  # unknown zone, or no tz database on this system
+        return None
+    now = datetime.now(zone)
+    dst = now.dst() or timedelta(0)
+    return {
+        "code": tz_code,
+        "name": now.tzname(),
+        "offset": int((now.utcoffset() - dst).total_seconds() * 1000),
+        "dstOffset": int(dst.total_seconds() * 1000),
+    }
+
+
+def _configured_location() -> Dict[str, Any]:
+    """Project the deployment-configured location into the §3.5 flat shape.
+
+    OVOS-SESSION-1 §3.5 makes ``location`` a client-owned field: the client
+    is the authoritative source, and an OMITTED ``location`` resolves at each
+    consumer against that consumer's own deployment default (§2.1). Across a
+    HiveMind link the consumer is the master, so a satellite that omits the
+    field has its own configured location replaced by the master's. The
+    session ORIGIN therefore declares its configured value here.
+
+    The mycroft.conf block keeps the legacy nested shape
+    (``city``/``coordinate``/``timezone``); only the three §3.5 keys are read
+    from it, and a non-numeric coordinate is dropped instead of being
+    declared. Returns ``{}`` when the deployment configures no location.
+    """
+    cfg = Configuration().get("location", {}) or {}
+    if not isinstance(cfg, dict):
+        return {}
+    coordinate = cfg.get("coordinate", {}) or {}
+    timezone = cfg.get("timezone", {}) or {}
+    location: Dict[str, Any] = {}
+    for key, raw in (("lat", coordinate.get("latitude")),
+                     ("lon", coordinate.get("longitude"))):
+        try:
+            location[key] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    code = timezone.get("code")
+    if isinstance(code, str) and code:
+        location["tz"] = code
+    return location
 
 
 def _get_default_lang() -> str:
@@ -732,10 +804,14 @@ class Session(_SpecSession):
             tts_prefs (Dict): Deprecated; provided value will be ignored.
             location_prefs (Dict): OVOS-SESSION-1 §3.5 `location` -- either the wire shape
                 `{lat, lon, tz}` or the legacy nested mycroft.conf shape (normalized on
-                ingest, with a deprecation warning). Stored as given (key-wise validated);
-                since the deployment default for this field IS the deployment
-                configuration (§4.1), an omitted/empty/malformed value is stored as `{}`,
-                never materialized from configuration -- readers fall back at read time.
+                ingest, with a deprecation warning). Stored as given (key-wise validated).
+                `None` (omitted) means this process ORIGINATES the session and declares
+                nothing: the deployment-configured location is stamped (§3.5
+                client-owned field, ruling on §4.1 in T-2292), so the value crosses the
+                wire instead of resolving against the consumer's own configuration. An
+                explicit value, `{}` included, is stored as given: a session rebuilt
+                from a received carrier passes what the carrier carried (`{}` when it
+                carried nothing) and never receives a stamp.
             system_unit (str): Measurement system preference (e.g., "metric" or "imperial").
             time_format (str): Time format preference identifier.
             date_format (str): Date format preference identifier.
@@ -815,6 +891,19 @@ class Session(_SpecSession):
         location = (location_prefs if location_prefs is not None
                    else canonical_kwargs.pop("location", None))
         canonical_kwargs.pop("location", None)
+        # OVOS-SESSION-1 §3.5 / §4.1 (ruling T-2292): §4.1 binds a component
+        # DERIVING a Message for a session it did not originate. It does not
+        # reach the origin declaring its own session, and §3.5 makes the
+        # client the authoritative source for this client-owned field. A
+        # process that CONSTRUCTS the session it originates and passes no
+        # location at all (``None``) therefore stamps its configured
+        # location. An explicit value, ``{}`` included, is what the caller
+        # declared: a session rebuilt from a received carrier
+        # (``deserialize``, ``from_message``, the session sync fold) passes
+        # the carrier's value, ``{}`` when it carried none, and so never has
+        # one synthesized for it.
+        if location is None:
+            location = _configured_location() or None
 
         # --- canonical SESSION-1 fields / helpers (inherited) ----------------
         # Every registered field is forwarded to the canonical parent so the
@@ -849,16 +938,15 @@ class Session(_SpecSession):
         self.touch_time = int(time.time())
         self.expiration_seconds = expiration_seconds or \
                                   Configuration().get('session', {}).get("ttl", -1)
-        # OVOS-SESSION-1 §3.5: ``location``'s deployment default IS a
-        # deployment-configured value (the mycroft.conf location), so §4.1
-        # forbids materializing it into session state or onto the wire on
-        # the origin's behalf. `self.location` is set above via the parent
-        # constructor, which stores ONLY what was actually provided
-        # (key-wise validated, folded to `{}` by `_normalize_empty_containers`
-        # below when nothing valid was given); the configured fallback is
-        # applied at READ time only -- see `timezone` and
-        # `location_preferences` below, mirroring how `timezone` already
-        # falls back to config without storing it.
+        # OVOS-SESSION-1 §3.5 ``location`` is set above via the parent
+        # constructor, from what the caller provided or, for a session this
+        # process originates with no location given, from the deployment
+        # configuration (see the stamp above). A session rebuilt from a received
+        # carrier keeps ONLY what the carrier carried (key-wise validated,
+        # folded to `{}` by `_normalize_empty_containers` below when nothing
+        # valid was given), and the configured fallback stays a READ-time
+        # projection there -- see `timezone` and `location_preferences`
+        # below.
         # Legacy back-compat: a caller (or a legacy wire payload via
         # deserialize) may hand an ``IntentContextManager`` frame stack. It is
         # NOT stored as a parallel object — its entities fold into the canonical
@@ -971,10 +1059,27 @@ class Session(_SpecSession):
                 "longitude": self.location.get(
                     "lon", cfg.get("coordinate", {}).get("longitude")),
             },
-            "timezone": {**cfg.get("timezone", {}),
-                        "code": self.location.get(
-                            "tz", cfg.get("timezone", {}).get("code"))},
+            "timezone": self._timezone_view(cfg.get("timezone", {}) or {}),
         }
+
+    def _timezone_view(self, cfg_timezone: Dict[str, Any]) -> Dict[str, Any]:
+        """The legacy ``timezone`` block, consistent with whoever owns it.
+
+        When the session carries a ``tz``, every field comes from that zone,
+        so ``code``, ``name``, ``offset`` and ``dstOffset`` agree with each
+        other. When it carries none, the reading box's own configured block
+        is returned untouched, which is what a session with no declared
+        position has always resolved to (§2.1).
+        """
+        tz_code = self.location.get("tz")
+        if not tz_code:
+            return dict(cfg_timezone)
+        derived = _timezone_block(tz_code)
+        if derived is not None:
+            return derived
+        # The zone is unknown here. Say so with the code alone rather than
+        # pair it with another zone's offsets.
+        return {"code": tz_code}
 
     @location_preferences.setter
     def location_preferences(self, value: Optional[Dict[str, Any]]):
@@ -1326,10 +1431,11 @@ class Session(_SpecSession):
             # keeps working; _normalize_location_input on the read side
             # already accepts either shape under the same "location" key
             if "tz" in location:
-                log_deprecation(
-                    "session.location.timezone.code is a legacy nested "
-                    "mycroft.conf projection; read location.tz instead",
-                    _NEXT_MAJOR_VERSION)
+                # No deprecation warning on this side: the projection is a
+                # habit only a READER can have, and the producer cannot act
+                # on a warning about it. Since the origin now stamps its
+                # configured location, warning here would fire on every
+                # serialize of every session.
                 location["timezone"] = {"code": location["tz"]}
             data["location"] = location
         else:
@@ -1520,7 +1626,17 @@ class _BusSessionManagerMixin:
         """
         sess = cls.sessions.get(DEFAULT_SESSION_ID)
         if sess is None:
-            sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+            # CONSTRUCT, do not deserialize. ``deserialize`` is the rebuild
+            # path: it passes the carrier's ``location`` (``{}`` when the
+            # carrier had none) and so never stamps, which is right for a
+            # session this box received. The default session is not received.
+            # It is the box's own session, originated here, and the one every
+            # message without a carrier takes. OVOS-SESSION-1 §4.1 binds "every
+            # session other than the default session", so the default is the
+            # one case §4.1 never bound, and §3.5 has the origin declare its
+            # configured position. Built through the constructor it takes the
+            # same stamp as any other session this box originates.
+            sess = cls.session_cls(session_id=DEFAULT_SESSION_ID)
             cls.sessions[DEFAULT_SESSION_ID] = sess
         cls.default_session = sess
         return sess
@@ -1589,7 +1705,14 @@ class _BusSessionManagerMixin:
         """
         Define and return a new default_session (then broadcast it on the bus)
         """
-        sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+        # CONSTRUCT, do not deserialize, for the reason get_default_session
+        # gives: deserialize is the rebuild path for a session this box
+        # RECEIVED, so it never stamps §3.5. A reset replaces the box's own
+        # default, which is originated here, so it takes the stamp like any
+        # other session this box originates. Built the old way, the registry
+        # and the carrier held an unstamped default after every reset, and
+        # ovoscope resets the default session while building a cell.
+        sess = cls.session_cls(session_id=DEFAULT_SESSION_ID)
         cls.sessions[DEFAULT_SESSION_ID] = sess
         cls.default_session = sess
         LOG.info("Default Session reset")
