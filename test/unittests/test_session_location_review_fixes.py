@@ -71,6 +71,29 @@ class TestDefaultSessionIsStamped(unittest.TestCase):
             rebuilt = Session.deserialize({"session_id": DEFAULT_SESSION_ID})
         self.assertEqual(rebuilt.location, {})
 
+    def test_a_reset_default_session_is_stamped_too(self):
+        """``reset_default_session`` is the same origin, so it stamps too.
+
+        It built the replacement with ``deserialize``, which is the rebuild
+        path for a session this box RECEIVED, and so never stamps. After a
+        reset the registry and the carrier held an unstamped default, and
+        ovoscope resets the default session while building a cell, so every
+        fleet cell ran that path.
+        """
+        with patch.object(session_module, "Configuration",
+                          return_value=_KANSAS_CITY):
+            before = SessionManager.get_default_session()
+            self.assertEqual(before.location.get("tz"), "America/Chicago")
+
+            after = SessionManager.reset_default_session()
+
+        stamp = {"lat": 38.9717, "lon": -95.2353, "tz": "America/Chicago"}
+        self.assertEqual(after.location, stamp, "the returned session lost it")
+        self.assertEqual(SessionManager.sessions[DEFAULT_SESSION_ID].location,
+                         stamp, "the registry holds an unstamped default")
+        self.assertEqual(after.serialize().get("location", {}).get("tz"),
+                         "America/Chicago", "no consumer would see it")
+
 
 class TestTimezoneViewAgreesWithItself(unittest.TestCase):
     """Fix 2: the legacy view never pairs one zone's code with another's offset."""

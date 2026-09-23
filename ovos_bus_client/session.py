@@ -1705,7 +1705,14 @@ class _BusSessionManagerMixin:
         """
         Define and return a new default_session (then broadcast it on the bus)
         """
-        sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+        # CONSTRUCT, do not deserialize, for the reason get_default_session
+        # gives: deserialize is the rebuild path for a session this box
+        # RECEIVED, so it never stamps §3.5. A reset replaces the box's own
+        # default, which is originated here, so it takes the stamp like any
+        # other session this box originates. Built the old way, the registry
+        # and the carrier held an unstamped default after every reset, and
+        # ovoscope resets the default session while building a cell.
+        sess = cls.session_cls(session_id=DEFAULT_SESSION_ID)
         cls.sessions[DEFAULT_SESSION_ID] = sess
         cls.default_session = sess
         LOG.info("Default Session reset")
