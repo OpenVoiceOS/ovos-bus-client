@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.19a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.19a1) (2026-09-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.18a1...2.11.19a1)
+
+**Merged pull requests:**
+
+- fix: the session origin stamps its own configured location \(SESSION-1 §3.5\) [\#365](https://github.com/OpenVoiceOS/ovos-bus-client/pull/365) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.18a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.18a1) (2026-09-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.17a1...2.11.18a1)
@@ -371,10 +379,6 @@
 ## [2.6.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.3a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.2a2...2.6.3a1)
-
-**Merged pull requests:**
-
-- fix: bridge namespace counterpart on receive, not as a second wire message [\#258](https://github.com/OpenVoiceOS/ovos-bus-client/pull/258) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a2) (2026-06-29)
 
