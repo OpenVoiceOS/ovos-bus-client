@@ -1,5 +1,7 @@
 import enum
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
@@ -102,6 +104,43 @@ def _normalize_location_input(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             legacy["tz"] = timezone["code"]
         return legacy
     return raw
+
+
+def _timezone_block(tz_code: str) -> Optional[Dict[str, Any]]:
+    """Build a legacy ``timezone`` block that agrees with ``tz_code``.
+
+    The pre-spec block carries ``code``, ``name``, ``offset`` and
+    ``dstOffset``. Only ``code`` lives in the OVOS-SESSION-1 §3.5 field, so
+    the other three have to come from somewhere. Copying them from the
+    reading box is what made the object self-contradictory: a session that
+    says ``Europe/Lisbon`` paired with the master's ``offset`` of -21600000.
+
+    They are derived from the code itself instead, through ``zoneinfo``, at
+    the current instant, because ``offset`` and ``dstOffset`` are only
+    defined against a moment. ``offset`` is the zone's standard offset and
+    ``dstOffset`` the daylight amount, both in milliseconds, which is the
+    convention the block already used.
+
+    ``name`` is the abbreviation ``zoneinfo`` supplies (``WEST``), not the
+    long Windows-style name the configuration file carries (``Western
+    European Summer Time``). An abbreviation that agrees with the code beats
+    a long name that does not.
+
+    Returns ``None`` when the code is not a zone this system knows, leaving
+    the caller to fall back rather than invent a block.
+    """
+    try:
+        zone = ZoneInfo(tz_code)
+    except Exception:  # unknown zone, or no tz database on this system
+        return None
+    now = datetime.now(zone)
+    dst = now.dst() or timedelta(0)
+    return {
+        "code": tz_code,
+        "name": now.tzname(),
+        "offset": int((now.utcoffset() - dst).total_seconds() * 1000),
+        "dstOffset": int(dst.total_seconds() * 1000),
+    }
 
 
 def _configured_location() -> Dict[str, Any]:
@@ -1020,10 +1059,27 @@ class Session(_SpecSession):
                 "longitude": self.location.get(
                     "lon", cfg.get("coordinate", {}).get("longitude")),
             },
-            "timezone": {**cfg.get("timezone", {}),
-                        "code": self.location.get(
-                            "tz", cfg.get("timezone", {}).get("code"))},
+            "timezone": self._timezone_view(cfg.get("timezone", {}) or {}),
         }
+
+    def _timezone_view(self, cfg_timezone: Dict[str, Any]) -> Dict[str, Any]:
+        """The legacy ``timezone`` block, consistent with whoever owns it.
+
+        When the session carries a ``tz``, every field comes from that zone,
+        so ``code``, ``name``, ``offset`` and ``dstOffset`` agree with each
+        other. When it carries none, the reading box's own configured block
+        is returned untouched, which is what a session with no declared
+        position has always resolved to (§2.1).
+        """
+        tz_code = self.location.get("tz")
+        if not tz_code:
+            return dict(cfg_timezone)
+        derived = _timezone_block(tz_code)
+        if derived is not None:
+            return derived
+        # The zone is unknown here. Say so with the code alone rather than
+        # pair it with another zone's offsets.
+        return {"code": tz_code}
 
     @location_preferences.setter
     def location_preferences(self, value: Optional[Dict[str, Any]]):
@@ -1570,7 +1626,17 @@ class _BusSessionManagerMixin:
         """
         sess = cls.sessions.get(DEFAULT_SESSION_ID)
         if sess is None:
-            sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+            # CONSTRUCT, do not deserialize. ``deserialize`` is the rebuild
+            # path: it passes the carrier's ``location`` (``{}`` when the
+            # carrier had none) and so never stamps, which is right for a
+            # session this box received. The default session is not received.
+            # It is the box's own session, originated here, and the one every
+            # message without a carrier takes. OVOS-SESSION-1 §4.1 binds "every
+            # session other than the default session", so the default is the
+            # one case §4.1 never bound, and §3.5 has the origin declare its
+            # configured position. Built through the constructor it takes the
+            # same stamp as any other session this box originates.
+            sess = cls.session_cls(session_id=DEFAULT_SESSION_ID)
             cls.sessions[DEFAULT_SESSION_ID] = sess
         cls.default_session = sess
         return sess
