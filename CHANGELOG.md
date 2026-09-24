@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.20a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.20a1) (2026-09-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.19a1...2.11.20a1)
+
+**Merged pull requests:**
+
+- fix: a non-string lang on the wire no longer raises in get\_message\_lang [\#360](https://github.com/OpenVoiceOS/ovos-bus-client/pull/360) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.19a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.19a1) (2026-09-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.18a1...2.11.19a1)
@@ -255,15 +263,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.6a2)
 
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
@@ -366,11 +374,6 @@
 ## [2.6.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.5a1) (2026-07-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.4a1...2.6.5a1)
-
-**Merged pull requests:**
-
-- fix: discard malformed frames instead of tearing down the connection [\#264](https://github.com/OpenVoiceOS/ovos-bus-client/pull/264) ([JarbasAl](https://github.com/JarbasAl))
-- fix: Clear bus connected state on close/error [\#263](https://github.com/OpenVoiceOS/ovos-bus-client/pull/263) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [2.6.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.4a1) (2026-07-03)
 
