@@ -31,6 +31,60 @@ class TestGetMessageLang(TestCase):
     def test_none_message_returns_none(self):
         self.assertIsNone(get_message_lang(None))
 
+    def test_non_string_lang_in_data_falls_through_to_session(self):
+        """A non-string `lang` is not a declared value, so it resolves like an
+        absent one (OVOS-PIPELINE-1 §9.1) instead of raising."""
+        s = Session(lang="es-ES")
+        for bad in (5, ["en-US"], {"tag": "en-US"}, 3.5, True):
+            with self.subTest(bad=bad):
+                msg = Message("recognizer_loop:utterance",
+                              data={"utterances": ["hello world"], "lang": bad},
+                              context={"session": s.serialize()})
+                with patch("ovos_bus_client.util.LOG") as log:
+                    self.assertEqual(get_message_lang(msg).lower(), "es-es")
+                warned = " ".join(str(c) for c in log.warning.call_args_list)
+                self.assertIn(type(bad).__name__, warned,
+                              f"warning does not name the received type: {warned}")
+
+    def test_non_string_lang_in_context_falls_through_to_session(self):
+        s = Session(lang="es-ES")
+        msg = Message("recognizer_loop:utterance",
+                      data={"utterances": ["hello world"]},
+                      context={"lang": 5, "session": s.serialize()})
+        with patch("ovos_bus_client.util.LOG") as log:
+            self.assertEqual(get_message_lang(msg).lower(), "es-es")
+        self.assertTrue(log.warning.called)
+
+    def test_non_string_lang_in_data_falls_through_to_context(self):
+        """A non-string data `lang` yields to a valid context `lang` before the
+        session answers (OVOS-PIPELINE-1 §9.1)."""
+        s = Session(lang="es-ES")
+        msg = Message("ovos.utterance.handle",
+                      data={"utterances": ["hello world"], "lang": 5},
+                      context={"lang": "de-DE", "session": s.serialize()})
+        with patch("ovos_bus_client.util.LOG") as log:
+            self.assertEqual(get_message_lang(msg), "de-DE")
+        self.assertTrue(log.warning.called)
+
+    def test_non_string_lang_with_no_session_falls_through_to_default(self):
+        """With no session evidence the default lang answers, still no raise."""
+        msg = Message("recognizer_loop:utterance",
+                      data={"utterances": ["hello world"], "lang": 5})
+        with patch("ovos_bus_client.util.LOG") as log:
+            returned = get_message_lang(msg)
+        self.assertTrue(log.warning.called)
+        self.assertIsInstance(returned, str)
+        self.assertEqual(returned, get_message_lang(
+            Message("recognizer_loop:utterance", data={"utterances": ["hi"]})))
+
+    def test_empty_string_lang_still_falls_through(self):
+        """The pre-existing falsy path is unchanged and warns about nothing."""
+        s = Session(lang="es-ES")
+        msg = Message("t", data={"lang": ""}, context={"session": s.serialize()})
+        with patch("ovos_bus_client.util.LOG") as log:
+            self.assertEqual(get_message_lang(msg).lower(), "es-es")
+        self.assertFalse(log.warning.called)
+
 
 class TestGetWebsocketAndBus(TestCase):
     def test_get_websocket_threaded(self):
