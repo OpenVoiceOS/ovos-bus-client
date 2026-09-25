@@ -1,14 +1,17 @@
-"""A malformed intent context must be rejected as MalformedSession.
-
-``Session.deserialize`` promises exactly one failure mode for a carrier it
-cannot read, and every caller is written against it -- ``SessionManager``'s
-``ovos.session.sync`` handler catches ``MalformedSession``, logs it and carries
-on with no inbound session.
+"""A malformed intent context costs that field, not the whole session.
 
 The intent-context parser used to raise its own ``AttributeError``,
-``TypeError`` and ``ValueError``, which escaped that handler and surfaced on the
-bus client's receive thread. One peer sending one bad frame could take the
-reader down, where the contract says it should cost that peer its one message.
+``TypeError`` and ``ValueError`` out of ``Session.deserialize``. Those escaped
+every caller written for that function -- ``SessionManager``'s
+``ovos.session.sync`` handler among them -- and surfaced on the bus client's
+receive thread, so one peer sending one bad frame could take the reader down.
+
+Catching them is still the point. Rejecting the whole carrier for it was not:
+OVOS-SESSION-1 §2.5 is field-by-field, and every other field in this
+deserializer already honours that -- a bad ``site_id``, ``pipeline`` or
+``active_skills`` logs "treating as omitted" and the session survives with its
+``session_id`` and ``lang``. ``context`` was the sole exception, so a peer with
+one bad frame stack also cost the reader a perfectly good session identity.
 """
 import json
 import unittest
@@ -51,11 +54,27 @@ class TestMalformedIntentContext(unittest.TestCase):
          {"context": {"frame_stack": [[{"entities": [_ENTITY]}, {}]]}}),
     )
 
-    def test_malformed_context_raises_malformed_session(self):
+    def test_a_malformed_context_is_omitted_and_the_session_survives(self):
+        """Neither an escaping builtin nor a discarded session."""
         for name, payload in self.MALFORMED:
             with self.subTest(name):
-                with self.assertRaises(MalformedSession):
+                carrier = dict(payload, session_id="s-1", lang="en-us")
+                session = Session.deserialize(carrier)
+                self.assertEqual(session.session_id, "s-1",
+                                 "a good session_id was thrown away")
+                self.assertEqual(session.lang, "en-US",
+                                 "a good lang was thrown away")
+                self.assertEqual(len(session.context.frame_stack), 0,
+                                 "the malformed context was not omitted")
+
+    def test_no_parser_builtin_escapes(self):
+        """The original defect: these reached the receive thread."""
+        for name, payload in self.MALFORMED:
+            with self.subTest(name):
+                try:
                     Session.deserialize(payload)
+                except (AttributeError, TypeError, ValueError) as error:
+                    self.fail(f"{type(error).__name__} escaped for {name}: {error}")
 
     def test_a_null_or_numeric_timestamp_is_accepted(self):
         """The fold substitutes now for None and adds the timeout to a number,
@@ -69,10 +88,16 @@ class TestMalformedIntentContext(unittest.TestCase):
                                                      timestamp]]},
                     }).session_id, "ts")
 
-    def test_the_cause_is_preserved(self):
-        with self.assertRaises(MalformedSession) as caught:
-            Session.deserialize({"context": 5})
-        self.assertIsNotNone(caught.exception.__cause__)
+    def test_a_non_object_context_is_omitted_too(self):
+        session = Session.deserialize({"session_id": "s-2", "context": 5})
+        self.assertEqual(session.session_id, "s-2")
+        self.assertEqual(len(session.context.frame_stack), 0)
+
+    def test_a_malformed_carrier_itself_is_still_rejected(self):
+        """Field tolerance is not carrier tolerance: §2.5 still rejects a
+        session that is not an object at all, and callers rely on that."""
+        with self.assertRaises(MalformedSession):
+            Session.deserialize("not-a-session")
 
     def test_a_canonical_round_trip_still_parses(self):
         """Whatever serialize() emits must deserialize; the shape check is

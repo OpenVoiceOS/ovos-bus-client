@@ -1486,15 +1486,23 @@ class Session(_SpecSession):
             _validate_legacy_context_shape(raw_context)
             context = IntentContextManager.deserialize(raw_context)
         except (AttributeError, TypeError, ValueError) as error:
-            # Same contract as the carrier itself (§2.5): a malformed session is
-            # rejected as MalformedSession, which callers already handle.
-            # Without this, the parser's own errors -- and the later fold's,
-            # which the shape check above brings forward to here -- escape every
-            # handler written for this function, killing a reader that was only
-            # meant to drop one message.
-            raise MalformedSession(
-                f"session carries a malformed intent context: {error}"
-            ) from error
+            # §2.5 is field-by-field: a malformed field is treated as omitted
+            # and the rest of the session is kept. Every other field here
+            # already behaves that way -- a bad `site_id`, `pipeline` or
+            # `active_skills` logs "treating as omitted" (the canonical parent
+            # does it in ovos_spec_tools.session) and the session survives with
+            # its `session_id` and `lang` intact. `context` was the one
+            # exception, and rejecting the whole carrier for it threw away
+            # fields that parsed perfectly well.
+            #
+            # The parser's own AttributeError/TypeError/ValueError are still
+            # caught, which is the point of catching here at all: unhandled
+            # they escape every caller written for this function and kill a
+            # reader that was only meant to drop one field.
+            LOG.warning(
+                "OVOS-SESSION-1 §2: `context` is malformed (%s); "
+                "treating as omitted", error)
+            context = IntentContextManager()
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
