@@ -10,7 +10,7 @@ from ovos_utils import json_dumps
 from os import getpid
 import queue as _queue
 from threading import Event, Lock, Thread
-from typing import Union, Callable, Any, List, Optional
+from typing import Union, Callable, Any, Dict, List, Optional
 from uuid import uuid4
 
 from ovos_utils.log import LOG, log_deprecation
@@ -263,6 +263,108 @@ def _compute_legacy_intent_twin(message: Message,
     twin = _verbatim_copy(message, topic)
     twin.context[INTENT_COMPAT_TWIN_KEY] = True
     return twin
+
+
+#: How long a canonical frame stays a witness for the twin that follows it.
+#: The emitter puts the twin on the wire in the same ``emit()`` call, so the two
+#: frames are adjacent; this only has to survive queueing. It is narrow on
+#: purpose, like the mirror window it sits beside.
+TWIN_WITNESS_WINDOW_S = 5.0
+
+
+class TwinWitnessBook:
+    """Which legacy twins this client has actually seen a canonical frame for.
+
+    A ``_namespace_compat_twin`` marker only means "a canonical frame already
+    carried this event". That holds for a twin the emitter built, and NOT for a
+    frame that merely INHERITED the marker in a copied context.
+
+    OVOS-MSG-1 §5.2 makes that inheritance conforming rather than a fault:
+    ``reply`` produces "a copy of C" in which "All other context keys,
+    including ``session`` (§4), are preserved unchanged". A subscriber too old
+    to know the marker cannot strip it and has no reason to, since the key is
+    not its own. A modern client pops the marker before local dispatch so its
+    OWN descendants stay clean, but it cannot pop it inside another process.
+
+    So the receive rule believes the marker only when the canonical frame is
+    witnessed. Shared by both wire clients so they suppress identically.
+    """
+
+    def __init__(self, window: float = TWIN_WITNESS_WINDOW_S):
+        self._seen: Dict[str, float] = {}
+        self._lock = Lock()
+        self.window = window
+
+    @staticmethod
+    def fingerprint(msg_type: str, data, context) -> Optional[str]:
+        """Identify a twin frame by what is on the wire, or ``None``.
+
+        The marker is left out: the witness is recorded from the CANONICAL
+        frame, which never carries it.
+        """
+        try:
+            ctx = {k: v for k, v in (context or {}).items()
+                   if k != NAMESPACE_COMPAT_TWIN_KEY}
+            return _json.dumps([msg_type, data, ctx],
+                               sort_keys=True, default=str)
+        except Exception:
+            # Not fingerprintable, so a twin cannot be proven: the caller keeps
+            # the frame. Same rule the mirror guard follows.
+            return None
+
+    def witness(self, translator, message) -> None:
+        """Record the twin THIS frame would be twinned into, if any."""
+        counterparts = translator.counterpart_topics(message.msg_type)
+        if not counterparts:
+            return
+        topic = counterparts[0]
+        if topic == message.msg_type:
+            return
+        try:
+            payload = translator.translate_payload(
+                from_topic=message.msg_type, to_topic=topic, data=message.data)
+        except Exception:
+            return
+        fingerprint = self.fingerprint(topic, payload, message.context)
+        if fingerprint is None:
+            return
+        now = time.monotonic()
+        with self._lock:
+            for key in [k for k, ts in self._seen.items()
+                        if now - ts >= self.window]:
+                self._seen.pop(key, None)
+            self._seen[fingerprint] = now
+
+    def is_real_twin(self, message) -> bool:
+        """Was a canonical frame for this exact twin actually seen?"""
+        fingerprint = self.fingerprint(
+            message.msg_type, message.data, message.context)
+        if fingerprint is None:
+            return False
+        now = time.monotonic()
+        with self._lock:
+            ts = self._seen.get(fingerprint)
+            if ts is None:
+                return False
+            if now - ts >= self.window:
+                self._seen.pop(fingerprint, None)
+                return False
+            return True
+
+
+def twin_witness_book(client) -> TwinWitnessBook:
+    """The book for a client, created on first use.
+
+    Built lazily rather than in ``__init__`` because both wire clients are
+    widely constructed with ``__new__`` and hand-set attributes (the test suite
+    does it throughout), and a receive path that assumed a constructor had run
+    would break every such caller.
+    """
+    book = getattr(client, "_twin_witnesses", None)
+    if book is None:
+        book = TwinWitnessBook()
+        client._twin_witnesses = book
+    return book
 
 
 def _compute_legacy_namespace_twin(message: Message,
@@ -620,6 +722,28 @@ class MessageBusClient:
         # for the same reason (must not survive onto descendant frames via
         # forward()/reply()).
         is_namespace_twin = parsed_message.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
+        # The marker alone does not prove this frame is a twin. OVOS-MSG-1 §5.2
+        # requires reply() to preserve "All other context keys", so a subscriber
+        # too old to know the marker copies it from the frame it answers onto a
+        # brand new message. That reply is nobody's duplicate: no canonical frame
+        # carries it, and suppressing it loses the only copy there is. Measured
+        # on two vintages: a 7.0.6 / bus-client 1.5.0 fallback skill answers a
+        # canonical ovos.fallback.ping through the twin, and its
+        # ovos.skills.fallback.pong arrived marked and was dropped here, so the
+        # poll saw no answer at all.
+        #
+        # So the marker is now believed only when a canonical frame for this
+        # exact twin was actually seen. An unproven marker is ignored and the
+        # frame is delivered: the cost of that is a duplicate, the cost of the
+        # other way is silence.
+        if is_namespace_twin and not twin_witness_book(self).is_real_twin(parsed_message):
+            LOG.debug(
+                f"{parsed_message.msg_type} carries the namespace twin marker "
+                f"but no canonical frame for it was seen; it was inherited, "
+                f"delivering the frame")
+            is_namespace_twin = False
+        elif not is_namespace_twin:
+            twin_witness_book(self).witness(self._translator, parsed_message)
         # The 'message' firehose is the raw wire-capture stream a modern
         # receiver's wildcard/logging listeners see. A marked NAMESPACE or
         # INTENT twin is the SAME logical dispatch as the canonical frame

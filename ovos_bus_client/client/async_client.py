@@ -39,7 +39,8 @@ from ovos_bus_client.client.client import (_bus_flag,
                                            _compute_legacy_namespace_twin,
                                            _verbatim_copy,
                                            INTENT_COMPAT_TWIN_KEY,
-                                           NAMESPACE_COMPAT_TWIN_KEY)
+                                           NAMESPACE_COMPAT_TWIN_KEY,
+                                           twin_witness_book)
 from ovos_bus_client.conf import load_message_bus_config, MessageBusClientConf
 from ovos_bus_client.message import Message, CollectionMessage
 from ovos_bus_client.session import (SessionManager, Session, DEFAULT_SESSION_ID,
@@ -334,6 +335,18 @@ class AsyncMessageBusClient:
         # descendant frame.
         is_intent_twin = parsed.context.pop(INTENT_COMPAT_TWIN_KEY, False)
         is_namespace_twin = parsed.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
+        # see MessageBusClient.on_message: the marker is believed only when a
+        # canonical frame for this exact twin was seen. A legacy subscriber's
+        # reply inherits the marker through OVOS-MSG-1 §5.2 and is nobody's
+        # duplicate, so suppressing it loses the only copy of that event.
+        if is_namespace_twin and not twin_witness_book(self).is_real_twin(parsed):
+            LOG.debug(
+                f"{parsed.msg_type} carries the namespace twin marker but no "
+                f"canonical frame for it was seen; it was inherited, "
+                f"delivering the frame")
+            is_namespace_twin = False
+        elif not is_namespace_twin:
+            twin_witness_book(self).witness(self._translator, parsed)
         # one logical dispatch yields one firehose event -- see
         # MessageBusClient.on_message for why each marker gates it
         if not is_namespace_twin and not is_intent_twin:
