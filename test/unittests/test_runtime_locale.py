@@ -16,6 +16,7 @@ import subprocess
 import sys
 import unittest
 
+from ovos_config.config import Configuration
 from ovos_config.locale import setup_locale
 import ovos_config.locale as locale_module
 
@@ -23,12 +24,36 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.util import get_message_lang
 
 
+#: Module globals ``setup_locale()`` mutates. Named rather than discovered so a
+#: new one is a visible test failure instead of silent leakage. Not every
+#: supported ovos-config carries both: 2.3.8a2 and 3.0.0a1 drop ``_lang`` and
+#: have ``setup_locale()`` write the configuration instead, so each is saved
+#: only if it is there.
+_LOCALE_GLOBALS = ("_lang", "_default_tz")
+
+
 class TestRuntimeLocaleIsHonoured(unittest.TestCase):
+    """Each test restores every piece of locale state ``setup_locale()`` moves.
+
+    ``setup_locale()`` sets the language, the default timezone and loads
+    lingua-franca resources. Restoring only the language left a timezone
+    established by another test replaced with the configured one, so the order
+    tests ran in could change their outcome.
+    """
+
     def setUp(self):
-        self._lang = locale_module._lang
+        self._saved = {name: getattr(locale_module, name)
+                       for name in _LOCALE_GLOBALS
+                       if hasattr(locale_module, name)}
+        # On the versions that have no ``_lang``, ``setup_locale()`` writes the
+        # configuration, so that is the value to put back.
+        self._saved_config_lang = Configuration().get("lang")
 
     def tearDown(self):
-        locale_module._lang = self._lang
+        for name, value in self._saved.items():
+            setattr(locale_module, name, value)
+        if Configuration().get("lang") != self._saved_config_lang:
+            Configuration()["lang"] = self._saved_config_lang
 
     def test_a_runtime_locale_switch_reaches_lang_resolution(self):
         setup_locale("it-it")
@@ -41,10 +66,10 @@ class TestRuntimeLocaleIsHonoured(unittest.TestCase):
 
     def test_the_config_is_the_fallback_when_no_locale_was_set_up(self):
         """With no active lang, the configured value is what should surface."""
-        from ovos_config.config import Configuration
         from ovos_bus_client.util import standardize_lang
 
-        locale_module._lang = None
+        if hasattr(locale_module, "_lang"):
+            locale_module._lang = None
         expected = standardize_lang(Configuration().get("lang", "en-us"))
         self.assertEqual(get_message_lang(Message("t", data={})), expected)
 
