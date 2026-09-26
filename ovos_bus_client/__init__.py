@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ovos_bus_client.client.client import MessageBusClient, GUIWebsocketClient
+try:
+    from ovos_bus_client.client.async_client import AsyncMessageBusClient
+except ImportError:
+    AsyncMessageBusClient = None  # websockets not installed
 from ovos_bus_client.message import Message, GUIMessage
 from ovos_bus_client.send_func import send
 from ovos_bus_client.session import Session, SessionManager, UtteranceState
@@ -29,6 +33,7 @@ clients connected to the bus.
 
 __all__ = [
     MessageBusClient,
+    AsyncMessageBusClient,
     GUIWebsocketClient,
     GUIMessage,
     Message,
