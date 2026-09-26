@@ -63,7 +63,7 @@ and consume pure JSON — they have never encrypted or decrypted the envelope.
 The legacy AES-GCM wrapper (controlled by
 [`websocket.secret_key`](configuration.md#deprecated-websocketsecret_key-and-websocketallow_unencrypted))
 was always a transport-level concern
-([OVOS-MSG-1 §1 Scope](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md#1-scope)
+([OVOS-MSG-1 §1 Scope](https://github.com/OpenVoiceOS/architecture/blob/dev/msg-1.md#1-scope)
 explicitly excludes encryption from the message-object spec); it is now
 explicitly placed at the transport edge inside
 [`MessageBusClient` and `GUIWebsocketClient`](client.md)
