@@ -885,6 +885,90 @@ class _IntentContextView(IntentContextManager):
         self._session.touch()
 
 
+
+def _require_fold_number(value, what: str) -> None:
+    """Reject a number the fold cannot do float arithmetic with.
+
+    The fold computes ``timestamp + timeout`` and compares with ``time.time()``,
+    so both are coerced to float there. A JSON integer too large for a float
+    (``10**400``) passes an ``isinstance(int)`` check and then raises
+    ``OverflowError`` inside ``Session.__init__``, after this guard.
+    """
+    if value is None:
+        return
+    if not isinstance(value, (int, float)):
+        raise TypeError(f"{what} must be a number or null, got {type(value).__name__}")
+    try:
+        float(value)
+    except OverflowError as error:
+        raise ValueError(f"{what} is too large") from error
+
+
+def _validate_legacy_context_shape(raw) -> None:
+    """Reject a legacy ``context`` the session fold cannot consume.
+
+    ``IntentContextManager.deserialize`` is lenient: it will happily build a
+    frame whose ``entities`` is a string, because it only unpacks pairs and
+    passes the frame dict through. The shape is not actually exercised until
+    ``Session.__init__`` folds the stack into ``intent_context``, and that fold
+    is outside every handler written for ``deserialize`` -- so a peer could put
+    an ``AttributeError`` on the reader's thread with a payload this function
+    had already accepted.
+
+    The accepted shape is exactly what ``IntentContextManager.serialize``
+    emits: ``frame_stack`` a list of ``(frame, timestamp)`` pairs, each frame a
+    mapping, its ``entities`` a list of mappings (``_entity_to_entry`` calls
+    ``.get`` on each), and each timestamp a number or null (the fold adds the
+    timeout to it). Tuples are accepted alongside lists because an in-process
+    round trip never passes through JSON.
+    """
+    if not isinstance(raw, dict):
+        raise TypeError(f"context must be a mapping, got {type(raw).__name__}")
+    # The fold compares the timeout with 0 and adds it to each timestamp, so a
+    # string here raised TypeError inside Session.__init__ -- after this guard.
+    _require_fold_number(raw.get("timeout"), "context timeout")
+    frames = raw.get("frame_stack", [])
+    if not isinstance(frames, (list, tuple)):
+        raise TypeError(
+            f"frame_stack must be a list, got {type(frames).__name__}")
+    for frame in frames:
+        if not (isinstance(frame, (list, tuple)) and len(frame) == 2):
+            raise ValueError(
+                "each frame_stack item must be a (frame, timestamp) pair")
+        payload, timestamp = frame
+        # The fold adds the timeout to this: ``(ts if ts is not None else now)
+        # + self.timeout``. None is fine, the fold substitutes now; anything
+        # non-numeric raises TypeError there, which is outside the guard.
+        _require_fold_number(timestamp, "frame timestamp")
+        if not isinstance(payload, dict):
+            raise TypeError(
+                f"frame must be a mapping, got {type(payload).__name__}")
+        entities = payload.get("entities", [])
+        if not isinstance(entities, (list, tuple)):
+            raise TypeError(
+                f"frame entities must be a list, got {type(entities).__name__}")
+        for entity in entities:
+            if not isinstance(entity, dict):
+                raise TypeError(
+                    f"each entity must be a mapping, got {type(entity).__name__}")
+            # Derive the key exactly as _entity_to_entry does. The fold uses it
+            # as a key in the intent_context map, so `["key"]` -- which passes
+            # the mapping check above -- raised "unhashable type: 'list'"
+            # inside Session.__init__, outside this guard. A falsy key is fine:
+            # the fold skips that entity.
+            data = entity.get("data")
+            key = None
+            if isinstance(data, (list, tuple)) and data \
+                    and isinstance(data[0], (list, tuple)) and len(data[0]) >= 2:
+                key = data[0][1]
+            elif isinstance(data, str):
+                key = data
+            if key and not isinstance(key, str):
+                raise TypeError(
+                    f"context entity key must be a string, got "
+                    f"{type(key).__name__}")
+
+
 class Session(_SpecSession):
     """OVOS-SESSION-1 carrier with the bus-client lifecycle layered on top.
 
@@ -1635,6 +1719,12 @@ class Session(_SpecSession):
 
         Returns:
             Session: A Session instance reconstructed from the provided data.
+
+        Raises:
+            MalformedSession: the carrier itself is not an object. A malformed
+                legacy ``context`` does NOT raise: per §2.5 it is logged and
+                treated as omitted, like any other malformed field, and the
+                rest of the session is returned.
         """
         data = data or {}
         # Delegate canonical field extraction to the parent: from_dict() applies
@@ -1687,7 +1777,34 @@ class Session(_SpecSession):
         # modern peer that carries both keys is never overridden (canonical
         # wins, no double-count). ``from_dict`` above already populated
         # ``intent_context`` in ``canonical_kwargs`` when present.
-        context = IntentContextManager.deserialize(data.get("context", {}))
+        try:
+            raw_context = data.get("context", {})
+            if raw_context is None:
+                # An explicit null is an ABSENT context, not a malformed one.
+                # Plenty of serializers emit the key with null rather than
+                # omitting it, and §2.1 normalizes the map to a dict either
+                # way, so rejecting it would fail sessions that are fine.
+                raw_context = {}
+            _validate_legacy_context_shape(raw_context)
+            context = IntentContextManager.deserialize(raw_context)
+        except (AttributeError, TypeError, ValueError) as error:
+            # §2.5 is field-by-field: a malformed field is treated as omitted
+            # and the rest of the session is kept. Every other field here
+            # already behaves that way -- a bad `site_id`, `pipeline` or
+            # `active_skills` logs "treating as omitted" (the canonical parent
+            # does it in ovos_spec_tools.session) and the session survives with
+            # its `session_id` and `lang` intact. `context` was the one
+            # exception, and rejecting the whole carrier for it threw away
+            # fields that parsed perfectly well.
+            #
+            # The parser's own AttributeError/TypeError/ValueError are still
+            # caught, which is the point of catching here at all: unhandled
+            # they escape every caller written for this function and kill a
+            # reader that was only meant to drop one field.
+            LOG.warning(
+                "OVOS-SESSION-1 §2: `context` is malformed (%s); "
+                "treating as omitted", error)
+            context = IntentContextManager()
         location = data.get("location", {})
         system_unit = data.get("system_unit")
         date_format = data.get("date_format")
