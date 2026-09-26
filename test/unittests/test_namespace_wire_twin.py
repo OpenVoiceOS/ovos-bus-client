@@ -196,12 +196,19 @@ class TestNewClientReceiveDedup(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_twin_alone_carries_no_marker_leak_to_its_own_listener(self):
-        # the twin's own listener still gets a clean (unmarked) frame
+        # CHANGED: this used to assert the frame was SUPPRESSED. A marked frame
+        # with no canonical frame ahead of it is no longer read as a twin --
+        # a legacy subscriber's reply inherits the marker through
+        # OVOS-MSG-1 §5.2 and is the only copy of its event, so suppressing it
+        # lost it (see test_namespace_twin_marker_inherited.py). What this test
+        # is named for, and what it now asserts, is the contract that did not
+        # change: whatever is delivered carries no marker onward.
         c = _client()
         got = _received(c, LEGACY)
         _deliver(c, LEGACY, {"utterance": "hi"},
                 {NAMESPACE_COMPAT_TWIN_KEY: True})
-        self.assertEqual(len(got), 0)  # marked twin: suppressed, see below
+        self.assertEqual(len(got), 1)
+        self.assertNotIn(NAMESPACE_COMPAT_TWIN_KEY, got[0].context)
 
     def test_marked_twin_delivers_nothing_new_a_second_time(self):
         # a receiver that already saw the canonical frame (and its local
@@ -226,13 +233,18 @@ class TestNewClientReceiveDedup(unittest.TestCase):
         self.assertEqual(_sent(c), [])
 
     def test_marker_does_not_leak_onto_descendant_frames(self):
+        # CHANGED with the test above, and for the same reason. The marker is
+        # popped before dispatch either way, so a handler cannot forward it
+        # onto a descendant frame; that is the contract this test is named for.
         c = _client()
         got_twin = _received(c, LEGACY)
         _deliver(c, LEGACY, {"utterance": "hi"},
                 {NAMESPACE_COMPAT_TWIN_KEY: True})
-        # nothing delivered directly (suppressed), so nothing to forward from
-        # here -- but exercise the pop-before-firehose contract directly:
-        self.assertEqual(len(got_twin), 0)
+        self.assertEqual(len(got_twin), 1)
+        self.assertNotIn(NAMESPACE_COMPAT_TWIN_KEY, got_twin[0].context)
+        # and a descendant built from it carries nothing either
+        self.assertNotIn(NAMESPACE_COMPAT_TWIN_KEY,
+                         got_twin[0].forward("some.other.topic").context)
 
 
 class TestFlagGating(unittest.TestCase):
