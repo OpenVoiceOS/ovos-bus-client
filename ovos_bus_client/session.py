@@ -651,6 +651,24 @@ class _IntentContextView(IntentContextManager):
 
 
 
+def _require_fold_number(value, what: str) -> None:
+    """Reject a number the fold cannot do float arithmetic with.
+
+    The fold computes ``timestamp + timeout`` and compares with ``time.time()``,
+    so both are coerced to float there. A JSON integer too large for a float
+    (``10**400``) passes an ``isinstance(int)`` check and then raises
+    ``OverflowError`` inside ``Session.__init__``, after this guard.
+    """
+    if value is None:
+        return
+    if not isinstance(value, (int, float)):
+        raise TypeError(f"{what} must be a number or null, got {type(value).__name__}")
+    try:
+        float(value)
+    except OverflowError as error:
+        raise ValueError(f"{what} is too large") from error
+
+
 def _validate_legacy_context_shape(raw) -> None:
     """Reject a legacy ``context`` the session fold cannot consume.
 
@@ -673,11 +691,7 @@ def _validate_legacy_context_shape(raw) -> None:
         raise TypeError(f"context must be a mapping, got {type(raw).__name__}")
     # The fold compares the timeout with 0 and adds it to each timestamp, so a
     # string here raised TypeError inside Session.__init__ -- after this guard.
-    timeout = raw.get("timeout")
-    if timeout is not None and not isinstance(timeout, (int, float)):
-        raise TypeError(
-            f"context timeout must be a number or null, got "
-            f"{type(timeout).__name__}")
+    _require_fold_number(raw.get("timeout"), "context timeout")
     frames = raw.get("frame_stack", [])
     if not isinstance(frames, (list, tuple)):
         raise TypeError(
@@ -690,10 +704,7 @@ def _validate_legacy_context_shape(raw) -> None:
         # The fold adds the timeout to this: ``(ts if ts is not None else now)
         # + self.timeout``. None is fine, the fold substitutes now; anything
         # non-numeric raises TypeError there, which is outside the guard.
-        if timestamp is not None and not isinstance(timestamp, (int, float)):
-            raise TypeError(
-                f"frame timestamp must be a number or null, got "
-                f"{type(timestamp).__name__}")
+        _require_fold_number(timestamp, "frame timestamp")
         if not isinstance(payload, dict):
             raise TypeError(
                 f"frame must be a mapping, got {type(payload).__name__}")

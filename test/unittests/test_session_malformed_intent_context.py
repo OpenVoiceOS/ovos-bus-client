@@ -46,6 +46,14 @@ class TestMalformedIntentContext(unittest.TestCase):
         ("timeout is a string",
          {"context": {"timeout": "nope",
                       "frame_stack": [[{"entities": [_ENTITY]}, None]]}}),
+        # A JSON integer too large for a float passes an isinstance check and
+        # then overflows in the fold's `timestamp + timeout`.
+        ("timeout overflows a float",
+         {"context": {"timeout": 10 ** 400,
+                      "frame_stack": [[{"entities": [_ENTITY]}, None]]}}),
+        ("timestamp overflows a float",
+         {"context": {"timeout": 5.0,
+                      "frame_stack": [[{"entities": [_ENTITY]}, 10 ** 400]]}}),
         ("derived key is unhashable",
          {"context": {"frame_stack": [[{"entities": [{"data": [["value", ["key"]]]}]},
                                        None]]}}),
