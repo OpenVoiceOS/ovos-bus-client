@@ -271,6 +271,23 @@ def _compute_legacy_intent_twin(message: Message,
 #: purpose, like the mirror window it sits beside.
 TWIN_WITNESS_WINDOW_S = 5.0
 
+#: Topic lookup for the witness book, with BOTH migration directions on.
+#:
+#: The witness asks what twin a PEER would have put on the wire beside the
+#: frame just received. That is a property of the migration map, not of this
+#: process: ``emit_legacy`` and ``modernize`` say what THIS client emits and
+#: translates, and a receiver that emits nothing legacy still has to recognise
+#: the legacy twin an older peer sends. Reading the local flags here made the
+#: book empty on such a receiver, so no marker was ever proven and every real
+#: twin was delivered again.
+#:
+#: Both directions are on because either endpoint can be the twinning one: a
+#: modern emitter marks the legacy spelling, an old emitter's frame is
+#: modernized into the spec spelling, and the pairing is the same either way.
+#: It is used for the topic ONLY. The payload is reshaped by the receiver's
+#: own translator, which is the receiver's own reading of the frame.
+_WITNESS_TOPICS = NamespaceTranslator(modernize=True, emit_legacy=True)
+
 
 class TwinWitnessBook:
     """Which legacy twins this client has actually seen a canonical frame for.
@@ -313,8 +330,18 @@ class TwinWitnessBook:
             return None
 
     def witness(self, translator, message) -> None:
-        """Record the twin THIS frame would be twinned into, if any."""
-        counterparts = translator.counterpart_topics(message.msg_type)
+        """Record the twin THIS frame would be twinned into, if any.
+
+        The topic lookup goes through :data:`_WITNESS_TOPICS`, NOT through the
+        caller's own translator. ``counterpart_topics`` is the SEND side of
+        the dual-emit and returns nothing when the LOCAL ``emit_legacy`` is
+        off, but the question here is what a PEER put on the wire. A receiver
+        with ``emit_legacy=False`` asked its own translator and got ``[]``, so
+        its book stayed empty, no marker was ever proven, and every real twin
+        was delivered as a duplicate. The payload is still reshaped by the
+        caller's translator: that is the receiver's own reading of the frame.
+        """
+        counterparts = _WITNESS_TOPICS.counterpart_topics(message.msg_type)
         if not counterparts:
             return
         topic = counterparts[0]
@@ -346,8 +373,13 @@ class TwinWitnessBook:
             ts = self._seen.get(fingerprint)
             if ts is None:
                 return False
+            # Consumed on the hit: one canonical frame proves ONE twin. Left
+            # in place, a single canonical frame proved every marked frame
+            # with the same fingerprint inside the window, so a peer that
+            # re-emits a received frame verbatim had its second copy -- a
+            # genuine new event -- dropped.
+            self._seen.pop(fingerprint, None)
             if now - ts >= self.window:
-                self._seen.pop(fingerprint, None)
                 return False
             return True
 

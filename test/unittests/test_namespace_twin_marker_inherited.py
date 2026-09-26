@@ -133,6 +133,124 @@ class TestARealTwinIsStillSuppressed(unittest.TestCase):
 
 
 
+class TestAModernOnlyReceiverStillSuppresses(unittest.TestCase):
+    """`emit_legacy` says what THIS process emits, not what a peer emits.
+
+    The witness lookup went through the receiver's own
+    ``counterpart_topics``, which is the SEND side of the dual-emit and
+    returns ``[]`` when the local ``emit_legacy`` is off. On such a receiver
+    the book stayed empty, no marker was ever proven, and every real twin an
+    older peer put on the wire was delivered.
+
+    Measured live by the reviewer lane on three real clients over a real
+    ``ovos-messagebus``: one ``ovos.fallback.ping`` emit gave a receiver with
+    ``OVOS_BUS_EMIT_LEGACY=false`` three dispatches instead of one. A
+    fallback poll counts two answers where there is one, and a
+    ``<skill_id>:stop`` twin runs stop twice.
+    """
+
+    def _modern_only_client(self):
+        client = _client()
+        client._translator = NamespaceTranslator(modernize=True, emit_legacy=False)
+        client._wire_legacy_twins = False
+        return client
+
+    def _dispatches(self, client):
+        got = []
+        for topic in (CANONICAL_PING, LEGACY_PING):
+            client.on(topic, lambda message: got.append(message.msg_type))
+        return got
+
+    def test_the_local_flag_does_not_empty_the_witness_book(self):
+        """The book is written even though this client emits nothing legacy."""
+        client = self._modern_only_client()
+        self.assertEqual(
+            [], client._translator.counterpart_topics(CANONICAL_PING),
+            "the premise moved: the send side no longer reports nothing here")
+
+        _deliver(client, CANONICAL_PING, data={"utterances": ["hello"]})
+
+        book = client._twin_witnesses
+        self.assertEqual(1, len(book._seen),
+                         "the witness book is empty on a modern-only receiver")
+
+    def test_a_real_twin_is_suppressed_on_a_modern_only_receiver(self):
+        """One logical event, one dispatch. It was three."""
+        client = self._modern_only_client()
+        got = self._dispatches(client)
+
+        _deliver(client, CANONICAL_PING, data={"utterances": ["hello"]})
+        _deliver(client, LEGACY_PING, data={"utterances": ["hello"]},
+                 context={NAMESPACE_COMPAT_TWIN_KEY: True})
+
+        self.assertEqual([CANONICAL_PING], got)
+
+    def test_an_inherited_marker_still_gets_through(self):
+        """The defect the PR exists to fix must survive the flag too."""
+        client = self._modern_only_client()
+        heard = _heard(client, LEGACY_PONG, CANONICAL_PONG)
+
+        _deliver(client, LEGACY_PONG,
+                 context={NAMESPACE_COMPAT_TWIN_KEY: True})
+
+        self.assertTrue(heard, "the pong was suppressed on a modern-only receiver")
+
+
+class TestAWitnessIsConsumed(unittest.TestCase):
+    """One canonical frame proves ONE twin.
+
+    The entry stayed in the book on a hit, so a single canonical frame proved
+    every marked frame with the same fingerprint for the whole 5 s window. A
+    peer that re-emits a received frame verbatim inside that window had its
+    second copy -- a genuine new event -- dropped.
+    """
+
+    def test_a_second_marked_copy_is_delivered(self):
+        client = _client()
+        got = []
+        client.on(LEGACY_PING, lambda message: got.append(message.msg_type))
+
+        # this client emits legacy, so the canonical frame is mirrored onto
+        # the legacy spelling for local listeners. That mirror is not a twin
+        # delivery, so it is the baseline both counts are taken against.
+        _deliver(client, CANONICAL_PING, data={"utterances": ["hello"]})
+        mirrored = len(got)
+        _deliver(client, LEGACY_PING, data={"utterances": ["hello"]},
+                 context={NAMESPACE_COMPAT_TWIN_KEY: True})
+        after_the_real_twin = len(got)
+        _deliver(client, LEGACY_PING, data={"utterances": ["hello"]},
+                 context={NAMESPACE_COMPAT_TWIN_KEY: True})
+
+        self.assertEqual(1, mirrored, "the mirror baseline moved")
+        self.assertEqual(mirrored, after_the_real_twin,
+                         "the one real twin was not suppressed")
+        self.assertEqual(mirrored + 1, len(got),
+                         "one canonical frame proved a second marked frame")
+
+    def test_the_book_does_not_keep_a_spent_witness(self):
+        client = _client()
+        _deliver(client, CANONICAL_PING, data={"utterances": ["hello"]})
+        self.assertEqual(1, len(client._twin_witnesses._seen))
+        _deliver(client, LEGACY_PING, data={"utterances": ["hello"]},
+                 context={NAMESPACE_COMPAT_TWIN_KEY: True})
+        self.assertEqual(0, len(client._twin_witnesses._seen))
+
+    def test_two_canonical_frames_prove_two_twins(self):
+        """Consuming must not cost the ordinary repeated-event case."""
+        client = _client()
+        got = []
+        client.on(LEGACY_PING, lambda message: got.append(message.msg_type))
+
+        for _ in range(2):
+            _deliver(client, CANONICAL_PING, data={"utterances": ["hello"]})
+            _deliver(client, LEGACY_PING, data={"utterances": ["hello"]},
+                     context={NAMESPACE_COMPAT_TWIN_KEY: True})
+
+        # two mirrors of the two canonical frames, and no twin delivery
+        self.assertEqual(2, len(got),
+                         "a twin behind its own canonical frame was delivered")
+
+
 class TestAsyncClientAgrees(unittest.TestCase):
     """The async client is a separate class with its own receive path, and
     this repository keeps the two in parity on purpose. A fix applied to one
@@ -166,6 +284,42 @@ class TestAsyncClientAgrees(unittest.TestCase):
                       context={NAMESPACE_COMPAT_TWIN_KEY: True})
 
         self.assertTrue(got, "the async client still suppresses the reply")
+
+    def test_a_real_twin_is_suppressed_on_a_modern_only_receiver(self):
+        """Both wire clients carried the emit_legacy defect, so both are
+        asserted. The async client is a separate class with its own receive
+        path, and a fix applied to one leaves the other broken."""
+        bus = self._async_client()
+        bus._translator = NamespaceTranslator(modernize=True, emit_legacy=False)
+        bus._wire_legacy_twins = False
+        got = []
+        for topic in (CANONICAL_PING, LEGACY_PING):
+            bus.emitter.on(topic, lambda message: got.append(message.msg_type))
+
+        self._deliver(bus, CANONICAL_PING, data={"utterances": ["hello"]})
+        self._deliver(bus, LEGACY_PING, data={"utterances": ["hello"]},
+                      context={NAMESPACE_COMPAT_TWIN_KEY: True})
+
+        self.assertEqual([CANONICAL_PING], got)
+
+    def test_a_witness_is_consumed_on_the_async_client_too(self):
+        bus = self._async_client()
+        got = []
+        bus.emitter.on(LEGACY_PING, lambda message: got.append(message.msg_type))
+
+        # the canonical frame mirrors onto the legacy spelling: the baseline
+        self._deliver(bus, CANONICAL_PING, data={"utterances": ["hello"]})
+        mirrored = len(got)
+        self._deliver(bus, LEGACY_PING, data={"utterances": ["hello"]},
+                      context={NAMESPACE_COMPAT_TWIN_KEY: True})
+        after_the_real_twin = len(got)
+        self._deliver(bus, LEGACY_PING, data={"utterances": ["hello"]},
+                      context={NAMESPACE_COMPAT_TWIN_KEY: True})
+
+        self.assertEqual(1, mirrored, "the mirror baseline moved")
+        self.assertEqual(mirrored, after_the_real_twin)
+        self.assertEqual(mirrored + 1, len(got),
+                         "one canonical frame proved a second marked frame")
 
     def test_a_real_twin_is_still_suppressed(self):
         bus = self._async_client()
