@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.23a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.23a1) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.22a1...2.11.23a1)
+
+**Merged pull requests:**
+
+- fix: believe a namespace twin marker only with a witnessed canonical frame [\#377](https://github.com/OpenVoiceOS/ovos-bus-client/pull/377) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.22a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.22a1) (2026-09-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.21a1...2.11.22a1)
@@ -366,10 +374,6 @@
 ## [2.7.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.2a1) (2026-07-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.1a1...2.7.2a1)
-
-**Merged pull requests:**
-
-- fix: seed blacklisted\_pipelines deployment default from config [\#269](https://github.com/OpenVoiceOS/ovos-bus-client/pull/269) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.7.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.1a1) (2026-07-24)
 
