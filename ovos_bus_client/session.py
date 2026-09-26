@@ -671,6 +671,13 @@ def _validate_legacy_context_shape(raw) -> None:
     """
     if not isinstance(raw, dict):
         raise TypeError(f"context must be a mapping, got {type(raw).__name__}")
+    # The fold compares the timeout with 0 and adds it to each timestamp, so a
+    # string here raised TypeError inside Session.__init__ -- after this guard.
+    timeout = raw.get("timeout")
+    if timeout is not None and not isinstance(timeout, (int, float)):
+        raise TypeError(
+            f"context timeout must be a number or null, got "
+            f"{type(timeout).__name__}")
     frames = raw.get("frame_stack", [])
     if not isinstance(frames, (list, tuple)):
         raise TypeError(
@@ -698,6 +705,22 @@ def _validate_legacy_context_shape(raw) -> None:
             if not isinstance(entity, dict):
                 raise TypeError(
                     f"each entity must be a mapping, got {type(entity).__name__}")
+            # Derive the key exactly as _entity_to_entry does. The fold uses it
+            # as a key in the intent_context map, so `["key"]` -- which passes
+            # the mapping check above -- raised "unhashable type: 'list'"
+            # inside Session.__init__, outside this guard. A falsy key is fine:
+            # the fold skips that entity.
+            data = entity.get("data")
+            key = None
+            if isinstance(data, (list, tuple)) and data \
+                    and isinstance(data[0], (list, tuple)) and len(data[0]) >= 2:
+                key = data[0][1]
+            elif isinstance(data, str):
+                key = data
+            if key and not isinstance(key, str):
+                raise TypeError(
+                    f"context entity key must be a string, got "
+                    f"{type(key).__name__}")
 
 
 class Session(_SpecSession):
@@ -1418,11 +1441,10 @@ class Session(_SpecSession):
             Session: A Session instance reconstructed from the provided data.
 
         Raises:
-            MalformedSession: the carrier is not an object, or its intent
-                context cannot be parsed. Callers that already handle a
-                malformed carrier therefore handle a malformed context too,
-                rather than seeing the parser's own AttributeError/TypeError/
-                ValueError escape.
+            MalformedSession: the carrier itself is not an object. A malformed
+                legacy ``context`` does NOT raise: per §2.5 it is logged and
+                treated as omitted, like any other malformed field, and the
+                rest of the session is returned.
         """
         data = data or {}
         # Delegate canonical field extraction to the parent: from_dict() applies

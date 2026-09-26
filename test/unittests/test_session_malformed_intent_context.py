@@ -14,6 +14,7 @@ deserializer already honours that -- a bad ``site_id``, ``pipeline`` or
 one bad frame stack also cost the reader a perfectly good session identity.
 """
 import json
+import time
 import unittest
 
 from ovos_bus_client.message import Message
@@ -38,6 +39,16 @@ class TestMalformedIntentContext(unittest.TestCase):
         ("frame stack is an empty mapping", {"context": {"frame_stack": {}}}),
         ("frame is not a pair", {"context": {"frame_stack": [["x", 1, 2]]}}),
         ("frame is not a mapping", {"context": {"frame_stack": [["x", 1]]}}),
+        # Both of these pass every structural check and used to raise inside
+        # Session.__init__'s fold, after the guard. A null timestamp keeps the
+        # frame live, so the fold really is reached rather than skipped as
+        # expired.
+        ("timeout is a string",
+         {"context": {"timeout": "nope",
+                      "frame_stack": [[{"entities": [_ENTITY]}, None]]}}),
+        ("derived key is unhashable",
+         {"context": {"frame_stack": [[{"entities": [{"data": [["value", ["key"]]]}]},
+                                       None]]}}),
         ("frame entities are not a list",
          {"context": {"frame_stack": [[{"entities": "nope"}, 1]]}}),
         # the one that used to reach Session.__init__ and raise there, outside
@@ -78,15 +89,26 @@ class TestMalformedIntentContext(unittest.TestCase):
 
     def test_a_null_or_numeric_timestamp_is_accepted(self):
         """The fold substitutes now for None and adds the timeout to a number,
-        so both are well-formed and must not be rejected."""
-        for timestamp in (None, 0, 1789789436, 1789789436.5):
+        so both are well-formed -- and the context must actually SURVIVE.
+
+        Asserting only session_id would pass even if the validator rejected
+        every context and the fallback discarded it. And a fixed timestamp
+        silently expires: 1789789436 was used here, which is 18 Sep 2026, so
+        once that passed the frame was skipped as stale and the test went on
+        passing while checking nothing. Live numbers are taken from the clock.
+        """
+        now = time.time()
+        for timestamp in (None, now, now + 0.5, int(now)):
             with self.subTest(timestamp=timestamp):
+                session = Session.deserialize({
+                    "session_id": "ts",
+                    "context": {"frame_stack": [[{"entities": [_ENTITY]},
+                                                 timestamp]]},
+                })
+                self.assertEqual(session.session_id, "ts")
                 self.assertEqual(
-                    Session.deserialize({
-                        "session_id": "ts",
-                        "context": {"frame_stack": [[{"entities": [_ENTITY]},
-                                                     timestamp]]},
-                    }).session_id, "ts")
+                    (session.intent_context or {}).get("key", {}).get("value"),
+                    "value", "a valid context entry was discarded")
 
     def test_a_non_object_context_is_omitted_too(self):
         session = Session.deserialize({"session_id": "s-2", "context": 5})
@@ -107,11 +129,13 @@ class TestMalformedIntentContext(unittest.TestCase):
         manager.inject_context({"data": [["value", "key"]], "key": "key",
                                 "confidence": 1.0})
         payload = {"session_id": "rt", "context": manager.serialize()}
-        self.assertEqual(Session.deserialize(payload).session_id, "rt")
         # and again through JSON, where the (frame, ts) tuples become lists
-        self.assertEqual(
-            Session.deserialize(json.loads(json.dumps(payload))).session_id,
-            "rt")
+        for carrier in (payload, json.loads(json.dumps(payload))):
+            session = Session.deserialize(carrier)
+            self.assertEqual(session.session_id, "rt")
+            self.assertEqual(
+                (session.intent_context or {}).get("key", {}).get("value"),
+                "value", "the round-tripped context entry was discarded")
 
     def test_an_explicit_null_context_is_absent_not_malformed(self):
         """A serializer that writes the key as null rather than omitting it is
