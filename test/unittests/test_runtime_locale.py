@@ -35,8 +35,9 @@ _LOCALE_GLOBALS = ("_lang", "_default_tz")
 class TestRuntimeLocaleIsHonoured(unittest.TestCase):
     """Each test restores every piece of locale state ``setup_locale()`` moves.
 
-    ``setup_locale()`` sets the language, the default timezone and loads
-    lingua-franca resources. Restoring only the language left a timezone
+    ``setup_locale()`` sets the language and the default timezone, and on
+    ovos-config versions that import lingua-franca it sets lingua-franca's
+    default language too. Restoring only the language left a timezone
     established by another test replaced with the configured one, so the order
     tests ran in could change their outcome.
     """
@@ -48,12 +49,20 @@ class TestRuntimeLocaleIsHonoured(unittest.TestCase):
         # On the versions that have no ``_lang``, ``setup_locale()`` writes the
         # configuration, so that is the value to put back.
         self._saved_config_lang = Configuration().get("lang")
+        # ovos-config 2.x forwards the language to lingua-franca when it is
+        # installed (``locale_module.LF``); later versions have no such hook.
+        lingua_franca = getattr(locale_module, "LF", None)
+        self._saved_lf_lang = (lingua_franca.get_default_lang()
+                               if lingua_franca is not None else None)
 
     def tearDown(self):
         for name, value in self._saved.items():
             setattr(locale_module, name, value)
         if Configuration().get("lang") != self._saved_config_lang:
             Configuration()["lang"] = self._saved_config_lang
+        lingua_franca = getattr(locale_module, "LF", None)
+        if lingua_franca is not None and self._saved_lf_lang:
+            lingua_franca.set_default_lang(self._saved_lf_lang)
 
     def test_a_runtime_locale_switch_reaches_lang_resolution(self):
         setup_locale("it-it")
