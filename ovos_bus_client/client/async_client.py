@@ -284,14 +284,9 @@ class AsyncMessageBusClient:
                 self._connected.set()
                 LOG.debug("AsyncMessageBusClient connected to %s", self.url)
                 self.emitter.emit("open")
-                # DEPRECATED: see MessageBusClient.on_open -- kept one cycle
-                # so a fresh client still learns a pre-spec-tools core's
-                # (e.g. stable 1.3.1) default session on connect.
-                log_deprecation("the connect-time ovos.session.sync request "
-                                "is a pre-spec surface retired by "
-                                "OVOS-SESSION-2 §2.7 and will stop being sent",
-                                _NEXT_MAJOR_VERSION)
-                await self.emit(Message("ovos.session.sync"))
+                # No connect-time ovos.session.sync request: see
+                # MessageBusClient.on_open for the clauses, and for what the
+                # stamped carrier did to an orchestrator's default session.
                 self._listen_task = asyncio.ensure_future(self._recv_loop())
                 return
             except (ConnectionRefusedError, OSError) as e:

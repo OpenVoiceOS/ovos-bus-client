@@ -13,7 +13,7 @@ from threading import Event, Lock, Thread
 from typing import Union, Callable, Any, Dict, List, Optional
 from uuid import uuid4
 
-from ovos_utils.log import LOG, log_deprecation
+from ovos_utils.log import LOG
 try:
     from pyee import ExecutorEventEmitter
 except (ImportError, ModuleNotFoundError):
@@ -31,9 +31,7 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      MalformedMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
-                                     DEFAULT_SESSION_ID, LEGACY_SESSION_SYNC,
-                                     session_carrier,
-                                     _NEXT_MAJOR_VERSION)
+                                     DEFAULT_SESSION_ID, session_carrier)
 from ovos_spec_tools.messages import NamespaceTranslator
 
 # --- legacy intent-topic compat (non-normative migration tooling) ----------
@@ -613,18 +611,30 @@ class MessageBusClient:
             return
         # a successful connect restores the initial reconnect wait
         self.retry = self.RECONNECT_INITIAL_S
-        # DEPRECATED: ovos.session.sync's bare-request/echo round trip is a
-        # pre-spec surface OVOS-SESSION-2 §2.7/§7 retires. It is still the
-        # only way a pre-spec-tools core (e.g. stable 1.3.1) ever answers
-        # with its default session, so a freshly-connected client kept one
-        # cycle behind: without this, it never learns a long-running old
-        # core's default session (lang, etc) and is stuck on its own
-        # config-derived default.
-        log_deprecation("the connect-time ovos.session.sync request is a "
-                        "pre-spec surface retired by OVOS-SESSION-2 §2.7 "
-                        "and will stop being sent",
-                        _NEXT_MAJOR_VERSION)
-        self.emit(Message(LEGACY_SESSION_SYNC))  # request default session update
+        # No connect-time ovos.session.sync request. OVOS-SESSION-2 §2.7:
+        # "This specification defines no topic on which any participant
+        # pushes a session at another", and "Each derives its initial view
+        # of that session from the deployment configuration ... no
+        # handshake, bootstrap request, or announcement is needed to make
+        # them agree." appendix/divergences.md §5.5 scopes the removal and
+        # names the bare-sync bootstrap on connect.
+        #
+        # It also could not be sent harmlessly. emit() stamps
+        # context["session"] with _own_session() on a message that carries
+        # none, so on a default-id client the request went out carrying THIS
+        # process's config-derived default session -- and an orchestrator
+        # folds a present field onto its store per §5.1. A process started
+        # without the user's mycroft.conf carries en-US, so its connect set
+        # the whole deployment's default lang to en-US, which core then
+        # broadcast to every process (T-6516, measured on a real bus: an
+        # nl-NL store went to en-US on one connect, with no utterance).
+        #
+        # What is given up is the pre-spec round trip: a core older than
+        # ovos-spec-tools answers ovos.session.update_default only when
+        # asked, so against such a core this client keeps its own
+        # config-derived default until the next broadcast. §2.7 is explicit
+        # that this is the correct initial view, and on a deployment whose
+        # processes read one config the two agree with no handshake.
 
     def on_close(self, *args):
         """
