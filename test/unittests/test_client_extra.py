@@ -226,21 +226,22 @@ class TestLifecycle(TestCase):
         t = client.run_in_thread()
         self.assertTrue(t.daemon)
 
-    def test_on_open_sets_connected_and_requests_default_session(self):
-        """The connect-time default-session PUSH (OVOS-SESSION-2 §2.7) stays
-        removed (#328). The connect-time ``ovos.session.sync`` REQUEST is a
-        deprecated, one-cycle-only shim: a pre-spec-tools core (stable
-        1.3.1) only ever answers ``ovos.session.update_default`` when asked,
-        so on_open still sends exactly one request."""
+    def test_on_open_sets_connected_and_sends_nothing(self):
+        """OVOS-SESSION-2 §2.7: no participant pushes a session at another,
+        and "no handshake, bootstrap request, or announcement is needed to
+        make them agree". So a connect puts NOTHING on the wire -- neither
+        the default-session push (removed in #328) nor the
+        ``ovos.session.sync`` request (removed for T-6516: emit stamped it
+        with this process's own config-derived default session, which an
+        orchestrator then folded onto its store per §5.1)."""
         client = MessageBusClient()
         client.client = MagicMock()
         client.client.send = MagicMock()
         client.on_open()
         client.flush()
         self.assertTrue(client.connected_event.is_set())
-        self.assertEqual(client.client.send.call_count, 1)
-        sent = json.loads(client.client.send.call_args[0][0])
-        self.assertEqual(sent["type"], "ovos.session.sync")
+        self.assertEqual(client.client.send.call_count, 0,
+                         f"connect sent {client.client.send.call_args_list}")
 
     def test_on_close_emits_close_event(self):
         client = MessageBusClient()
