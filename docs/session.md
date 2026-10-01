@@ -2,6 +2,24 @@
 
 Session state is the primary mechanism by which OVOS tracks per-user, per-device conversation context across the intent pipeline, skills, chat agents, and HiveMind agents.
 
+`session` rides in `Message.context` per
+[OVOS-MSG-1 §4 The session carrier](https://github.com/OpenVoiceOS/architecture/blob/dev/msg-1.md#4-the-session-carrier),
+which fixes only its existence and propagation rule across `forward` /
+`reply` / `response`. Its wire shape and field set are owned by
+[**OVOS-SESSION-1**](https://github.com/OpenVoiceOS/architecture/blob/dev/session-1.md),
+which defines `session_id` and `lang` as the normative fields. Everything
+else on the `Session` class below (pipeline, site_id, `IntentContextManager`,
+persona, preferences) is a layer-2 extension carried in the same
+`context.session` dict; SESSION-1 treats those keys as opaque pass-through.
+The `IntentContextManager` sub-object is normatively covered by
+[**OVOS-CONTEXT-1**](https://github.com/OpenVoiceOS/architecture/blob/dev/intent-context.md).
+
+This package still ships two session-push mechanisms —
+`SessionManager.handle_session_sync` and the `_broadcast_default_session`
+bootstrap in `client.py` — that no spec defines a topic for; SESSION-2 makes
+the session client-authoritative instead. Both are in the V1 removal scope
+per the [architecture appendix](https://github.com/OpenVoiceOS/architecture/blob/dev/appendix/divergences.md#removed-mechanisms--session-push-topics).
+
 ## Session
 
 `Session` — `ovos_bus_client/session.py:263`
