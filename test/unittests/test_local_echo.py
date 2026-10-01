@@ -11,7 +11,9 @@ originator's own marker and the originator discarded its own reply, silently.
 import json
 from unittest.mock import Mock
 
-from ovos_bus_client.client.client import MessageBusClient
+from ovos_bus_client.client.client import (INTENT_COMPAT_TWIN_KEY,
+                                           NAMESPACE_COMPAT_TWIN_KEY,
+                                           MessageBusClient)
 from ovos_bus_client.message import Message
 
 ECHO_TOPIC = "mycroft.skill.handler.complete"
@@ -153,7 +155,7 @@ def test_a_dropped_frame_leaves_no_fingerprint_behind():
     client.emit(message)
 
     topics = [call.args[0] for call in client.emitter.emit.call_args_list]
-    assert topics == ["message", ECHO_TOPIC], "local delivery still happens"
+    assert topics == [], "a frame the wire refused is not delivered locally"
     assert len(client._local_echo_sent) == 0, "no fingerprint for a frame never sent"
 
     # the identical frame arriving from elsewhere must be delivered
@@ -378,3 +380,110 @@ def test_the_firehose_gets_the_transport_frame_on_an_encrypted_bus(monkeypatch):
         warnings.simplefilter("ignore", DeprecationWarning)
         client.on_message(wire)  # our echo, still recognised through the envelope
     assert client.emitter.emit.call_count == 2
+
+
+# ----------------------------------------------------------------------
+# The echo path and the receive path must agree about a marked twin, and
+# about a frame the wire refused. Both cells were measured on a real bus
+# before they were written here: knowledge/wiki/audits/gate-ledger/
+# live-ovos-bus-client-292-at-5e4ba0c.md, drive 2 probes A and B.
+# ----------------------------------------------------------------------
+
+TWIN_KEYS = (INTENT_COMPAT_TWIN_KEY, NAMESPACE_COMPAT_TWIN_KEY)
+
+
+def _twin_context(**markers):
+    context = {"source": "core"}
+    context.update(markers)
+    return context
+
+
+def test_a_namespace_twin_is_not_echoed_to_any_listener():
+    """A marked namespace twin is a second wire frame that exists only for a
+    pre-spec-tools receiver. on_message delivers nothing for it, because the
+    canonical frame it follows already served both spellings. The echo path
+    must make the same decision, or the emitting process serves them twice."""
+    client = _bridged_client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1},
+                        _twin_context(**{NAMESPACE_COMPAT_TWIN_KEY: True})))
+
+    names = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert names == [], names
+
+
+def test_an_intent_twin_is_echoed_without_the_firehose():
+    """on_message gates only the firehose on the intent marker: a listener
+    bound to the suffixed spelling is served from this frame alone."""
+    client = _bridged_client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1},
+                        _twin_context(**{INTENT_COMPAT_TWIN_KEY: True})))
+
+    names = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert names == [ECHO_TOPIC, "legacy.handler.complete"], names
+    assert "message" not in names, "a twin must not double-count in the firehose"
+
+
+def test_the_echo_path_and_the_receive_path_agree_about_every_marker():
+    """The echo stands in for the returning wire copy, so for the same frame
+    it must deliver what on_message would have delivered. A control with no
+    marker proves the comparison can see a difference."""
+    for markers in ({}, {INTENT_COMPAT_TWIN_KEY: True},
+                    {NAMESPACE_COMPAT_TWIN_KEY: True},
+                    {INTENT_COMPAT_TWIN_KEY: True, NAMESPACE_COMPAT_TWIN_KEY: True}):
+        echoed = _bridged_client()
+        echoed.emit(Message(ECHO_TOPIC, {"x": 1}, _twin_context(**markers)))
+        by_echo = [call.args[0] for call in echoed.emitter.emit.call_args_list]
+
+        received = _bridged_client()
+        received._local_echo_topics = frozenset()
+        received.on_message(
+            Message(ECHO_TOPIC, {"x": 1}, _twin_context(**markers)).serialize())
+        by_wire = [call.args[0] for call in received.emitter.emit.call_args_list]
+
+        assert by_echo == by_wire, (markers, by_echo, by_wire)
+
+    # the control: without a marker both paths DO fire the firehose, so the
+    # equality above is not the equality of two empty lists.
+    plain = _bridged_client()
+    plain.emit(Message(ECHO_TOPIC, {"x": 1}, _twin_context()))
+    assert [call.args[0] for call in plain.emitter.emit.call_args_list] == [
+        "message", ECHO_TOPIC, "legacy.handler.complete"]
+
+
+def test_the_wire_frame_of_a_twin_still_carries_its_markers():
+    """Only the local copy is popped. An old receiver needs the marker."""
+    client = _bridged_client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1},
+                        _twin_context(**{INTENT_COMPAT_TWIN_KEY: True})))
+    context = json.loads(client.sent[0])["context"]
+    assert context[INTENT_COMPAT_TWIN_KEY] is True, context
+
+
+def test_a_marker_does_not_survive_onto_a_descendant_of_the_echoed_copy():
+    """on_message pops the markers so forward()/reply() cannot brand an
+    unrelated descendant frame a twin. The echo path owes the same."""
+    client = _client()
+    client.emit(Message(ECHO_TOPIC, {"x": 1},
+                        _twin_context(**{INTENT_COMPAT_TWIN_KEY: True})))
+    delivered = client.emitter.emit.call_args_list[0].args[1]
+    assert delivered.msg_type == ECHO_TOPIC
+    child = delivered.forward("some.other.topic", {})
+    assert not [key for key in TWIN_KEYS if key in child.context], child.context
+
+
+def test_a_frame_the_wire_refused_reaches_no_listener_in_this_process():
+    """The echo stands in for the returning wire copy. A refused write has no
+    returning copy to stand in for, and every other process on the bus saw
+    nothing: delivering here makes this process act on a message that does
+    not exist anywhere else."""
+    client = _bridged_client()
+    client._send = lambda message, frame=None: False
+    client.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+
+    client.emitter.emit.assert_not_called()
+
+    # the control: the same client and the same frame, with the write accepted
+    accepted = _bridged_client()
+    accepted.emit(Message(ECHO_TOPIC, {"x": 1}, {"source": "core"}))
+    assert [call.args[0] for call in accepted.emitter.emit.call_args_list] == [
+        "message", ECHO_TOPIC, "legacy.handler.complete"]

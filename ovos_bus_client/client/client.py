@@ -881,8 +881,13 @@ class MessageBusClient:
             if not delivered:
                 # Nothing went out, so nothing will come back: keeping the
                 # fingerprint would suppress someone else's identical frame.
+                # The local dispatch goes with it. The echo stands in for the
+                # returning wire copy, and there is no wire copy to stand in
+                # for: dispatching here would make this process act on a
+                # message no other process on the bus ever saw.
                 self._forget_local_echo(message)
-            self._dispatch_local_echo(message, frame)
+            else:
+                self._dispatch_local_echo(message, frame)
         else:
             self._send(message)
         # ... with TWO exceptions: the legacy intent twin and the legacy
@@ -1067,21 +1072,33 @@ class MessageBusClient:
         # exactly as on_message hands it the frame as received: on an
         # encrypted bus that is the envelope, and a firehose listener never
         # sees plaintext it would not see off the wire.
+        # The twin markers are read and popped here exactly as on_message does
+        # at the top of its own dispatch, and for the same two reasons: the
+        # marker must not survive onto a descendant frame through
+        # forward()/reply(), and a marked twin is the SAME logical dispatch as
+        # the canonical frame that preceded it. Only the local copy is popped;
+        # ``frame`` already carries the markers to the wire, where an old
+        # receiver still needs them.
+        is_intent_twin = local_copy.context.pop(INTENT_COMPAT_TWIN_KEY, False)
+        is_namespace_twin = local_copy.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
         counterparts = []
         try:
-            for topic in self._translator.counterpart_topics(local_copy.msg_type):
-                translated = self._translator.translate_payload(
-                    from_topic=local_copy.msg_type, to_topic=topic,
-                    data=local_copy.data)
-                counterparts.append((topic, local_copy.forward(topic, translated)))
+            if not is_namespace_twin:
+                for topic in self._translator.counterpart_topics(local_copy.msg_type):
+                    translated = self._translator.translate_payload(
+                        from_topic=local_copy.msg_type, to_topic=topic,
+                        data=local_copy.data)
+                    counterparts.append((topic, local_copy.forward(topic, translated)))
         except Exception:
             LOG.exception("local echo could not bridge %s", message.msg_type)
         try:
-            self.emitter.emit('message', frame)
-            self.emitter.emit(local_copy.msg_type, local_copy)
-            for topic, counterpart in counterparts:
-                self.emitter.emit(topic, counterpart)
-            self._modernize_intent_topic(local_copy, is_twin=False)
+            if not is_namespace_twin and not is_intent_twin:
+                self.emitter.emit('message', frame)
+            if not is_namespace_twin:
+                self.emitter.emit(local_copy.msg_type, local_copy)
+                for topic, counterpart in counterparts:
+                    self.emitter.emit(topic, counterpart)
+            self._modernize_intent_topic(local_copy, is_twin=is_intent_twin)
         except Exception:
             LOG.exception("local echo dispatch failed for %s", message.msg_type)
 
