@@ -6,6 +6,7 @@ from threading import Event, RLock
 from typing import Optional, List, Tuple, Union, Iterable, Dict, Any
 from uuid import uuid4
 
+from ovos_config import locale as ovos_config_locale
 from ovos_config.config import Configuration
 from ovos_utils.log import LOG, log_deprecation
 from ovos_spec_tools import standardize_lang
@@ -177,14 +178,31 @@ def _configured_location() -> Dict[str, Any]:
 
 
 def _get_default_lang() -> str:
-    """Read the runtime-configured default lang.
+    """Read the runtime default lang, honouring ``setup_locale()``.
 
     This is a hot path: every ``Session``/``Message`` without an explicit
     lang goes through it, including the module-level default session built
-    at import time. Reading ``Configuration()`` directly is what ovos-config
-    has recommended since ``get_default_lang()`` was deprecated in
-    ovos-config 1.0.0.
+    at import time. That is why it must not call a function that emits a
+    ``DeprecationWarning`` on some supported ovos-config lines (#293).
+
+    It must also not read ``Configuration()`` alone. ``setup_locale()`` and
+    ``set_default_lang()`` do NOT write to the config -- they set a module
+    global in ``ovos_config.locale`` that ``Configuration()`` never sees, and
+    that global is what ``get_default_lang()`` returns and what the running
+    system's locale actually is. Reading only the config made a runtime
+    locale switch invisible here: after ``setup_locale("it-it")`` a message
+    with no lang resolved ``en-US``.
+
+    So: take the active lang when one has been set, and fall back to the
+    configured value when it has not. No deprecated call on any line, and
+    the same answer ``get_default_lang()`` would give on all of them.
     """
+    try:
+        active = getattr(ovos_config_locale, "_lang", None)
+    except Exception:  # pragma: no cover - defensive: locale module shape
+        active = None
+    if active:
+        return active
     return Configuration().get("lang", "en-us")
 
 # The canonical parent stores an empty list/dict field as ``None`` (SESSION-1
