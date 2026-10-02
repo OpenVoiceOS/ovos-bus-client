@@ -851,8 +851,95 @@ class _IntentContextView(IntentContextManager):
         write side follows behind a version floor.
         """
         key, entry = self._entity_to_entry(entity)
-        if key:
-            self._write({key: entry})
+        if not key:
+            return
+        payload = {key: entry}
+        payload.update(self._expired_twin_tombstone(key, entry))
+        self._write(payload)
+
+    def _expired_twin_tombstone(self, key: str,
+                                entry: Dict) -> Dict[str, None]:
+        """``{bare: None}`` when a bare twin this view published is about to go
+        stale, else ``{}``.
+
+        A writer that predates OVOS-CONTEXT-1 stores the munged spelling as a
+        bare key beside the private entry the same turn writes, and
+        :meth:`frame_stack` hides the duplicate behind the private entry. The
+        duplicate's whole reason to exist is that one registered spelling. The
+        moment *this* view writes a new value to the private entry, the twin
+        stops being a duplicate and starts being a second, stale answer for the
+        same spelling: two frames then carry it with two different values, the
+        depth decay in ``get_context`` picks between them, and a later removal
+        leaves the pre-inject value tagging with nothing raised and nothing
+        logged (measured, T-2348 cells B and D).
+
+        OVOS-CONTEXT-1 §5 permits the deletion, conditionally:
+
+            A component MAY delete shared entries it did not set only when
+            doing so is part of its user-visible purpose (an explicit "forget
+            that" command, end-of-conversation cleanup).
+
+        Deleting the twin is not housekeeping that happens to touch a shared
+        key; it is what makes the context update the user just caused take
+        effect at all, for the one spelling this view serves (architecture,
+        T-7135).
+
+        The permission turns on the twin being this view's own prior output and
+        not a shared fact another component published, so the same three
+        conditions :meth:`remove_context` applies are applied here: the twin is
+        live, its value still equals the private entry's, and its spelling is
+        the adapt projection of that private key. They are evaluated **before**
+        the write, because the write is what destroys the second one — that is
+        the whole defect, and it is why the gate lives here rather than at
+        removal time. A bare entry failing any of them is, or may be, a third
+        party's shared entry, and §5's permission does not reach it.
+
+        Those conditions are a **proxy** for provenance, not a decision about
+        it. OVOS-CONTEXT-1 §3, l.271-273:
+
+            §2 gives the entry no ``scope`` field and no ``origin`` field, so a
+            private intention that the key does not spell is recorded nowhere
+            and no consumer can act on it.
+
+        So nothing stored says who wrote a bare key, and no gate at this layer
+        can do better. A bare entry another component published as a
+        genuine shared fact, whose value happens to equal the private entry's,
+        satisfies all three and is retired here: that case is indistinguishable
+        from the twin and it loses. It is the same proxy :meth:`remove_context`
+        has always used; what this change alters is how often it is consulted,
+        from once per removal to once per value-changing inject. The accepted
+        trade is decision ``context1-twin-tombstone-backcompat``, "no entry
+        beats a wrong one".
+        """
+        if ":" not in key:
+            return {}
+        bare = _adapt_entity_type(key)
+        if bare == key:
+            return {}
+        ctx = self._session.intent_context or {}
+        current = ctx.get(key)
+        twin = ctx.get(bare)
+        if not isinstance(current, dict) or twin is None:
+            # no private entry to shadow, so no twin of ours to retire
+            return {}
+        now = time.time()
+        if not self._is_live_entry(twin, now) \
+                or not self._is_live_entry(current, now) \
+                or twin.get("value") != current.get("value"):
+            return {}
+        if entry.get("value") == current.get("value"):
+            # The write changes no value, so the twin does not go stale: it is
+            # still an exact duplicate and frame_stack still hides it. §5's
+            # permission turns on the deletion being part of a user-visible
+            # purpose, and the purpose claimed here is making the context
+            # update the user just caused take effect. An inject that updates
+            # nothing has no such update, so the permission does not reach it
+            # and the deletion would be the housekeeping §5 disallows. The
+            # cost is real: set_context re-sets the same value on every
+            # re-entry, so without this the first such turn would strip a
+            # pre-CONTEXT-1 peer's only readable spelling for nothing.
+            return {}
+        return {bare: None}
 
     def remove_context(self, context_id: str):
         # a tombstone (null entry, §5.3) rather than a pop, so the removal
