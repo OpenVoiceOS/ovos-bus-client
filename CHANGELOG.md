@@ -1,5 +1,90 @@
 # Changelog
 
+## [2.11.24a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.24a1) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.23a1...2.11.24a1)
+
+**Merged pull requests:**
+
+- fix\(gui\): build the resource cache beside the served path and move it in [\#380](https://github.com/OpenVoiceOS/ovos-bus-client/pull/380) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.23a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.23a1) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.22a1...2.11.23a1)
+
+**Merged pull requests:**
+
+- fix: believe a namespace twin marker only with a witnessed canonical frame [\#377](https://github.com/OpenVoiceOS/ovos-bus-client/pull/377) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.22a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.22a1) (2026-09-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.21a1...2.11.22a1)
+
+**Merged pull requests:**
+
+- fix: read the adapt entity\_type back from the private CONTEXT-1 entry [\#364](https://github.com/OpenVoiceOS/ovos-bus-client/pull/364) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.21a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.21a1) (2026-09-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.20a1...2.11.21a1)
+
+## [2.11.20a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.20a1) (2026-09-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.19a1...2.11.20a1)
+
+**Merged pull requests:**
+
+- fix: a non-string lang on the wire no longer raises in get\_message\_lang [\#360](https://github.com/OpenVoiceOS/ovos-bus-client/pull/360) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.19a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.19a1) (2026-09-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.18a1...2.11.19a1)
+
+**Merged pull requests:**
+
+- fix: the session origin stamps its own configured location \(SESSION-1 §3.5\) [\#365](https://github.com/OpenVoiceOS/ovos-bus-client/pull/365) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.18a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.18a1) (2026-09-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.17a1...2.11.18a1)
+
+**Merged pull requests:**
+
+- fix: the arrival hook only checks the session carrier \(SESSION-2 §2.6, §6.1\) [\#370](https://github.com/OpenVoiceOS/ovos-bus-client/pull/370) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.17a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.17a1) (2026-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.16a2...2.11.17a1)
+
+**Merged pull requests:**
+
+- fix: emit destination as a string \(OVOS-MSG-1 §3.3\) [\#368](https://github.com/OpenVoiceOS/ovos-bus-client/pull/368) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.16a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.16a2) (2026-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.16a1...2.11.16a2)
+
+**Merged pull requests:**
+
+- docs: the intent pair guard starvation is reachable; pin it with tests [\#362](https://github.com/OpenVoiceOS/ovos-bus-client/pull/362) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.16a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.16a1) (2026-09-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.15a2...2.11.16a1)
+
+**Merged pull requests:**
+
+- fix: raise the ovos-spec-tools floor to 1.12.0a1 for the FALLBACK-1 twins [\#361](https://github.com/OpenVoiceOS/ovos-bus-client/pull/361) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [2.11.15a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.15a2) (2026-09-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.15a1...2.11.15a2)
+
+**Merged pull requests:**
+
+- fix: reconnect from run\_forever\(\)'s loop instead of recursing from on\_error\(\) [\#357](https://github.com/OpenVoiceOS/ovos-bus-client/pull/357) ([goldyfruit](https://github.com/goldyfruit))
+- build: allow pyee 13.x, keep the ceiling below 14 [\#354](https://github.com/OpenVoiceOS/ovos-bus-client/pull/354) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [2.11.15a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.15a1) (2026-09-08)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.14a2...2.11.15a1)
@@ -206,23 +291,23 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
-
-## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
 
 ## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
 
-## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
 
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+
+## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
 
 **Merged pull requests:**
 
@@ -282,10 +367,6 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.3a1...2.8.0a1)
 
-**Merged pull requests:**
-
-- feat: legacy intent-topic bridge — wire twin on emit, modernize on receive [\#271](https://github.com/OpenVoiceOS/ovos-bus-client/pull/271) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.7.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.3a1) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.2a1...2.7.3a1)
@@ -298,74 +379,37 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.1a1...2.7.2a1)
 
-**Merged pull requests:**
-
-- fix: seed blacklisted\_pipelines deployment default from config [\#269](https://github.com/OpenVoiceOS/ovos-bus-client/pull/269) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.7.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.1a1) (2026-07-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.0a1...2.7.1a1)
-
-**Merged pull requests:**
-
-- fix: survive a malformed session on an inbound message [\#267](https://github.com/OpenVoiceOS/ovos-bus-client/pull/267) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.7.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.0a1) (2026-07-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.5a1...2.7.0a1)
 
-**Merged pull requests:**
-
-- feat: unify legacy Session.context onto canonical intent\_context [\#256](https://github.com/OpenVoiceOS/ovos-bus-client/pull/256) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.6.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.5a1) (2026-07-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.4a1...2.6.5a1)
-
-**Merged pull requests:**
-
-- fix: discard malformed frames instead of tearing down the connection [\#264](https://github.com/OpenVoiceOS/ovos-bus-client/pull/264) ([JarbasAl](https://github.com/JarbasAl))
-- fix: Clear bus connected state on close/error [\#263](https://github.com/OpenVoiceOS/ovos-bus-client/pull/263) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [2.6.4a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.4a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.3a1...2.6.4a1)
 
-**Merged pull requests:**
-
-- fix: always deserialize canonical Session list/dict fields to empty containers [\#257](https://github.com/OpenVoiceOS/ovos-bus-client/pull/257) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.6.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.3a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.2a2...2.6.3a1)
-
-**Merged pull requests:**
-
-- fix: bridge namespace counterpart on receive, not as a second wire message [\#258](https://github.com/OpenVoiceOS/ovos-bus-client/pull/258) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.2a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a2) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.2a1...2.6.2a2)
 
-**Merged pull requests:**
-
-- refactor: SessionManager subclasses the ovos-spec-tools registry [\#254](https://github.com/OpenVoiceOS/ovos-bus-client/pull/254) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.6.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.2a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.1a1...2.6.2a1)
 
-**Merged pull requests:**
-
-- fix: Session.update\_from applies SESSION-1 deserialization semantics [\#251](https://github.com/OpenVoiceOS/ovos-bus-client/pull/251) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [2.6.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.1a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.6.0a1...2.6.1a1)
-
-**Merged pull requests:**
-
-- fix: SessionManager keeps one live Session per id \(singleton\) [\#249](https://github.com/OpenVoiceOS/ovos-bus-client/pull/249) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.6.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.6.0a1) (2026-06-28)
 

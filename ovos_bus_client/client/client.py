@@ -13,7 +13,7 @@ from ovos_utils import json_dumps
 from os import getpid
 import queue as _queue
 from threading import Event, Lock, Thread
-from typing import Union, Callable, Any, List, Optional
+from typing import Union, Callable, Any, Dict, List, Optional
 from uuid import uuid4
 
 from ovos_utils.log import LOG, log_deprecation
@@ -35,7 +35,7 @@ from ovos_bus_client.message import (Message, CollectionMessage, GUIMessage,
                                      encrypt_as_dict, decrypt_from_dict)
 from ovos_bus_client.session import (SessionManager, Session, MalformedSession,
                                      DEFAULT_SESSION_ID, LEGACY_SESSION_SYNC,
-                                     resolve_session_id, session_carrier,
+                                     session_carrier,
                                      _NEXT_MAJOR_VERSION)
 from ovos_spec_tools.messages import NamespaceTranslator
 
@@ -305,6 +305,140 @@ def _compute_legacy_intent_twin(message: Message,
     twin = _verbatim_copy(message, topic)
     twin.context[INTENT_COMPAT_TWIN_KEY] = True
     return twin
+
+
+#: How long a canonical frame stays a witness for the twin that follows it.
+#: The emitter puts the twin on the wire in the same ``emit()`` call, so the two
+#: frames are adjacent; this only has to survive queueing. It is narrow on
+#: purpose, like the mirror window it sits beside.
+TWIN_WITNESS_WINDOW_S = 5.0
+
+#: Topic lookup for the witness book, with BOTH migration directions on.
+#:
+#: The witness asks what twin a PEER would have put on the wire beside the
+#: frame just received. That is a property of the migration map, not of this
+#: process: ``emit_legacy`` and ``modernize`` say what THIS client emits and
+#: translates, and a receiver that emits nothing legacy still has to recognise
+#: the legacy twin an older peer sends. Reading the local flags here made the
+#: book empty on such a receiver, so no marker was ever proven and every real
+#: twin was delivered again.
+#:
+#: Both directions are on because either endpoint can be the twinning one: a
+#: modern emitter marks the legacy spelling, an old emitter's frame is
+#: modernized into the spec spelling, and the pairing is the same either way.
+#: It is used for the topic ONLY. The payload is reshaped by the receiver's
+#: own translator, which is the receiver's own reading of the frame.
+_WITNESS_TOPICS = NamespaceTranslator(modernize=True, emit_legacy=True)
+
+
+class TwinWitnessBook:
+    """Which legacy twins this client has actually seen a canonical frame for.
+
+    A ``_namespace_compat_twin`` marker only means "a canonical frame already
+    carried this event". That holds for a twin the emitter built, and NOT for a
+    frame that merely INHERITED the marker in a copied context.
+
+    OVOS-MSG-1 §5.2 makes that inheritance conforming rather than a fault:
+    ``reply`` produces "a copy of C" in which "All other context keys,
+    including ``session`` (§4), are preserved unchanged". A subscriber too old
+    to know the marker cannot strip it and has no reason to, since the key is
+    not its own. A modern client pops the marker before local dispatch so its
+    OWN descendants stay clean, but it cannot pop it inside another process.
+
+    So the receive rule believes the marker only when the canonical frame is
+    witnessed. Shared by both wire clients so they suppress identically.
+    """
+
+    def __init__(self, window: float = TWIN_WITNESS_WINDOW_S):
+        self._seen: Dict[str, float] = {}
+        self._lock = Lock()
+        self.window = window
+
+    @staticmethod
+    def fingerprint(msg_type: str, data, context) -> Optional[str]:
+        """Identify a twin frame by what is on the wire, or ``None``.
+
+        The marker is left out: the witness is recorded from the CANONICAL
+        frame, which never carries it.
+        """
+        try:
+            ctx = {k: v for k, v in (context or {}).items()
+                   if k != NAMESPACE_COMPAT_TWIN_KEY}
+            return _json.dumps([msg_type, data, ctx],
+                               sort_keys=True, default=str)
+        except Exception:
+            # Not fingerprintable, so a twin cannot be proven: the caller keeps
+            # the frame. Same rule the mirror guard follows.
+            return None
+
+    def witness(self, translator, message) -> None:
+        """Record the twin THIS frame would be twinned into, if any.
+
+        The topic lookup goes through :data:`_WITNESS_TOPICS`, NOT through the
+        caller's own translator. ``counterpart_topics`` is the SEND side of
+        the dual-emit and returns nothing when the LOCAL ``emit_legacy`` is
+        off, but the question here is what a PEER put on the wire. A receiver
+        with ``emit_legacy=False`` asked its own translator and got ``[]``, so
+        its book stayed empty, no marker was ever proven, and every real twin
+        was delivered as a duplicate. The payload is still reshaped by the
+        caller's translator: that is the receiver's own reading of the frame.
+        """
+        counterparts = _WITNESS_TOPICS.counterpart_topics(message.msg_type)
+        if not counterparts:
+            return
+        topic = counterparts[0]
+        if topic == message.msg_type:
+            return
+        try:
+            payload = translator.translate_payload(
+                from_topic=message.msg_type, to_topic=topic, data=message.data)
+        except Exception:
+            return
+        fingerprint = self.fingerprint(topic, payload, message.context)
+        if fingerprint is None:
+            return
+        now = time.monotonic()
+        with self._lock:
+            for key in [k for k, ts in self._seen.items()
+                        if now - ts >= self.window]:
+                self._seen.pop(key, None)
+            self._seen[fingerprint] = now
+
+    def is_real_twin(self, message) -> bool:
+        """Was a canonical frame for this exact twin actually seen?"""
+        fingerprint = self.fingerprint(
+            message.msg_type, message.data, message.context)
+        if fingerprint is None:
+            return False
+        now = time.monotonic()
+        with self._lock:
+            ts = self._seen.get(fingerprint)
+            if ts is None:
+                return False
+            # Consumed on the hit: one canonical frame proves ONE twin. Left
+            # in place, a single canonical frame proved every marked frame
+            # with the same fingerprint inside the window, so a peer that
+            # re-emits a received frame verbatim had its second copy -- a
+            # genuine new event -- dropped.
+            self._seen.pop(fingerprint, None)
+            if now - ts >= self.window:
+                return False
+            return True
+
+
+def twin_witness_book(client) -> TwinWitnessBook:
+    """The book for a client, created on first use.
+
+    Built lazily rather than in ``__init__`` because both wire clients are
+    widely constructed with ``__new__`` and hand-set attributes (the test suite
+    does it throughout), and a receive path that assumed a constructor had run
+    would break every such caller.
+    """
+    book = getattr(client, "_twin_witnesses", None)
+    if book is None:
+        book = TwinWitnessBook()
+        client._twin_witnesses = book
+    return book
 
 
 def _compute_legacy_namespace_twin(message: Message,
@@ -697,6 +831,28 @@ class MessageBusClient:
         # for the same reason (must not survive onto descendant frames via
         # forward()/reply()).
         is_namespace_twin = parsed_message.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
+        # The marker alone does not prove this frame is a twin. OVOS-MSG-1 §5.2
+        # requires reply() to preserve "All other context keys", so a subscriber
+        # too old to know the marker copies it from the frame it answers onto a
+        # brand new message. That reply is nobody's duplicate: no canonical frame
+        # carries it, and suppressing it loses the only copy there is. Measured
+        # on two vintages: a 7.0.6 / bus-client 1.5.0 fallback skill answers a
+        # canonical ovos.fallback.ping through the twin, and its
+        # ovos.skills.fallback.pong arrived marked and was dropped here, so the
+        # poll saw no answer at all.
+        #
+        # So the marker is now believed only when a canonical frame for this
+        # exact twin was actually seen. An unproven marker is ignored and the
+        # frame is delivered: the cost of that is a duplicate, the cost of the
+        # other way is silence.
+        if is_namespace_twin and not twin_witness_book(self).is_real_twin(parsed_message):
+            LOG.debug(
+                f"{parsed_message.msg_type} carries the namespace twin marker "
+                f"but no canonical frame for it was seen; it was inherited, "
+                f"delivering the frame")
+            is_namespace_twin = False
+        elif not is_namespace_twin:
+            twin_witness_book(self).witness(self._translator, parsed_message)
         # The 'message' firehose is the raw wire-capture stream a modern
         # receiver's wildcard/logging listeners see. A marked NAMESPACE or
         # INTENT twin is the SAME logical dispatch as the canonical frame
@@ -798,43 +954,32 @@ class MessageBusClient:
         return self.session or Session(self.session_id)
 
     def _take_inbound_session(self, message: Message):
-        """Take an arriving message's session into whatever state holds it.
+        """Check an arriving message's session carrier. Nothing else.
 
-        OVOS-SESSION-2 §5.1's arrival merge is an orchestrator-intake fold: it
-        happens exactly once, at the process that owns the default-session
-        store, when an utterance is first taken in. This client is a bus
-        *consumer* -- a listener, a satellite, a skill container, or the
-        orchestrator itself -- and every one of those observes far more
-        default-session messages than the single intake per utterance the
-        spec merges (replies, handled-acks, forwarded frames all carry a
-        session too). Folding on each of those would merge stale field values
-        back into the live store on every observed message, not just at
-        intake, and would silently overwrite whatever the orchestrator's own
-        intake fold just wrote (see OVOS-SESSION-2 §2.6: mutation only at
-        lifecycle boundaries, not on every observation). The orchestrator
-        process folds for itself, explicitly, at its own intake point; this
-        client only needs to be able to *resolve* a session for handlers,
-        which ``SessionManager.get`` already does purely off the carrier
-        without touching the store.
+        This hook is a transport receive point, not a lifecycle boundary.
+        OVOS-SESSION-2 §2.6 allows a session mutation only in a transformer
+        hook, a ``Match.updated_session`` or a handler invocation, and §6.1
+        makes the bus stateless with respect to session: it MUST NOT
+        interpret, mutate, persist or special-case ``context.session``. So
+        the hook does not build a ``Session`` and does not touch the store.
 
-        A carrier that names no usable id IS the default session (SESSION-1
-        §3.1) and is left exactly alone: it dispatches without touching the
-        store, whether or not it would otherwise construct into a well-formed
-        ``Session`` (an empty/falsy id is unusable but still names the
-        default per §3.1, so it must not be rejected as malformed here). A
-        named session is client-owned and the orchestrator holds nothing for
-        it (§2.2), so it still goes through ``update``, which is a no-op
-        wherever the registry honours §2.2 and the utterance-scoped
-        registration on older releases.
+        The §5.1 arrival fold is orchestrator-intake-only (core#915), and a
+        named session is client-owned with nothing held for it (§2.2), so
+        there was never a store write to make here. Building a ``Session``
+        anyway did two things the clauses refuse: ``Session.from_message``
+        promoted ``context.lang`` into the carrier dict in place (a signal
+        write, SESSION-1 §3.2.7 and §4.1), and it read every carried field a
+        second time, so one wrong-typed field logged its §2 WARN two times
+        per message (once here, once in the handler's ``SessionManager.get``).
+        A handler reads the language by the §3.2.7 precedence instead.
+
+        What the hook still owes is SESSION-1 §2.5: a consumer that finds the
+        carrier malformed MUST drop the Message. ``session_carrier`` raises
+        on a non-object carrier, and ``on_message`` drops on that raise.
 
         @raises MalformedSession: the message carries a non-object session
         """
-        carrier = session_carrier(message)
-        if resolve_session_id(carrier) == DEFAULT_SESSION_ID:
-            return
-        sess = Session.from_message(message)
-        if sess.session_id != DEFAULT_SESSION_ID:
-            SessionManager.update(sess)
+        session_carrier(message)
 
     def on_default_session_update(self, message):
         new_session = message.data["session_data"]
@@ -1450,13 +1595,21 @@ class MessageBusClient:
         topic each still run once per dispatch.
 
         Sharing it across different handlers on DIFFERENT spellings is not
-        free. A process holding handler A on the canonical topic and an
-        unrelated handler B on the suffixed one starves B: A's canonical frame
-        arms the guard, and the twin B waits for is dropped as the mirror. This
-        is accepted. A skill container runs ONE workshop version, which binds
-        one spelling or both, so the mixed case is unreachable from a single
-        version; and the alternative — a per-handler guard — reintroduces the
-        double dispatch for the dual-binding case that is real and common.
+        free. A client holding handler A on one spelling and an unrelated
+        handler B on the other starves B: A's frame arms the guard, and the
+        frame B waits for is dropped as the mirror. It works in both
+        directions, and it is reachable: ``ovos-workshop`` <= 9.3.1 binds only
+        the suffixed spelling and >= 9.3.11a2 only the canonical one, so a test
+        harness or observer that listens on the other spelling on the SAME
+        client (or the same FakeBus) silences that skill. Such an observer must
+        listen on ``'message'``, which the guard does not wrap, or use its own
+        client.
+
+        This is accepted. The alternative, a per-handler guard, brings back the
+        double dispatch for ``ovos-workshop`` 9.3.2a1 to 9.3.11a1, which binds
+        one skill method to both spellings through two unrelated wrapper
+        closures that no receive-side key can tie together. See
+        test_intent_legacy_reemit.TestPairGuardStarvesAHandlerOnTheOtherSpelling.
         """
         counterpart = intent_topic_counterpart(event_name)
         if counterpart is not None:

@@ -252,3 +252,11 @@ class TestEnclosureGetters(TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEnclosureDestinationIsString(TestCase):
+    def test_source_message_destination_is_a_string(self):
+        # OVOS-MSG-1 §3.3: destination is a string, with no list form.
+        api = EnclosureAPI(bus=MagicMock(), skill_id="s")
+        msg = api._get_source_message()
+        self.assertEqual(msg.context["destination"], "enclosure")

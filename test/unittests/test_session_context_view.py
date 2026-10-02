@@ -27,19 +27,42 @@ class TestContextUnifiedStore(unittest.TestCase):
         self.session.intent_context = None
 
     # (a) legacy write -> canonical read + CONTEXT-1 gating
-    def test_legacy_inject_visible_in_intent_context_and_gates(self):
-        self.session.context.inject_context(_adapt_entity("Bob", "person"))
+    def test_legacy_inject_refreshes_the_entry_it_names(self):
+        # the adapt entity_type names the stored private entry through its
+        # munged spelling, and the write lands on that entry
+        self.session.set_intent_context("person", "Bob", scope="private",
+                                        owner_id="tea.skill")
+        self.session.context.inject_context(
+            _adapt_entity("Alice", "tea_skillperson"))
 
-        # visible in the canonical flat map as a CONTEXT-1 entry
-        self.assertIn("person", self.session.intent_context)
-        entry = self.session.intent_context["person"]
-        self.assertEqual(entry["value"], "Bob")
+        entry = self.session.intent_context["tea.skill:person"]
+        self.assertEqual(entry["value"], "Alice")
+        self.assertNotIn("tea_skillperson", self.session.intent_context)
 
-        # gates via CONTEXT-1 (shared scope, bare key)
+        # gates via CONTEXT-1 as the PRIVATE entry it is, for its owner only
         self.assertTrue(gate_satisfied(self.session.intent_context,
                                        requires=[{"key": "person",
-                                                  "scope": "shared"}],
-                                       excludes=None, owner_id="some.skill"))
+                                                  "scope": "private"}],
+                                       excludes=None, owner_id="tea.skill"))
+        self.assertFalse(gate_satisfied(self.session.intent_context,
+                                        requires=[{"key": "person",
+                                                   "scope": "shared"}],
+                                        excludes=None, owner_id="other.skill"))
+
+    def test_legacy_inject_still_mints_a_bare_key(self):
+        # the write-side half is held back until the read side below carries a
+        # version floor: a writer that stops minting, read by a peer that does
+        # not recompute the spelling, breaks adapt tagging silently
+        self.session.context.inject_context(_adapt_entity("Bob", "person"))
+        self.assertEqual(self.session.intent_context["person"]["value"], "Bob")
+
+    def test_legacy_inject_refreshes_a_live_shared_entry(self):
+        # a bare key an ecosystem agreed on (§2) already fixes the scope, so
+        # the adapt write refreshes it instead of being dropped
+        self.session.set_intent_context("person", "Bob", scope="shared")
+        self.session.context.inject_context(_adapt_entity("Alice", "person"))
+        self.assertEqual(self.session.intent_context["person"]["value"],
+                         "Alice")
 
     # (b) canonical write -> legacy adapt get_context read
     def test_canonical_write_visible_through_legacy_get_context(self):
@@ -81,8 +104,8 @@ class TestContextUnifiedStore(unittest.TestCase):
         # legacy callers prune the stack by assigning a filtered list, so
         # assignment must carry removal semantics for the projected keys
         view = self.session.context
-        view.inject_context(_adapt_entity("Bob", "person"))
-        view.inject_context(_adapt_entity("kitchen", "room"))
+        self.session.set_intent_context("person", "Bob", scope="shared")
+        self.session.set_intent_context("room", "kitchen", scope="shared")
         kept = [(frame, ts) for frame, ts in view.frame_stack
                 if frame.entities[0]["data"][0][1] == "room"]
         view.frame_stack = kept
@@ -94,7 +117,7 @@ class TestContextUnifiedStore(unittest.TestCase):
         # entries the legacy stack cannot represent (null flags, non-string
         # values) are invisible to the view; assignment says nothing about them
         view = self.session.context
-        view.inject_context(_adapt_entity("Bob", "person"))
+        self.session.set_intent_context("person", "Bob", scope="shared")
         self.session.intent_context["skill.a:flag"] = {"value": None}
         view.frame_stack = []
         self.assertIsNone(self.session.intent_context["person"])
@@ -112,17 +135,110 @@ class TestContextUnifiedStore(unittest.TestCase):
         self.assertEqual(keys, ["person"])
 
     def test_update_context_greedy_writes_canonical(self):
-        # greedy mode injects every scanned entity
+        # greedy mode injects every scanned entity, and one that names a live
+        # entry through its adapt spelling lands on that entry
         view = self.session.context
         view.context_greedy = True
-        view.update_context([_adapt_entity("kitchen", "room")])
-        self.assertEqual(self.session.intent_context["room"]["value"], "kitchen")
+        self.session.set_intent_context("room", "hall", scope="private",
+                                        owner_id="tea.skill")
+        view.update_context([_adapt_entity("kitchen", "tea_skillroom")])
+        self.assertEqual(self.session.intent_context["tea.skill:room"]["value"],
+                         "kitchen")
+        self.assertNotIn("tea_skillroom", self.session.intent_context)
 
     def test_dead_entry_not_projected_to_frame_stack(self):
         self.session.intent_context = {
             "person": {"value": "Bob", "expires_at": time.time() - 10}}
         ctx = self.session.context.get_context()
         self.assertEqual(ctx, [])
+
+
+class TestAdaptSpellingProjection(unittest.TestCase):
+    """The read side recomputes the munged adapt spelling from the key.
+
+    A skill registers its adapt keyword as ``alphanumeric_skill_id + name``
+    (ovos-workshop), so the private OVOS-CONTEXT-1 entry ``tea.skill:person``
+    is the entry behind the adapt ``entity_type`` ``tea_skillperson``.
+    """
+
+    def setUp(self):
+        from ovos_bus_client.session import Session
+        self.session = Session("ctx-spelling-test")
+        self.session.intent_context = None
+
+    def test_private_entry_reads_back_under_the_munged_spelling(self):
+        self.session.set_intent_context("person", "Bob", scope="private",
+                                        owner_id="tea.skill")
+        pairs = [e["data"][0] for e in self.session.context.get_context()]
+        self.assertIn(("Bob", "tea_skillperson"), pairs)
+
+    def test_origin_keeps_the_canonical_key(self):
+        # the tombstone the frame-stack setter writes reaches the entry, not
+        # its adapt spelling
+        self.session.set_intent_context("person", "Bob", scope="private",
+                                        owner_id="tea.skill")
+        self.session.context.frame_stack = []
+        self.assertEqual(self.session.intent_context,
+                         {"tea.skill:person": None})
+
+    def test_munged_sub_key_is_not_prefixed_twice(self):
+        # an emitter that predates CONTEXT-1 sends the munged spelling as the
+        # key itself; prefixing again would name a keyword no skill registered
+        self.session.set_intent_context("tea_skillperson", "Bob",
+                                        scope="private", owner_id="tea.skill")
+        pairs = [e["data"][0] for e in self.session.context.get_context()]
+        self.assertIn(("Bob", "tea_skillperson"), pairs)
+
+    def test_bare_key_is_its_own_adapt_spelling(self):
+        self.session.set_intent_context("person", "Bob", scope="shared")
+        pairs = [e["data"][0] for e in self.session.context.get_context()]
+        self.assertIn(("Bob", "person"), pairs)
+
+    def test_remove_context_by_munged_spelling_tombstones_the_entry(self):
+        self.session.set_intent_context("person", "Bob", scope="private",
+                                        owner_id="tea.skill")
+        self.session.context.remove_context("tea_skillperson")
+        self.assertIsNone(self.session.intent_context["tea.skill:person"])
+
+    def test_modern_writer_to_old_reader_sends_the_munged_spelling(self):
+        # the quadrant that fails silently: an old peer reads the legacy
+        # ``context`` wire key and tags on the registered keyword name
+        self.session.set_intent_context("person", "Bob", scope="private",
+                                        owner_id="tea.skill")
+        frames = self.session.serialize()["context"]["frame_stack"]
+        entity_types = [f[0]["entities"][0]["data"][0][1] for f in frames]
+        self.assertEqual(entity_types, ["tea_skillperson"])
+
+    def test_transitional_duplicate_collapses_to_one_frame(self):
+        # an old writer stores the munged bare key BESIDE the private entry;
+        # both project to the registered spelling, and one turn gives one frame
+        self.session.set_intent_context("person", "Bob", scope="private",
+                                        owner_id="tea.skill")
+        self.session.set_intent_context("tea_skillperson", "Bob",
+                                        scope="shared")
+        types = [f.entities[0]["data"][0][1]
+                 for f, _ in self.session.context.frame_stack]
+        self.assertEqual(types, ["tea_skillperson"])
+        origins = [f.entities[0]["origin"]
+                   for f, _ in self.session.context.frame_stack]
+        self.assertEqual(origins, ["tea.skill:person"])
+
+    def test_old_writer_to_modern_reader_keeps_the_spelling(self):
+        # an old peer's whole context store arrives on the legacy wire key and
+        # exists nowhere else, so it is folded rather than dropped, and reads
+        # back under the same spelling the old peer tagged with
+        from ovos_bus_client.session import Session
+        now = time.time()
+        sess = Session.deserialize({
+            "session_id": "old-writer-1",
+            "context": {"timeout": 120,
+                        "frame_stack": [
+                            ({"entities": [_adapt_entity("Bob",
+                                                         "tea_skillperson")],
+                              "metadata": {}}, now)]}})
+        self.assertIn("tea_skillperson", sess.intent_context)
+        pairs = [e["data"][0] for e in sess.context.get_context()]
+        self.assertIn(("Bob", "tea_skillperson"), pairs)
 
 
 class TestContextWarnOnAccess(unittest.TestCase):
@@ -272,13 +388,13 @@ class TestLegacyWireRoundTrip(unittest.TestCase):
     def test_legacy_write_preserves_intent_context_identity(self):
         from ovos_bus_client.session import Session
         session = Session("identity-1")
-        session.set_intent_context("person", "Bob", scope="shared")
+        session.set_intent_context("pet", "dog", scope="shared")
         held = session.intent_context
         # adapt entity shape: data[0] is (value, key)
         session.context.inject_context({"key": "pet",
                                         "data": [["cat", "pet"]]})
         self.assertIs(session.intent_context, held)
-        self.assertIn("pet", held)
+        self.assertEqual(held["pet"]["value"], "cat")
 
     def test_legacy_clear_context_keeps_dict_and_identity(self):
         from ovos_bus_client.session import Session

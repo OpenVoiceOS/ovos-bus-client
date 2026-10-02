@@ -218,13 +218,11 @@ class TestSessionSerialization(TestCase):
         _reset_session_manager()
 
     def test_serialize_includes_all_keys(self):
-        # Pre-spec pin: `location` used to always be present, materialized
-        # from the deployment config even when the session named none. Under
-        # OVOS-SESSION-1 §3.5/§4.1 `location`'s deployment default IS a
-        # deployment-configured value, so it is never materialized onto the
-        # wire on the origin's behalf (§4.1) -- it is omitted here because no
-        # `location` was ever provided to this session, same as an omitted
-        # override field with no session-carried value.
+        # OVOS-SESSION-1 §3.5 `location` is client-owned, and this Session is
+        # the origin, so it declares the deployment-configured value on the
+        # wire (ruling T-2292 on §4.1). §4.1 binds the OTHER construction --
+        # a session rebuilt from a received carrier -- and that one is pinned
+        # in test_session_location.py.
         s = Session("sid", lang="pt-pt", site_id="kitchen", persona_id="p1",
                     blacklisted_skills=["bad.skill"],
                     blacklisted_intents=["bad:intent"])
@@ -235,7 +233,7 @@ class TestSessionSerialization(TestCase):
                     "is_speaking", "is_recording", "blacklisted_skills",
                     "blacklisted_intents"]:
             self.assertIn(key, d)
-        self.assertNotIn("location", d)
+        self.assertIn("location", d)
         self.assertEqual(d["session_id"], "sid")
         self.assertEqual(d["persona_id"], "p1")
         self.assertEqual(d["site_id"], "kitchen")
