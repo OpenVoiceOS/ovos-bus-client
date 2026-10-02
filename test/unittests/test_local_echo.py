@@ -398,17 +398,46 @@ def _twin_context(**markers):
     return context
 
 
-def test_a_namespace_twin_is_not_echoed_to_any_listener():
-    """A marked namespace twin is a second wire frame that exists only for a
-    pre-spec-tools receiver. on_message delivers nothing for it, because the
-    canonical frame it follows already served both spellings. The echo path
-    must make the same decision, or the emitting process serves them twice."""
-    client = _bridged_client()
-    client.emit(Message(ECHO_TOPIC, {"x": 1},
+CANONICAL_PING = "ovos.fallback.ping"
+LEGACY_PING = "ovos.skills.fallback.ping"
+LEGACY_PONG = "ovos.skills.fallback.pong"
+
+
+def _real_bridge_client(topics):
+    """A client echoing `topics` through the real namespace map, which is what
+    the twin witness book matches on."""
+    from ovos_spec_tools import NamespaceTranslator
+    client = _client(topics)
+    client._translator = NamespaceTranslator(modernize=True, emit_legacy=True)
+    return client
+
+
+def test_a_namespace_twin_behind_its_echoed_canonical_frame_is_not_echoed_again():
+    """A marked namespace twin that follows its canonical frame is a second
+    wire frame for a pre-spec-tools receiver only: the canonical echo already
+    served both spellings. on_message suppresses it; so must the echo."""
+    client = _real_bridge_client((CANONICAL_PING, LEGACY_PING))
+    client.emit(Message(CANONICAL_PING, {"utterances": ["hello"]}, {"source": "core"}))
+    before = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert CANONICAL_PING in before and LEGACY_PING in before, before
+
+    client.emit(Message(LEGACY_PING, {"utterances": ["hello"]},
                         _twin_context(**{NAMESPACE_COMPAT_TWIN_KEY: True})))
 
+    after = [call.args[0] for call in client.emitter.emit.call_args_list]
+    assert after == before, "the twin was echoed a second time"
+
+
+def test_an_inherited_namespace_marker_is_echoed_like_the_wire_would_deliver_it():
+    """OVOS-MSG-1 §5.2: an old subscriber's reply() copies the marker from the
+    ping it answers onto its pong. Nothing canonical carries that pong, so
+    on_message delivers it (#377); an echo that suppressed it on the marker
+    alone would lose the only copy."""
+    client = _real_bridge_client((LEGACY_PONG,))
+    client.emit(Message(LEGACY_PONG, {}, _twin_context(**{NAMESPACE_COMPAT_TWIN_KEY: True})))
+
     names = [call.args[0] for call in client.emitter.emit.call_args_list]
-    assert names == [], names
+    assert LEGACY_PONG in names, names
 
 
 def test_an_intent_twin_is_echoed_without_the_firehose():

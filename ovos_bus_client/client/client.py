@@ -1226,6 +1226,14 @@ class MessageBusClient:
         # receiver still needs them.
         is_intent_twin = local_copy.context.pop(INTENT_COMPAT_TWIN_KEY, False)
         is_namespace_twin = local_copy.context.pop(NAMESPACE_COMPAT_TWIN_KEY, False)
+        # And believed only as on_message believes it: when the canonical frame
+        # this twin duplicates was seen. A marker an old subscriber copied onto
+        # its reply proves nothing, and the echo stands in for the wire copy,
+        # so the two paths must agree on it or the echo loses the only copy.
+        if is_namespace_twin and not twin_witness_book(self).is_real_twin(local_copy):
+            is_namespace_twin = False
+        elif not is_namespace_twin:
+            twin_witness_book(self).witness(self._translator, local_copy)
         counterparts = []
         try:
             if not is_namespace_twin:
