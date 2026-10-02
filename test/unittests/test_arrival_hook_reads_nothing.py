@@ -11,6 +11,7 @@ one time per message (from the handler's ``SessionManager.get``).
 """
 import copy
 import logging
+import threading
 import unittest
 from unittest.mock import MagicMock
 
@@ -45,18 +46,31 @@ class TestArrivalHookReadsNothing(unittest.TestCase):
         self.bus.connected_event.set()
 
     def _deliver(self, topic, carrier, context_lang="pt-PT"):
-        """Put one message through on_message; return what the handler saw."""
+        """Put one message through on_message; return what the handler saw.
+
+        ``self.bus.emitter`` is a ``pyee.ExecutorEventEmitter`` (see
+        ``client.py``'s own comment on the dispatch loop): ``emit`` submits
+        the handler to a thread pool and returns before it runs. Without a
+        sync point, the handler's ``SessionManager.get`` call -- the second
+        §2 WARN this suite counts -- can still be mid-flight, or already
+        land, after a *later* test's own ``_Records`` handler replaces this
+        one, moving one WARN from this test's count into the next test's.
+        Waiting on an ``Event`` the handler sets pins that WARN to this call.
+        """
         seen = {}
+        done = threading.Event()
 
         def handler(message):
             seen["carrier"] = message.context.get("session")
             seen["session"] = SessionManager.get(message)
+            done.set()
 
         self.bus.on(topic, handler)
         raw = Message(topic, {"utterances": ["hello"]},
                       {"session": copy.deepcopy(carrier),
                        "lang": context_lang}).serialize()
         self.bus.on_message(raw)
+        self.assertTrue(done.wait(5), "handler did not run")
         self.assertIn("carrier", seen, "handler did not run")
         return seen
 
