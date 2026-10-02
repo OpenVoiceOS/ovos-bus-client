@@ -1,5 +1,6 @@
 import unittest
 
+import pytest
 from time import time
 from unittest import TestCase
 import json
@@ -145,6 +146,10 @@ class TestFunctions(unittest.TestCase):
         self.assertIsNone(dig_for_message())
 
 
+@pytest.mark.filterwarnings("ignore:deprecated without replacement:DeprecationWarning")
+@pytest.mark.filterwarnings(
+    "ignore:deprecated, use ovos_config.Configuration\\(\\) object directly:DeprecationWarning"
+)
 class TestLanguageExtraction(TestCase):
     def test_no_lang_in_message(self):
         """No lang in message should result in lang from active locale."""

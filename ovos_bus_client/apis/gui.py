@@ -1,5 +1,9 @@
+import base64
+import mimetypes
 import os
 import shutil
+import stat
+import tempfile
 from os.path import splitext, isfile
 from typing import List, Union, Optional, Callable
 
@@ -113,23 +117,100 @@ class GUIInterface:
         GUI_CACHE_PATH = get_xdg_cache_save_path('ovos_gui')
 
         output_path = f"{GUI_CACHE_PATH}/{self.skill_id}"
-        if os.path.exists(output_path):
-            LOG.info(f"Removing existing {self.skill_id} cached GUI resources before updating")
+        # the path carries the skill id only, so two processes that load one
+        # skill id under one XDG_CACHE_HOME build this same directory. Build
+        # the whole tree in a private directory beside the target and move it
+        # into place at the end, so no process reads or writes a tree that
+        # another process is still filling.
+        os.makedirs(GUI_CACHE_PATH, exist_ok=True)
+        staging = tempfile.mkdtemp(dir=GUI_CACHE_PATH,
+                                   prefix=f".{self.skill_id}.staging.")
+        # tempfile.mkdtemp creates its directory 0700 by design, and os.rename
+        # carries the mode with the inode, so the tree published below would be
+        # 0700 where a directory made by copytree/makedirs is 0755: the GUI
+        # service could not traverse into it, whatever the modes below. Publish
+        # with the mode of the directory that CONTAINS it, which is what
+        # makedirs gave the cache root under this process's umask. This
+        # reproduces what the tree before this change served, without reading
+        # the umask, which cannot be read without briefly setting it.
+        #
+        # What that tree served has two cases, and the chmod only decides the
+        # first. Where the skill ships no `all` directory, or ships one whose
+        # mode matches the umask, the served directory's mode equalled the
+        # cache root's (022 -> 0755, 077 -> 0700, 002 -> 0775). Where an `all`
+        # source's mode differs, copytree below copystats that source's mode
+        # onto this directory and the served mode is the SOURCE's, not the
+        # cache root's: measured on that tree, umask 077 with an `all` source
+        # at 0755 served 0755 from a 0700 cache root, and umask 022 with an
+        # `all` source at 0700 served 0700 from a 0755 cache root. A packaged
+        # skill is the second case, because resources installed by pip carry
+        # 0755 whatever the running umask is.
+        #
+        # This head reproduces both cases: the same copystat overwrites this
+        # chmod exactly as it overwrote mkdtemp's 0700. So the chmod is what
+        # keeps the first case right, and nothing here overrides an `all`
+        # source's mode in the second.
+        try:
+            os.chmod(staging, stat.S_IMODE(os.stat(GUI_CACHE_PATH).st_mode))
+        except OSError as e:
+            LOG.warning(f"could not set the mode of {staging}: ({e})")
+        try:
+            for framework, bpath in self.ui_directories.items():
+                if framework == "all":
+                    # mostly applies to image files
+                    shutil.copytree(bpath, staging, dirs_exist_ok=True)
+                    LOG.debug(f"Copied {self.skill_id} shared GUI resources from {bpath} to {output_path}")
+                    continue
+                if not os.path.isdir(bpath):
+                    LOG.error(f"invalid '{framework}' resources directory: {bpath}")
+                    continue
+                shutil.copytree(bpath, f"{staging}/{framework}", dirs_exist_ok=True)
+                LOG.debug(f"Copied {self.skill_id} GUI resources from {bpath} to {output_path}/{framework}")
+            if self._move_cache_into_place(staging, output_path):
+                staging = None
+        finally:
+            if staging is not None:
+                shutil.rmtree(staging, ignore_errors=True)
+
+    @staticmethod
+    def _move_cache_into_place(staging: str, output_path: str,
+                               attempts: int = 5) -> bool:
+        """
+        Move a staged resource tree onto the served path, whatever is there.
+        @param staging: directory holding the complete new tree
+        @param output_path: the served path, $XDG_CACHE_HOME/ovos_gui/<skill_id>
+        @param attempts: how many times to retry a lost race
+        @return: True if the staged tree is now the tree in place
+        """
+        # os.rename onto a directory that holds files fails, so the tree in
+        # place is moved aside first. Another process that refills output_path
+        # between the two moves makes the second one fail; the loop then moves
+        # its tree aside as well and tries again. Every tree either process
+        # publishes is complete, so the loser of the race loses nothing.
+        retired = f"{staging}.retired"
+        for _ in range(attempts):
+            if os.path.isdir(output_path):
+                try:
+                    os.rename(output_path, retired)
+                except OSError as e:
+                    LOG.debug(f"cached GUI resources at {output_path} "
+                              f"were already moved: ({e})")
+            elif os.path.exists(output_path):
+                # not a directory: a stale file cannot be renamed onto
+                try:
+                    os.remove(output_path)
+                except OSError as e:
+                    LOG.error(f"Failed to remove {output_path}: ({e})")
             try:
-                shutil.rmtree(output_path)
-            except Exception as e:
-                LOG.error(f"Failed to remove existing cache: ({e})")
-        for framework, bpath in self.ui_directories.items():
-            if framework == "all":
-                # mostly applies to image files
-                shutil.copytree(bpath, output_path, dirs_exist_ok=True)
-                LOG.debug(f"Copied {self.skill_id} shared GUI resources from {bpath} to {output_path}")
-                continue
-            if not os.path.isdir(bpath):
-                LOG.error(f"invalid '{framework}' resources directory: {bpath}")
-                continue
-            shutil.copytree(bpath, f"{output_path}/{framework}", dirs_exist_ok=True)
-            LOG.debug(f"Copied {self.skill_id} GUI resources from {bpath} to {output_path}/{framework}")
+                os.rename(staging, output_path)
+                return True
+            except OSError as e:
+                LOG.debug(f"Failed to move cached GUI resources into "
+                          f"{output_path}, retrying: ({e})")
+            finally:
+                shutil.rmtree(retired, ignore_errors=True)
+        LOG.error(f"Failed to update cached GUI resources at {output_path}")
+        return False
 
     def set_bus(self, bus=None):
         self._bus = bus or get_mycroft_bus()
@@ -395,6 +476,12 @@ class GUIInterface:
         self.bus.emit(Message("gui.value.set", data))
 
         # finally tell gui what to show
+        # OVOS-GUI-1 §3.3 / §4.1 allows an omitted __idle to mean "use the
+        # namespace default" (§4.3), but every released and dev ovos-gui
+        # reads message.data["__idle"] with no default and raises KeyError
+        # on an omitted key (ovos-gui#112, #117 add the .get() read and are
+        # not merged yet). Keep sending the key, null when unset, until a
+        # receiver that tolerates its absence ships.
         self.bus.emit(Message("gui.page.show",
                               {"page_names": page_names,
                                "index": index,
@@ -592,6 +679,10 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         self["text"] = text
+        # OVOS-GUI-1 §3.3: a producer that wants a previously set key gone
+        # sends it as null; it does not omit the key. Skipping the
+        # assignment when title is None left the old title on the wire
+        # from a prior call, so always set it, null included.
         self["title"] = title
         self.show_page("SYSTEM_TextFrame", override_idle,
                        override_animations)
@@ -628,6 +719,31 @@ class GUIInterface:
                         return gui_cache
         return url
 
+    @staticmethod
+    def _to_wire_image(url: str) -> str:
+        """Coerce an image reference to an OVOS-GUI-1 §3.5 wire form.
+
+        §3.5 / §8.1: an image-bearing key carries **either** an ``http(s)`` URL
+        or a ``data:`` URI. A producer that holds a **local** asset MUST resolve
+        it to a ``data:`` URI before emission and MUST NOT place a bare
+        filesystem path on the wire (a render backend MUST NOT be required to
+        read the producer's filesystem). ``http(s)`` URLs and pre-formed
+        ``data:`` URIs pass through unchanged; a local file is base64-encoded
+        into a ``data:`` URI.
+        """
+        if not url or not isinstance(url, str):
+            return url
+        if url.startswith("http") or url.startswith("data:"):
+            return url
+        if os.path.isfile(url):
+            mime = mimetypes.guess_type(url)[0] or "application/octet-stream"
+            with open(url, "rb") as f:
+                payload = base64.b64encode(f.read()).decode("ascii")
+            return f"data:{mime};base64,{payload}"
+        # not resolvable to a self-contained wire form; return as-is so the
+        # caller's existence check can reject it
+        return url
+
     def show_image(self, url: str, caption: Optional[str] = None,
                    title: Optional[str] = None,
                    fill: str = None, background_color: str = None,
@@ -653,10 +769,14 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         url = self._resolve_url(url)
-        if not url.startswith("http") and not os.path.isfile(url):
+        if (not url.startswith("http") and not url.startswith("data:")
+                and not os.path.isfile(url)):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
-        self["image"] = url
+        # OVOS-GUI-1 §3.5: never put a bare filesystem path on the wire — a
+        # local asset is resolved to a self-contained data: URI; a pre-formed
+        # data: URI or http(s) URL passes through unchanged.
+        self["image"] = self._to_wire_image(url)
         self["title"] = title
         self["caption"] = caption
         self["fill"] = fill
@@ -689,10 +809,14 @@ class GUIInterface:
                 False: 'Default' always show animations.
         """
         url = self._resolve_url(url)
-        if not url.startswith("http") and not os.path.isfile(url):
+        if (not url.startswith("http") and not url.startswith("data:")
+                and not os.path.isfile(url)):
             LOG.error(f"Provided image file does not exist! '{url}'")
             return
-        self["image"] = url
+        # OVOS-GUI-1 §3.5: never put a bare filesystem path on the wire — a
+        # local asset is resolved to a self-contained data: URI; a pre-formed
+        # data: URI or http(s) URL passes through unchanged.
+        self["image"] = self._to_wire_image(url)
         self["title"] = title
         self["caption"] = caption
         self["fill"] = fill
