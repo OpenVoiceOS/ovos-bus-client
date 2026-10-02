@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.25a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.25a1) (2026-10-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.24a1...2.11.25a1)
+
+**Merged pull requests:**
+
+- fix\(context\): retire the shadowed bare twin when the inject makes it stale [\#382](https://github.com/OpenVoiceOS/ovos-bus-client/pull/382) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.24a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.24a1) (2026-10-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.23a1...2.11.24a1)
@@ -291,15 +299,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.6a2)
 
 ## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
 
@@ -313,7 +321,6 @@
 
 - docs: add AGENTS.md with the conventions for coding agents [\#296](https://github.com/OpenVoiceOS/ovos-bus-client/pull/296) ([JarbasAl](https://github.com/JarbasAl))
 - fix: make close\(\) stop a client that is reconnecting [\#295](https://github.com/OpenVoiceOS/ovos-bus-client/pull/295) ([JarbasAl](https://github.com/JarbasAl))
-- docs: cross-link the technical manual [\#273](https://github.com/OpenVoiceOS/ovos-bus-client/pull/273) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.8.5a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a1) (2026-08-31)
 
@@ -370,10 +377,6 @@
 ## [2.7.3a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.3a1) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.7.2a1...2.7.3a1)
-
-**Merged pull requests:**
-
-- fix: bus CLIs hang forever when the messagebus is unreachable [\#274](https://github.com/OpenVoiceOS/ovos-bus-client/pull/274) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.7.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.7.2a1) (2026-07-31)
 
