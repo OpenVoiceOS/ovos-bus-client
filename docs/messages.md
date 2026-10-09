@@ -2,7 +2,7 @@
 
 Reference for the `Message` class and its helpers. The envelope shape, routing
 keys, session carrier and derivations are normatively defined by
-[**OVOS-MSG-1**](https://github.com/OpenVoiceOS/architecture/blob/master/message-object.md);
+[**OVOS-MSG-1**](https://github.com/OpenVoiceOS/architecture/blob/dev/msg-1.md);
 the implementation here is a re-export of
 [`ovos_spec_tools.message.Message`](https://github.com/OpenVoiceOS/ovos-spec-tools)
 with `publish` attached for back-compat.
