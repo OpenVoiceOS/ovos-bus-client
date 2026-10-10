@@ -3,7 +3,7 @@ OCPAudioServiceInterface, OCPVideoServiceInterface, OCPWebServiceInterface."""
 import unittest
 from datetime import timedelta
 from unittest import TestCase
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -477,6 +477,13 @@ class TestNormTracks(TestCase):
         # MediaEntry can be constructed from a minimal dict
         out = OCPInterface.norm_tracks([{"uri": "https://x", "title": "t"}])
         self.assertIsInstance(out[0], MediaEntry)
+
+    def test_norm_tracks_dict_does_not_log_bad_track(self):
+        # the converted entry replaces the dict in place; the type check must
+        # look at the converted entry, not the original dict
+        with patch("ovos_bus_client.apis.ocp.LOG") as log:
+            OCPInterface.norm_tracks([{"uri": "https://x", "title": "t"}])
+        log.error.assert_not_called()
 
 
 if __name__ == "__main__":
