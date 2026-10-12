@@ -214,6 +214,24 @@ def _maybe_encrypt(serialized: str) -> str:
     return json_dumps(encrypt_as_dict(secret, serialized))
 
 
+def _as_text(raw):
+    """The frame as ``str``, which is what every 'message' listener and
+    :meth:`Message.deserialize` expect.
+
+    ``run_forever(skip_utf8_validation=True)`` makes websocket-client hand
+    text frames over undecoded, as ``bytes``. Decoding here is done in C and
+    still rejects malformed UTF-8 -- what the skipped check was for, without
+    its pure-Python byte loop. Returns None for a frame that is not UTF-8.
+    """
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            return bytes(raw).decode("utf-8")
+        except UnicodeDecodeError as e:
+            LOG.warning("discarding bus frame that is not valid UTF-8: %s", e)
+            return None
+    return raw
+
+
 def _maybe_decrypt(raw):
     """Unwrap the legacy AES envelope on inbound frames when
     ``websocket.secret_key`` is configured. Returns a plain JSON string
@@ -724,6 +742,9 @@ class MessageBusClient:
             message = args[0]
         else:
             message = args[1]
+        message = _as_text(message)
+        if message is None:
+            return
         try:
             parsed_message = Message.deserialize(_maybe_decrypt(message))
         except MalformedMessage as e:
@@ -1475,7 +1496,9 @@ class MessageBusClient:
             # thread's time at boot - holding the GIL the skill loader needs.
             # The payload is decoded and parsed as JSON right after, which
             # rejects malformed text anyway, and the messagebus has already
-            # validated the frame it relays.
+            # validated the frame it relays. Text frames then arrive as bytes;
+            # on_message decodes them (in C, still rejecting bad UTF-8) so
+            # every listener keeps getting str.
             self.client.run_forever(skip_utf8_validation=True)
             delay = self._reconnect_delay
             if self._closing or delay is None:
@@ -1633,6 +1656,9 @@ class GUIWebsocketClient(MessageBusClient):
             message = args[0]
         else:
             message = args[1]
+        message = _as_text(message)
+        if message is None:
+            return
 
         self.emitter.emit('message', message)
 

@@ -428,3 +428,41 @@ class TestReceiveLoopSkipsUtf8Validation(unittest.TestCase):
         bus.client.run_forever.side_effect = lambda **kwargs: None
         bus.run_forever()
         bus.client.run_forever.assert_called_once_with(skip_utf8_validation=True)
+
+
+class TestReceivedFramesStayText(unittest.TestCase):
+    """With UTF-8 validation skipped, websocket-client delivers text frames as
+    bytes; every 'message' listener must still get str."""
+
+    def _frame(self):
+        import json as _json
+        return _json.dumps({"type": "test.topic", "data": {"word": "café"},
+                            "context": {}}).encode("utf-8")
+
+    def test_bytes_frame_reaches_listeners_as_str(self):
+        bus = MessageBusClient()
+        raw, parsed = [], []
+        got = threading.Event()
+        bus.emitter.on("message", raw.append)
+        bus.on("test.topic", lambda m: (parsed.append(m), got.set()))
+        bus.on_message(None, self._frame())
+        self.assertTrue(raw and all(isinstance(r, str) for r in raw))
+        self.assertTrue(got.wait(5))
+        self.assertEqual(parsed[0].data["word"], "café")
+
+    def test_invalid_utf8_frame_is_dropped_not_raised(self):
+        bus = MessageBusClient()
+        raw = []
+        bus.emitter.on("message", raw.append)
+        bus.on_message(None, b'{"type": "x", "data": {"w": "\\xff"}, "context": {}}'.replace(b"\\xff", b"\xff"))
+        self.assertEqual(raw, [])
+
+    def test_gui_client_listeners_get_str(self):
+        from ovos_bus_client.client.client import GUIWebsocketClient
+        bus = GUIWebsocketClient.__new__(GUIWebsocketClient)
+        bus.emitter = EventEmitter()
+        raw = []
+        bus.emitter.on("message", raw.append)
+        GUIWebsocketClient.on_message(bus, None, self._frame())
+        self.assertEqual(len(raw), 1)
+        self.assertIsInstance(raw[0], str)
