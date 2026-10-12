@@ -183,15 +183,35 @@ def dig_for_message(max_records: int = 10) -> Optional[Message]:
     Returns:
         Message | None: The first Message found among positional arguments in inspected frames, or `None` if none is found.
     """
-    stack = inspect.stack()[1:]  # first frame is this function call
-    stack = stack if len(stack) <= max_records else stack[:max_records]
-    for record in stack:
-        args = inspect.getargvalues(record.frame)
-        if args.args:
-            for arg in args.args:
-                if isinstance(args.locals[arg], Message):
-                    return args.locals[arg]
-    return None
+    # Walk the frames directly rather than calling inspect.stack(): that
+    # builds a FrameInfo for EVERY frame up to the thread's root, and each
+    # one reads its source file through linecache (findsource + a stat per
+    # file) to fill in the context line - none of which is used here, and
+    # all of it paid even though only the nearest `max_records` frames are
+    # inspected. A skill registering vocabulary calls this once per keyword,
+    # so on a multilingual runtime the source lookups dominated skill
+    # loading (tens of seconds of CPU per boot).
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back if frame is not None else None  # skip this call
+        depth = 0
+        while frame is not None and depth < max_records:
+            code = frame.f_code
+            # the same names inspect.getargvalues() reports as `args`:
+            # positional parameters followed by keyword-only ones
+            n_args = code.co_argcount + code.co_kwonlyargcount
+            if n_args:
+                local_values = frame.f_locals
+                for name in code.co_varnames[:n_args]:
+                    value = local_values.get(name)
+                    if isinstance(value, Message):
+                        return value
+            frame = frame.f_back
+            depth += 1
+        return None
+    finally:
+        # frames reference their locals; drop ours so no cycle outlives the call
+        del frame
 
 
 class CollectionMessage(Message):
