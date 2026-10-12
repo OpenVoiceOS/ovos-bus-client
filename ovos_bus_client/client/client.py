@@ -1467,7 +1467,16 @@ class MessageBusClient:
         self.started_running = True
         while True:
             self._reconnect_delay = None
-            self.client.run_forever()
+            # websocket-client validates every incoming text frame as UTF-8,
+            # and without the optional wsaccel extension it does so with a
+            # byte-at-a-time state machine in pure Python. The bus relays
+            # every registration a skill makes back to every client, so on a
+            # multilingual runtime that check alone took most of the receive
+            # thread's time at boot - holding the GIL the skill loader needs.
+            # The payload is decoded and parsed as JSON right after, which
+            # rejects malformed text anyway, and the messagebus has already
+            # validated the frame it relays.
+            self.client.run_forever(skip_utf8_validation=True)
             delay = self._reconnect_delay
             if self._closing or delay is None:
                 return

@@ -144,7 +144,7 @@ class _FailingApp:
         self.keep_running = False
         self.closed.set()
 
-    def run_forever(self):
+    def run_forever(self, **_kwargs):
         type(self).attempts += 1
         type(self).depths.append(len(inspect.stack()))
         if type(self).attempts <= type(self).failures:
@@ -385,14 +385,14 @@ class TestCloseDuringClientReplacement(TestCase):
             release.wait(5)
             return replacement
 
-        def run_forever():
+        def run_forever(**_kwargs):
             # first pass: report a disconnect so the loop reconnects once
             bus._reconnect_delay = 0
             return None
 
         bus.create_client = create_client
         bus.client.run_forever = run_forever
-        replacement.run_forever = lambda: started.append(True)
+        replacement.run_forever = lambda **_kwargs: started.append(True)
 
         loop = threading.Thread(target=bus.run_forever, daemon=True)
         loop.start()
@@ -416,3 +416,15 @@ class TestCloseDuringClientReplacement(TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReceiveLoopSkipsUtf8Validation(unittest.TestCase):
+    """websocket-client's pure-Python UTF-8 check is skipped: JSON decoding
+    and the messagebus already reject malformed text."""
+
+    def test_run_forever_skips_utf8_validation(self):
+        bus = MessageBusClient()
+        bus.client = MagicMock()
+        bus.client.run_forever.side_effect = lambda **kwargs: None
+        bus.run_forever()
+        bus.client.run_forever.assert_called_once_with(skip_utf8_validation=True)
