@@ -175,3 +175,61 @@ class TestCollectionMessage(unittest.TestCase):
 class TestGUIMessage(unittest.TestCase):
     # TODO
     pass
+
+
+class TestDigForMessageFrameWalk(TestCase):
+    """dig_for_message must keep inspect.stack()'s semantics without its cost."""
+
+    def test_keyword_only_parameter_is_found(self):
+        message = Message("kw", {}, {})
+
+        def handler(*, msg):
+            return dig_for_message()
+
+        self.assertIs(handler(msg=message), message)
+
+    def test_max_records_limits_the_search(self):
+        message = Message("deep", {}, {})
+
+        def level(n):
+            if n == 0:
+                return dig_for_message(max_records=3)
+            return level(n - 1)
+
+        def outer(msg):
+            return level(5)
+
+        # outer() is 7 frames above dig_for_message's caller chain; with only
+        # 3 frames inspected the message is out of reach, as it was before
+        self.assertIsNone(outer(message))
+
+        def near(msg):
+            return dig_for_message(max_records=3)
+
+        self.assertIs(near(message), message)
+
+    def test_nearest_message_wins(self):
+        far = Message("far", {}, {})
+        near = Message("near", {}, {})
+
+        def inner(msg):
+            return dig_for_message()
+
+        def outer(msg):
+            return inner(near)
+
+        self.assertIs(outer(far), near)
+
+    def test_does_not_read_source_files(self):
+        from unittest import mock
+        import linecache
+        message = Message("fast", {}, {})
+
+        def handler(msg):
+            return dig_for_message()
+
+        with mock.patch.object(linecache, "checkcache",
+                               side_effect=AssertionError("source lookup")), \
+                mock.patch.object(linecache, "getlines",
+                                  side_effect=AssertionError("source lookup")):
+            self.assertIs(handler(message), message)
