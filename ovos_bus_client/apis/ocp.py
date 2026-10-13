@@ -321,21 +321,21 @@ class OCPInterface:
         assert isinstance(tracks, list)
         # support Playlist and MediaEntry objects in tracks
         for idx, track in enumerate(tracks):
-            if isinstance(track, dict):
-                tracks[idx] = dict2entry(track)
-            if isinstance(track, PluginStream):
+            entry = dict2entry(track) if isinstance(track, dict) else track
+            if isinstance(entry, PluginStream):
                 # TODO - this method will be deprecated
                 #  once all SEI parsers can handle the new objects
                 #  this module can serialize them just fine,
                 #  but we dont know who is listening
-                tracks[idx] = track.as_media_entry
-            elif isinstance(track, list) and not isinstance(track, Playlist):
-                tracks[idx] = OCPInterface.norm_tracks(track)
-            elif not isinstance(track, (Playlist, MediaEntry)):
+                entry = entry.as_media_entry
+            elif isinstance(entry, list) and not isinstance(entry, Playlist):
+                entry = OCPInterface.norm_tracks(entry)
+            elif not isinstance(entry, (Playlist, MediaEntry)):
                 # TODO - support string uris
                 # let it fail in next assert
                 # log all bad entries before failing
-                LOG.error(f"Bad track, invalid type: {track}")
+                LOG.error(f"Bad track, invalid type: {entry}")
+            tracks[idx] = entry
         assert all(isinstance(t, (MediaEntry, Playlist, PluginStream)) for t in tracks)
         return tracks
 

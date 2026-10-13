@@ -1,45 +1,43 @@
+"""The event-scheduler interface a skill or plugin uses.
+
+:class:`EventSchedulerInterface` is the SCHEDULER-1 client of
+:class:`~ovos_bus_client.apis.scheduler.SchedulerClient` — ``schedule``,
+``cancel``, ``get`` and ``list`` — plus the ``*_scheduled_event`` methods
+that speak the pre-specification protocol. The older methods keep their
+behaviour for one stable cycle and warn, naming their replacement.
+"""
 import time
+import warnings
 from datetime import datetime, timedelta
 from typing import Callable, Optional, Union
 
-from ovos_utils.events import EventContainer, create_basic_wrapper
-from ovos_bus_client.message import Message, dig_for_message
-from ovos_utils.log import LOG
-from ovos_config.locale import get_default_tz
+from ovos_utils.events import create_basic_wrapper
+from ovos_utils.log import LOG, log_deprecation
+from ovos_config.locale import get_config_tz
 from ovos_utils.time import now_local
 
+from ovos_bus_client.apis.scheduler import SchedulerClient, SchedulerError
+from ovos_bus_client.message import Message
+from ovos_bus_client.util.scheduled_events import topics
+from ovos_bus_client.util.scheduled_events.legacy import LEGACY_REMOVAL_VERSION
 
-class EventSchedulerInterface:
-    """Interface for accessing the event scheduler over the message bus."""
+__all__ = ["EventSchedulerInterface", "SchedulerClient", "SchedulerError"]
+
+
+def _warn_legacy(method: str, replacement: str):
+    warnings.warn(
+        f"EventSchedulerInterface.{method} speaks the pre-specification "
+        f"mycroft.scheduler.* protocol; use {replacement} instead. It will "
+        f"be removed in ovos-bus-client {LEGACY_REMOVAL_VERSION}.",
+        DeprecationWarning, stacklevel=3)
+
+
+class EventSchedulerInterface(SchedulerClient):
+    """Schedules work for a skill or plugin over the message bus."""
 
     def __init__(self, bus=None, skill_id=None):
-        self.skill_id = skill_id or self.__class__.__name__.lower()
-        self.bus = bus
-        self.events = EventContainer(bus)
+        super().__init__(bus, skill_id)
         self.scheduled_repeats = []
-
-    def set_bus(self, bus):
-        """Attach the messagebus of the parent skill
-
-        Args:
-            bus (MessageBusClient): websocket connection to the messagebus
-        """
-        self.bus = bus
-        self.events.set_bus(bus)
-
-    def set_id(self, skill_id: str):
-        """
-        Attach the skill_id of the parent skill
-
-        Args:
-            skill_id (str): skill_id of the parent skill
-        """
-        self.skill_id = skill_id
-
-    def _get_source_message(self):
-        message = dig_for_message() or Message("")
-        message.context['skill_id'] = self.skill_id
-        return message
 
     def _create_unique_name(self, name: str) -> str:
         """
@@ -79,7 +77,7 @@ class EventSchedulerInterface:
             # ensure correct timezone before conversion to unix timestamp
             # naive datetime objects method relies on the platform C mktime() function to perform the conversion
             # and may not match mycroft.conf
-            when = when.replace(tzinfo=get_default_tz())
+            when = when.replace(tzinfo=get_config_tz())
         if not name:
             name = self.skill_id + handler.__name__
         unique_name = self._create_unique_name(name)
@@ -102,7 +100,7 @@ class EventSchedulerInterface:
         message = self._get_source_message()
         context = context or message.context
         context["skill_id"] = self.skill_id
-        self.bus.emit(Message('mycroft.scheduler.schedule_event',
+        self.bus.emit(Message(topics.LEGACY_SCHEDULE,
                               data=event_data, context=context))
 
     def schedule_event(self, handler: Callable[..., None],
@@ -119,6 +117,7 @@ class EventSchedulerInterface:
         @param name: Event name, must be unique in the context of this object
         @param context: Message context to send to `handler`
         """
+        _warn_legacy("schedule_event", "schedule()")
         self._schedule_event(handler, when, data, name, context=context)
 
     def schedule_repeating_event(self,
@@ -138,6 +137,7 @@ class EventSchedulerInterface:
         @param interval:  time in seconds between calls
         @param context: Message context to send to `handler`
         """
+        _warn_legacy("schedule_repeating_event", "schedule()")
         # Ensure name is defined to avoid re-scheduling
         name = name or self.skill_id + handler.__name__
 
@@ -160,12 +160,22 @@ class EventSchedulerInterface:
             name (str): reference name of event (from original scheduling)
             data (dict): new data to update event with
         """
+        _warn_legacy("update_scheduled_event", "schedule()")
         data = {
             'event': self._create_unique_name(name),
             'data': data or {}
         }
         message = self._get_source_message()
-        self.bus.emit(message.forward('mycroft.schedule.update_event', data))
+        self.bus.emit(message.forward(topics.LEGACY_UPDATE, data))
+        # #222 fixed the topic to the spelling the scheduler actually
+        # listens on (mycroft.scheduler.update_event, above); the misspelled
+        # mycroft.schedule.update_event is emitted alongside it for one
+        # stable cycle in case anything still listens on the typo directly
+        log_deprecation(
+            "mycroft.schedule.update_event is a misspelling of "
+            "mycroft.scheduler.update_event and will stop being emitted",
+            LEGACY_REMOVAL_VERSION)
+        self.bus.emit(message.forward("mycroft.schedule.update_event", data))
 
     def cancel_scheduled_event(self, name: str):
         """
@@ -174,13 +184,14 @@ class EventSchedulerInterface:
         Args:
             name (str): reference name of event (from original scheduling)
         """
+        _warn_legacy("cancel_scheduled_event", "cancel()")
         unique_name = self._create_unique_name(name)
         data = {'event': unique_name}
         if name in self.scheduled_repeats:
             self.scheduled_repeats.remove(name)
         if self.events.remove(unique_name):
             message = self._get_source_message()
-            self.bus.emit(message.forward('mycroft.scheduler.remove_event', data))
+            self.bus.emit(message.forward(topics.LEGACY_REMOVE, data))
 
     def get_scheduled_event_status(self, name: str) -> int:
         """
@@ -195,22 +206,22 @@ class EventSchedulerInterface:
         Raises:
             Exception: Raised if event is not found
         """
+        _warn_legacy("get_scheduled_event_status", "get()")
         event_name = self._create_unique_name(name)
-        data = {'name': event_name}
-
-        reply_name = f'mycroft.event_status.callback.{event_name}'
+        reply_name = f"{topics.LEGACY_GET_REPLY_PREFIX}{event_name}"
         message = self._get_source_message()
-        msg = message.forward('mycroft.scheduler.get_event', data)
-        status = self.bus.wait_for_response(msg, reply_type=reply_name)
+        status = self.bus.wait_for_response(
+            message.forward(topics.LEGACY_GET, {"name": event_name}),
+            reply_type=reply_name)
 
-        if status:
-            event_time = int(status.data[0][0])
-            current_time = int(time.time())
-            time_left_in_seconds = event_time - current_time
-            LOG.info(time_left_in_seconds)
-            return time_left_in_seconds
-        else:
+        if not status or not status.data.get("schedule"):
             raise Exception("Event Status Messagebus Timeout")
+        # the reply carries the schedule under a key: MSG-1 §2.2 forbids a
+        # list-shaped Message.data on this wire, so the pre-specification
+        # bare-list callback payload cannot reach here from a real bus --
+        # the callback shape is object-only, there is nothing to shim
+        event_time = int(status.data["schedule"][0])
+        return event_time - int(time.time())
 
     def cancel_all_repeating_events(self):
         """

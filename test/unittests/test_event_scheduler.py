@@ -1,144 +1,242 @@
-"""
-Test cases regarding the event scheduler.
-"""
+"""The scheduler under its historical name, ``EventScheduler``.
 
-import unittest
+These exercise the epoch-float API and the ``mycroft.scheduler.*`` topics the
+rest of the stack still speaks.
+"""
+import os
+import re
+import tempfile
 import time
+import unittest
+from unittest.mock import patch
 
-try:
-    from pyee import ExecutorEventEmitter
-except (ImportError, ModuleNotFoundError):
-    from pyee.executor import ExecutorEventEmitter
+from ovos_utils.fakebus import FakeBus
+
+from ovos_bus_client.message import Message
+from ovos_bus_client.util.scheduled_events import topics
+from ovos_bus_client.util.scheduler import EventScheduler, repeat_time
 
 
-from unittest.mock import MagicMock, patch
-from ovos_utils.messagebus import FakeBus
-from ovos_bus_client.util.scheduler import EventScheduler
+class TestRepeatTime(unittest.TestCase):
+    def test_next_occurrence_is_in_the_future(self):
+        past = time.time() - 100
+        self.assertGreaterEqual(repeat_time(past, 30), time.time())
+
+    def test_a_missed_period_keeps_the_schedule_phase(self):
+        start = time.time() - 95
+        self.assertAlmostEqual((repeat_time(start, 30) - start) % 30, 0, places=3)
+
+    def test_a_negative_period_is_read_as_its_magnitude(self):
+        self.assertGreaterEqual(repeat_time(time.time(), -30), time.time())
 
 
 class TestEventScheduler(unittest.TestCase):
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_create(self, mock_open, mock_json_dump, mock_load, mock_thread):
-        """
-        Test creating and shutting down event_scheduler.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
-        es.shutdown()
-        self.assertEqual(mock_json_dump.call_args[0][0], {})
+    def setUp(self):
+        self.bus = FakeBus()
+        self.emitted = []
+        self.bus.on("message", self._record)
+        handle, self.store = tempfile.mkstemp(suffix=".json")
+        os.close(handle)
+        os.unlink(self.store)
+        self.scheduler = EventScheduler(self.bus, self.store, autostart=False)
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_add_remove(self, mock_open, mock_json_dump, mock_load, mock_thread):
-        """
-        Test add an event and then remove it.
-        """
-        # Thread start is mocked so will not actually run the thread loop
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+    def tearDown(self):
+        self.scheduler.shutdown()
+        for path in (self.store, f"{self.store}.tmp"):
+            if os.path.isfile(path):
+                os.unlink(path)
 
-        # 900000000000 should be in the future for a long time
-        es.schedule_event("test", 90000000000, None)
-        es.schedule_event("test-2", 90000000000, None)
+    def _record(self, message):
+        if isinstance(message, str):
+            message = Message.deserialize(message)
+        self.emitted.append(message)
 
-        es.check_state()  # run one cycle
-        self.assertTrue("test" in es.events)
-        self.assertTrue("test-2" in es.events)
+    def test_an_absolute_path_is_used_as_the_store(self):
+        self.assertEqual(self.scheduler.schedule_file, self.store)
+        self.assertFalse(self.scheduler.is_running)
 
-        es.remove_event("test")
-        es.check_state()  # run one cycle
-        self.assertTrue("test" not in es.events)
-        self.assertTrue("test-2" in es.events)
-        es.shutdown()
+    def test_add_and_remove(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.scheduler.schedule_event("skill:test-2", time.time() + 3600)
+        self.assertIn(("skill", "skill:test"), self.scheduler.schedules)
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_save(self, mock_open, mock_dump, mock_load, mock_thread):
-        """
-        Test save functionality.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+        self.scheduler.remove_event("skill:test")
+        self.assertNotIn(("skill", "skill:test"), self.scheduler.schedules)
+        self.assertIn(("skill", "skill:test-2"), self.scheduler.schedules)
 
-        # 900000000000 should be in the future for a long time
-        es.schedule_event("test", 900000000000, None)
-        es.schedule_event("test-repeat", 910000000000, 60)
-        es.check_state()
+    def test_a_due_event_is_emitted_with_its_data(self):
+        self.scheduler.schedule_event("skill:test", time.time(), data={"a": 1})
+        self.scheduler.check_state()
+        fired = [m for m in self.emitted if m.msg_type == "skill:test"]
+        self.assertEqual(len(fired), 1)
+        self.assertEqual(fired[0].data, {"a": 1})
 
-        es.shutdown()
+    def test_a_one_shot_is_dropped_once_it_has_fired(self):
+        self.scheduler.schedule_event("skill:test", time.time())
+        self.scheduler.check_state()
+        self.assertEqual(self.scheduler.schedules, {})
 
-        # Make sure the dump method wasn't called with test-repeat
-        self.assertEqual(mock_dump.call_args[0][0], {"test": [(900000000000, None, {}, None)]})
+    def test_scheduling_the_same_name_twice_does_not_duplicate(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.scheduler.schedule_event("skill:test", time.time() + 7200)
+        self.assertEqual(len(self.scheduler.schedules), 1)
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_send_event(self, mock_open, mock_dump, mock_load, mock_thread):
-        """
-        Test save functionality.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+    def test_repeating_events_survive_a_restart(self):
+        self.scheduler.schedule_event("skill:tick", time.time() + 3600, repeat=60)
+        self.scheduler.shutdown()
 
-        # 0 should be in the future for a long time
-        es.schedule_event("test", time.time(), None)
+        revived = EventScheduler(self.bus, self.store, autostart=False)
+        self.addCleanup(revived.shutdown)
+        self.assertIn(("skill", "skill:tick"), revived.schedules)
 
-        es.check_state()
-        self.assertEqual(emitter.emit.call_args[0][0].msg_type, "test")
-        self.assertEqual(emitter.emit.call_args[0][0].data, {})
-        es.shutdown()
+    def test_update_event_changes_the_data(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600,
+                                      data={"a": 1})
+        self.scheduler.update_event("skill:test", {"a": 2})
+        self.assertEqual(
+            self.scheduler.schedules["skill", "skill:test"].record["data"],
+            {"a": 2})
 
-    @patch("threading.Thread")
-    @patch("json.load")
-    @patch("json.dump")
-    @patch("builtins.open")
-    def test_list_events_handler(self, mock_open, mock_dump, mock_load, mock_thread):
-        """
-        Test list_events_handler returns all scheduled events.
-        """
-        mock_load.return_value = ""
-        mock_open.return_value = MagicMock()
-        emitter = MagicMock()
-        es = EventScheduler(emitter)
+    def test_list_events_answers_with_every_schedule(self):
+        self.scheduler.schedule_event("skill:one", time.time() + 36000)
+        self.scheduler.schedule_event("skill:two", time.time() + 7200, repeat=60)
+        self.scheduler.legacy.handle_list(
+            Message(topics.LEGACY_LIST, {},
+                    {"source": ["a"], "destination": ["b"]}))
+        answers = [m for m in self.emitted if "scheduled_events" in m.data]
+        self.assertEqual(set(answers[-1].data["scheduled_events"]),
+                         {"skill:one", "skill:two"})
 
-        # Schedule a couple of events
-        es.schedule_event("test-event-1", 900000000000, None, {"data": "test1"})
-        es.schedule_event("test-event-2", 910000000000, 60, {"data": "test2"})
+    def test_the_store_is_written_on_every_mutation(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.assertTrue(os.path.isfile(self.store))
 
-        # Create a mock message
-        mock_message = MagicMock()
-        mock_message.context = {"source": "test"}
 
-        # Call the handler
-        es.handle_list_events(mock_message)
+class TestPreSpecPublicSurface(unittest.TestCase):
+    """PR #311 dropped these nine public methods and two attributes when
+    the epoch-float scheduler became this class. They are restored as
+    deprecated delegates onto the SCHEDULER-1 implementation for one stable
+    cycle.
+    """
 
-        # Verify message.reply was called with correct msg_type and data
-        mock_message.response.assert_called_once()
-        call_args = mock_message.response.call_args
-        self.assertIn("scheduled_events", call_args[1]["data"])
+    def setUp(self):
+        self.bus = FakeBus()
+        self.emitted = []
+        self.bus.on("message", self._record)
+        handle, self.store = tempfile.mkstemp(suffix=".json")
+        os.close(handle)
+        os.unlink(self.store)
+        self.scheduler = EventScheduler(self.bus, self.store, autostart=False)
 
-        # Verify emitter.emit was called with the reply message
-        emitter.emit.assert_called()
+    def tearDown(self):
+        self.scheduler.shutdown()
+        for path in (self.store, f"{self.store}.tmp"):
+            if os.path.isfile(path):
+                os.unlink(path)
 
-        # Verify the scheduled events contain our test events
-        scheduled_events = call_args[1]["data"]["scheduled_events"]
-        self.assertIn("test-event-1", scheduled_events)
-        self.assertIn("test-event-2", scheduled_events)
+    def _record(self, message):
+        if isinstance(message, str):
+            message = Message.deserialize(message)
+        self.emitted.append(message)
 
-        es.shutdown()
+    def _assert_deprecation_names_a_removal_version(self, mock_warn):
+        mock_warn.assert_called()
+        version = mock_warn.call_args[0][1]
+        self.assertRegex(version, r"^\d+\.0\.0$")
+
+    def test_handle_schedule_event_schedules(self):
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.handle_schedule_event(
+                Message(topics.LEGACY_SCHEDULE,
+                        {"event": "skill:test", "time": time.time() + 3600}))
+        self.assertIn(("skill", "skill:test"), self.scheduler.schedules)
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_handle_remove_event_removes(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.handle_remove_event(
+                Message(topics.LEGACY_REMOVE, {"event": "skill:test"}))
+        self.assertNotIn(("skill", "skill:test"), self.scheduler.schedules)
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_handle_update_event_updates_data(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600,
+                                      data={"a": 1})
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.handle_update_event(
+                Message(topics.LEGACY_UPDATE,
+                        {"event": "skill:test", "data": {"a": 2}}))
+        self.assertEqual(
+            self.scheduler.schedules["skill", "skill:test"].record["data"],
+            {"a": 2})
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_handle_get_event_answers_with_the_object_shape(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.handle_get_event(
+                Message(topics.LEGACY_GET, {"name": "skill:test"}))
+        answers = [m for m in self.emitted
+                  if m.msg_type.startswith(topics.LEGACY_GET_REPLY_PREFIX)]
+        self.assertEqual(answers[-1].data["event"], "skill:test")
+        self.assertIsNotNone(answers[-1].data["schedule"])
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_handle_list_events_answers_with_every_schedule(self):
+        self.scheduler.schedule_event("skill:one", time.time() + 3600)
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.handle_list_events(
+                Message(topics.LEGACY_LIST, {},
+                        {"source": ["a"], "destination": ["b"]}))
+        answers = [m for m in self.emitted if "scheduled_events" in m.data]
+        self.assertIn("skill:one", answers[-1].data["scheduled_events"])
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_handle_system_clock_sync_delegates(self):
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.handle_system_clock_sync(
+                Message(topics.CLOCK_SYNCED, {}))
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_clear_repeating_drops_only_repeating_schedules(self):
+        self.scheduler.schedule_event("skill:once", time.time() + 3600)
+        self.scheduler.schedule_event("skill:tick", time.time() + 3600, repeat=60)
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.clear_repeating()
+        self.assertIn(("skill", "skill:once"), self.scheduler.schedules)
+        self.assertNotIn(("skill", "skill:tick"), self.scheduler.schedules)
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_clear_empty_is_a_documented_no_op(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.clear_empty()
+        self.assertIn(("skill", "skill:test"), self.scheduler.schedules)
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_load_reads_the_store_into_memory(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600)
+        self.scheduler.schedules.clear()
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.scheduler.load()
+        self.assertIn(("skill", "skill:test"), self.scheduler.schedules)
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_events_attribute_snapshots_the_schedules(self):
+        self.scheduler.schedule_event("skill:test", time.time() + 3600,
+                                      data={"a": 1})
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            snapshot = self.scheduler.events
+        self.assertIn("skill:test", snapshot)
+        self.assertEqual(snapshot["skill:test"][0][2], {"a": 1})
+        self._assert_deprecation_names_a_removal_version(warn)
+
+    def test_event_lock_is_the_schedules_lock(self):
+        with patch("ovos_bus_client.util.scheduler.log_deprecation") as warn:
+            self.assertIs(self.scheduler.event_lock, self.scheduler.lock)
+        self._assert_deprecation_names_a_removal_version(warn)
+
+
+if __name__ == "__main__":
+    unittest.main()

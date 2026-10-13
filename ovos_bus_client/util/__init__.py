@@ -16,14 +16,14 @@
 Tools and constructs that are useful together with the messagebus.
 """
 from ovos_utils import json_loads
+from ovos_utils.log import LOG
 
 from ovos_config.config import read_mycroft_config
-from ovos_config.locale import get_default_lang
 from ovos_utils.json_helper import merge_dict
-from ovos_utils.lang import standardize_lang_tag
+from ovos_spec_tools import standardize_lang
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import dig_for_message, Message
-from ovos_bus_client.session import SessionManager
+from ovos_bus_client.session import SessionManager, _get_default_lang
 from ovos_bus_client.util.scheduler import EventScheduler
 
 
@@ -38,16 +38,31 @@ def get_message_lang(message=None):
     if not message:
         return None
     # old style lang param
-    lang = message.data.get("lang") or message.context.get("lang")
+    lang = None
+    for where, candidate in (("data", message.data.get("lang")),
+                             ("context", message.context.get("lang"))):
+        if candidate and not isinstance(candidate, str):
+            # OVOS-PIPELINE-1 §9.1 declares `lang` a string. A value of any
+            # other type is not a language tag, so it is treated as if it were
+            # absent: the next source answers (context, then session, then
+            # the default), exactly as an absent `lang` already does. It is
+            # not coerced with str(): a sender that put an int on the wire
+            # did not mean a tag.
+            LOG.warning(f"ignoring non-string {where} 'lang' on "
+                        f"'{message.msg_type}': {type(candidate).__name__}")
+            continue
+        if candidate:
+            lang = candidate
+            break
     if lang:
-        return standardize_lang_tag(lang)
+        return standardize_lang(lang)
 
     # new style session lang
     if "session_id" in message.context or "session" in message.context:
         sess = SessionManager.get(message)
         return sess.lang
 
-    return standardize_lang_tag(get_default_lang())
+    return standardize_lang(_get_default_lang())
 
 
 def get_websocket(host, port, route='/', ssl=False, threaded=True):
