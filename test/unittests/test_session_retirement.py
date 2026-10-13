@@ -6,17 +6,24 @@ a session at another." §7: "defines no bus topic." appendix/divergences.md
 ``ovos.session.sync`` retired; the owner ruling is to retire them with a
 one-cycle deprecation shim rather than a hard break.
 
-Live-testing against a real messagebus with a pre-spec-tools core (stable
-1.3.1) showed that core answers ``ovos.session.update_default`` ONLY when
-asked with ``ovos.session.sync`` -- there is no unsolicited push. Dropping
-the connect-time REQUEST therefore leaves a fresh client attached to a
-long-running old core stuck on its own config-derived default session
-forever (it never learns the core's lang, etc). The shim keeps both halves
-of the round trip for one cycle:
+The connect-time REQUEST is gone as of T-6516. It could not be sent
+harmlessly: ``emit`` stamps ``context["session"]`` with ``_own_session()``
+on any message carrying none, so a default-id client sent its OWN
+config-derived default session, and an orchestrator folds a present field
+onto its store per §5.1. Measured on a real bus: one connect by a process
+without the user's ``mycroft.conf`` moved an ``nl-NL`` store to ``en-US``,
+with no utterance, and core then broadcast that to every process.
 
-- both clients still send exactly one deprecated ``ovos.session.sync``
-  request on connect, and log a deprecation notice naming the removal
-  version;
+§2.7 rules the request out and supplies the replacement: "Each derives its
+initial view of that session from the deployment configuration ... no
+handshake, bootstrap request, or announcement is needed to make them
+agree." appendix/divergences.md §5.5 already scoped the removal, naming the
+bare-sync bootstrap on connect. What is given up is the pre-spec round trip
+-- a core older than ovos-spec-tools answers
+``ovos.session.update_default`` only when asked -- so against such a core a
+fresh client keeps its own configured default until the next broadcast.
+
+- neither client sends anything on connect;
 - the async client keeps its ``ovos.session.update_default`` listener
   (symmetric with the sync client's own long-kept listener) -- the audit's
   objection to #200 was a NEW subscriber shipped with no removal version,
@@ -29,7 +36,6 @@ connect-time default-session PUSH (that half was correctly retired by
 #328 and stays retired).
 """
 import asyncio
-import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -55,8 +61,8 @@ class TestAsyncClientHasUpdateDefaultListener(unittest.TestCase):
         self.assertTrue(hasattr(AsyncMessageBusClient, "_on_default_session_update"))
 
 
-class TestAsyncClientConnectRequestsDefaultSession(unittest.IsolatedAsyncioTestCase):
-    async def test_connect_emits_exactly_one_session_sync_and_warns(self):
+class TestAsyncClientConnectSendsNothing(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_emits_no_session_sync(self):
         with patch("ovos_bus_client.client.async_client.load_message_bus_config") as mock_cfg:
             mock_cfg.return_value = MagicMock(host="localhost", port=8181,
                                               route="/core", ssl=False)
@@ -71,28 +77,21 @@ class TestAsyncClientConnectRequestsDefaultSession(unittest.IsolatedAsyncioTestC
              patch("ovos_bus_client.client.async_client.log_deprecation") as mock_warn:
             await bus.connect(retry=False)
 
-        ws_mock.send.assert_awaited_once()
-        sent = json.loads(ws_mock.send.await_args.args[0])
-        self.assertEqual(sent["type"], "ovos.session.sync")
+        ws_mock.send.assert_not_awaited()
         connect_warnings = [c for c in mock_warn.call_args_list
                            if "ovos.session.sync request" in c.args[0]]
-        self.assertEqual(len(connect_warnings), 1)
+        self.assertEqual(connect_warnings, [])
 
 
-class TestSyncClientConnectRequestsDefaultSession(unittest.TestCase):
-    def test_on_open_sends_exactly_one_session_sync_and_warns(self):
+class TestSyncClientConnectSendsNothing(unittest.TestCase):
+    def test_on_open_sends_nothing(self):
         client = MessageBusClient()
         client.client = MagicMock()
         client.client.send = MagicMock()
-        with patch("ovos_bus_client.client.client.log_deprecation") as mock_warn:
-            client.on_open()
+        client.on_open()
         client.flush()
-        self.assertEqual(client.client.send.call_count, 1)
-        sent = json.loads(client.client.send.call_args[0][0])
-        self.assertEqual(sent["type"], "ovos.session.sync")
-        connect_warnings = [c for c in mock_warn.call_args_list
-                           if "ovos.session.sync request" in c.args[0]]
-        self.assertEqual(len(connect_warnings), 1)
+        self.assertEqual(client.client.send.call_count, 0,
+                         f"connect sent {client.client.send.call_args_list}")
 
 
 class TestBareSessionSyncDeprecation(unittest.TestCase):
