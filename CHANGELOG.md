@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.11.26a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.26a1) (2026-10-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.25a1...2.11.26a1)
+
+**Merged pull requests:**
+
+- perf: skip websocket-client's pure-Python UTF-8 validation on receive [\#387](https://github.com/OpenVoiceOS/ovos-bus-client/pull/387) ([goldyfruit](https://github.com/goldyfruit))
+- perf: dig\_for\_message walks frames instead of calling inspect.stack\(\) [\#386](https://github.com/OpenVoiceOS/ovos-bus-client/pull/386) ([goldyfruit](https://github.com/goldyfruit))
+- fix\(ocp\): stop logging "Bad track" for dict tracks in norm\_tracks [\#385](https://github.com/OpenVoiceOS/ovos-bus-client/pull/385) ([mikejgray](https://github.com/mikejgray))
+- fix\(session\): drop the connect-time ovos.session.sync bootstrap, which overwrote the default session [\#381](https://github.com/OpenVoiceOS/ovos-bus-client/pull/381) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.25a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.25a1) (2026-10-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.24a1...2.11.25a1)
@@ -299,23 +310,23 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
-
-## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
 
 ## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
 
-## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
 
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.5a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a1...2.8.5a2)
+
+## [2.8.6a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a1) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a1...2.8.6a1)
 
 **Merged pull requests:**
 
@@ -365,10 +376,6 @@
 ## [2.8.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.1a1) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.0a1...2.8.1a1)
-
-**Merged pull requests:**
-
-- fix: restore idempotent double-registration for intent-topic wrapped handlers [\#281](https://github.com/OpenVoiceOS/ovos-bus-client/pull/281) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.8.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.0a1) (2026-08-13)
 
