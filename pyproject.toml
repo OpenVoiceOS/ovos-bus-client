@@ -33,6 +33,7 @@ test = [
     "langcodes",
     "language_data",
     "websockets>=10.0",
+    "ovos-messagebus",
 ]
 async = ["websockets>=10.0"]
 

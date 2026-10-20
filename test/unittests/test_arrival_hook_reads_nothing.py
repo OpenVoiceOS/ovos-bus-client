@@ -96,16 +96,13 @@ class TestArrivalHookReadsNothing(unittest.TestCase):
         self.assertEqual(len(self.records.records), 1, self.records.records)
         self.assertIn("`session_id`", self.records.records[0])
 
-    def test_wrong_typed_session_id_on_a_migrated_topic_is_two_records(self):
-        # Accepted, not fixed here: recognizer_loop:utterance has a namespace
-        # twin, and Message.forward (ovos-spec-tools) stamps the derived
-        # frame through resolve_session_id. That is a second consumer act on
-        # a derived Message, and §2 puts the WARN on each consumer. The
-        # arrival hook itself contributes none of the two.
+    def test_wrong_typed_session_id_on_a_migrated_topic_is_one_record(self):
+        # recognizer_loop:utterance has a namespace twin. The twin is a
+        # verbatim copy of the received frame, so it is not a second
+        # consumer act on the session and adds no second WARN.
         self._deliver("recognizer_loop:utterance", {"session_id": 7})
-        self.assertEqual(len(self.records.records), 2, self.records.records)
-        for text in self.records.records:
-            self.assertIn("`session_id`", text)
+        self.assertEqual(len(self.records.records), 1, self.records.records)
+        self.assertIn("`session_id`", self.records.records[0])
 
 
 if __name__ == "__main__":
