@@ -31,7 +31,9 @@ except ImportError:
     ConnectionClosedError = OSError  # type: ignore
     ConnectionClosedOK = OSError  # type: ignore
 
-from ovos_spec_tools.intent_topics import canonical_intent_topic, is_intent_topic
+from ovos_spec_tools.intent_topics import (canonical_intent_topic,
+                                           intent_topic_counterpart,
+                                           is_intent_topic)
 from ovos_spec_tools.messages import NamespaceTranslator
 
 from ovos_bus_client.client.client import (_bus_flag,
@@ -219,6 +221,11 @@ class AsyncMessageBusClient:
         self._translator = NamespaceTranslator(
             modernize=_bus_flag("OVOS_BUS_MODERNIZE", "modernize", default=True),
             emit_legacy=_bus_flag("OVOS_BUS_EMIT_LEGACY", "emit_legacy", default=True))
+        # mirror guards, keyed as in MessageBusClient: per handler for the
+        # namespace migration, per topic pair for the intent-topic compat
+        self._handler_guards = {}        # func -> shared mirror-guard
+        self._dedup_registrations = {}   # func -> [(event_name, wrapped), ...]
+        self._intent_pair_guards = {}    # frozenset({canonical, suffixed}) -> guard
         self._wire_legacy_twins = _bus_flag(
             "OVOS_BUS_WIRE_LEGACY_TWINS", "wire_legacy_twins", default=True)
 
@@ -507,17 +514,92 @@ class AsyncMessageBusClient:
     # Event registration (synchronous — mirrors MessageBusClient)
     # ------------------------------------------------------------------
 
+    def _mirror_guard_for(self, event_name: str, func: Callable) -> Callable | None:
+        """The mirror guard a registration on ``event_name`` must wrap with.
+
+        Same scopes as ``MessageBusClient._mirror_guard_for``: per handler for
+        a migrated topic, per topic pair for an intent topic and its
+        ``.intent``-suffixed spelling, none for any other topic.
+        """
+        counterpart = intent_topic_counterpart(event_name)
+        if counterpart is not None:
+            return self._intent_pair_guards.setdefault(
+                frozenset({event_name, counterpart}),
+                self._translator.new_mirror_guard())
+        if self._translator.is_migrated(event_name):
+            return self._handler_guards.setdefault(
+                func, self._translator.new_mirror_guard())
+        return None
+
+    def _register(self, register: Callable, event_name: str, func: Callable,
+                  once: bool):
+        """Register ``func`` behind its mirror guard, if the topic needs one.
+
+        Re-registering the same (event_name, func) pair reuses the wrapper, so
+        the emitter sees one listener, as it does for a bare function.
+        """
+        guard = self._mirror_guard_for(event_name, func)
+        if guard is None:
+            register(event_name, func)
+            return
+        for ev, wrapped in self._dedup_registrations.get(func, []):
+            if ev == event_name:
+                register(event_name, wrapped)
+                return
+
+        def wrapped(message=None):
+            if once:
+                # the emitter drops a fired once() listener by itself
+                self._forget_dedup_entry(func, event_name, wrapped)
+            if guard(message):
+                return
+            return func(message)
+
+        register(event_name, wrapped)
+        self._dedup_registrations.setdefault(func, []).append((event_name, wrapped))
+
     def on(self, event_name: str, func: Callable):
-        self.emitter.on(event_name, func)
+        self._register(self.emitter.on, event_name, func, once=False)
 
     def once(self, event_name: str, func: Callable):
-        self.emitter.once(event_name, func)
+        self._register(self.emitter.once, event_name, func, once=True)
+
+    def _forget_dedup_entry(self, func: Callable, event_name: str, wrapped: Callable):
+        regs = self._dedup_registrations.get(func)
+        if not regs or (event_name, wrapped) not in regs:
+            return
+        regs.remove((event_name, wrapped))
+        if not regs:
+            self._dedup_registrations.pop(func, None)
+            self._handler_guards.pop(func, None)
+        self._release_intent_pair_guard(event_name)
+
+    def _release_intent_pair_guard(self, event_name: str):
+        """Drop the pair guard once nothing is registered on either spelling."""
+        counterpart = intent_topic_counterpart(event_name)
+        if counterpart is None:
+            return
+        pair_key = frozenset({event_name, counterpart})
+        for regs in self._dedup_registrations.values():
+            if any(ev in pair_key for ev, _ in regs):
+                return
+        self._intent_pair_guards.pop(pair_key, None)
 
     def remove(self, event_name: str, func: Callable):
         try:
-            self.emitter.remove_listener(event_name, func)
+            registered = [r for r in self._dedup_registrations.get(func, [])
+                          if r[0] == event_name]
+            if registered:
+                for _, wrapped in registered:
+                    self.emitter.remove_listener(event_name, wrapped)
+                    self._forget_dedup_entry(func, event_name, wrapped)
+            else:
+                self.emitter.remove_listener(event_name, func)
         except (ValueError, KeyError):
             LOG.warning("Failed to remove listener %s: %s", event_name, func)
 
     def remove_all_listeners(self, event_name: str):
         self.emitter.remove_all_listeners(event_name)
+        for func, regs in list(self._dedup_registrations.items()):
+            for ev, wrapped in [r for r in regs if r[0] == event_name]:
+                self._forget_dedup_entry(func, ev, wrapped)
