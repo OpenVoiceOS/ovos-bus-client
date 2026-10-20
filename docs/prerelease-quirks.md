@@ -9,6 +9,14 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.11.26a2
+
+A namespace counterpart carries the sender's session verbatim. This includes
+the `lang` and `active_skills` of a `default` session. Before, the receiving
+process re-stamped its own default session onto the counterpart, so a handler
+bound to both spellings of a topic ran twice and saw a different `lang` on
+each.
+
 ## 2.11.16a1
 
 `MessageBusClient` reconnects from `run_forever()`'s loop instead of

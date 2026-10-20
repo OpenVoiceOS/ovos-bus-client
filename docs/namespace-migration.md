@@ -17,9 +17,16 @@ During the migration window both are on, so every migrated event travels on
 | `modernize` | `OVOS_BUS_MODERNIZE` | `modernize` | emitting a *legacy* topic also emits the `ovos.*` spec topic |
 | `emit_legacy` | `OVOS_BUS_EMIT_LEGACY` | `emit_legacy` | emitting an `ovos.*` spec topic also emits the legacy topic |
 
-Only payload-compatible renames are translated (`MIGRATION_MAP`); topics whose
-payload shape also changes are never translated and must be migrated at the call
-site.
+Payload-compatible renames (`MIGRATION_MAP`) keep their payload unchanged. For
+topics whose payload shape also changes (`detach_intent`,
+`mycroft.skill.enable_intent`, `mycroft.skill.disable_intent`), the counterpart
+payload is reshaped by a per-topic transform. For example, `detach_intent` with
+`{"intent_name": "skill.weather:forecast"}` reaches an `ovos.intent.deregister`
+listener as `{"skill_id": "skill.weather", "intent_name": "forecast"}`. Fields
+that exist in only one shape (`lang`, `skill_id`) are omitted from the other.
+
+The counterpart is a verbatim copy of the received frame under the new topic.
+Its context, including the session, equals the original's.
 
 ## Handler de-duplication
 

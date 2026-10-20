@@ -69,8 +69,10 @@ from ovos_spec_tools.intent_topics import (canonical_intent_topic,
                                            legacy_intent_topic)
 from ovos_spec_tools.messages import MIGRATION_MAP
 
-def _verbatim_copy(message: Message, topic: str) -> Message:
+def _verbatim_copy(message: Message, topic: str, data: Optional[dict] = None) -> Message:
     """Retopic ``message`` onto ``topic``, carrying its context byte-for-byte.
+
+    ``data`` replaces the payload when given (a shape-changing counterpart).
 
     NOT :meth:`Message.forward`. ``forward()`` re-stamps the session through
     ``SessionManager.sync_message_session``, and for the ``default`` session
@@ -81,7 +83,8 @@ def _verbatim_copy(message: Message, topic: str) -> Message:
     language must be identical, and its fingerprint must match the canonical
     frame's or the receive-side pair guard cannot pair them.
     """
-    return Message(topic, data=deepcopy(message.data),
+    return Message(topic,
+                   data=deepcopy(message.data if data is None else data),
                    context=deepcopy(message.context))
 
 
@@ -841,7 +844,7 @@ class MessageBusClient:
                 translated = self._translator.translate_payload(
                     from_topic=parsed_message.msg_type, to_topic=topic,
                     data=parsed_message.data)
-                counterparts.append((topic, parsed_message.forward(topic, translated)))
+                counterparts.append((topic, _verbatim_copy(parsed_message, topic, translated)))
 
         try:
             if not is_namespace_twin and not is_intent_twin:

@@ -353,7 +353,7 @@ class AsyncMessageBusClient:
             for topic in self._translator.counterpart_topics(parsed.msg_type):
                 translated = self._translator.translate_payload(
                     from_topic=parsed.msg_type, to_topic=topic, data=parsed.data)
-                self.emitter.emit(topic, parsed.forward(topic, translated))
+                self.emitter.emit(topic, _verbatim_copy(parsed, topic, translated))
         self._modernize_intent_topic(parsed, is_twin=is_intent_twin)
 
     def _modernize_intent_topic(self, message: Message, is_twin: bool = False):
