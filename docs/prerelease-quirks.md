@@ -17,6 +17,24 @@ process re-stamped its own default session onto the counterpart, so a handler
 bound to both spellings of a topic ran twice and saw a different `lang` on
 each.
 
+## 2.11.27a2
+
+`AsyncMessageBusClient.on()` and `once()` run a handler bound to both
+spellings of a migrated topic once per emit, as `MessageBusClient` does. A
+handler on both `recognizer_loop:utterance` and `ovos.utterance.handle` no
+longer runs twice for one utterance. `remove()` and `remove_all_listeners()`
+release the guards. A handler on a shape-changing pair such as
+`detach_intent` and `ovos.intent.deregister` still runs twice, in both
+clients, because the two frames carry different payloads.
+
+The async client also has the intent-topic pair guard of the sync client. One
+guard covers an intent topic and its `.intent` spelling, so it works for
+handlers bound through separate closures. The trade-off is the same as in the
+sync client: if unrelated handler A listens on the canonical spelling and
+unrelated handler B listens on the suffixed spelling of one async client, the
+dispatch reaches only one of them. Listen on `message`, or use a second
+client, to observe the other spelling.
+
 ## 2.11.16a1
 
 `MessageBusClient` reconnects from `run_forever()`'s loop instead of
