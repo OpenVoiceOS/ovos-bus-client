@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.28a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.28a1) (2026-10-20)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.27a1...2.11.28a1)
+
+**Merged pull requests:**
+
+- fix: give AsyncMessageBusClient the sync client's per-handler mirror guard [\#391](https://github.com/OpenVoiceOS/ovos-bus-client/pull/391) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.27a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.27a1) (2026-10-20)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.26a1...2.11.27a1)
@@ -143,10 +151,6 @@
 ## [2.11.13a4](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.13a4) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.13a3...2.11.13a4)
-
-**Merged pull requests:**
-
-- perf: optional single-writer outbound queue \(websocket.async\_sender\) [\#285](https://github.com/OpenVoiceOS/ovos-bus-client/pull/285) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [2.11.13a3](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.13a3) (2026-09-06)
 
@@ -318,15 +322,15 @@
 
 ## [2.9.0a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.9.0a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.9.0a1)
-
-## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.8.6a2)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.7a1...2.9.0a1)
 
 ## [2.8.7a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.7a1) (2026-08-31)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.7a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.6a2...2.8.7a1)
+
+## [2.8.6a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.6a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.5a2...2.8.6a2)
 
 ## [2.8.5a2](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.5a2) (2026-08-31)
 
