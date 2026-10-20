@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.27a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.27a1) (2026-10-20)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.26a1...2.11.27a1)
+
+**Merged pull requests:**
+
+- fix: build namespace counterparts as verbatim copies [\#390](https://github.com/OpenVoiceOS/ovos-bus-client/pull/390) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [2.11.26a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.11.26a1) (2026-10-13)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.11.25a1...2.11.26a1)
@@ -368,10 +376,6 @@
 ## [2.8.2a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.2a1) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-bus-client/compare/2.8.1a1...2.8.2a1)
-
-**Merged pull requests:**
-
-- fix: silence deprecation warning noise on hot path [\#282](https://github.com/OpenVoiceOS/ovos-bus-client/pull/282) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [2.8.1a1](https://github.com/OpenVoiceOS/ovos-bus-client/tree/2.8.1a1) (2026-08-14)
 
