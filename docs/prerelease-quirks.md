@@ -9,6 +9,14 @@ This file resets at the next stable release. At that point its contents
 become upgrade notes for the `1.5.0 -> next-stable` jump, and a new, empty
 quirks log starts.
 
+## 2.11.29a1
+
+`MessageBusClient.remove_all_listeners(event_name)` releases the dedup
+bookkeeping of the listeners it removes, as `remove()` does. Before, the
+handler registrations, the per-handler mirror guard and the intent-pair
+guard stayed in memory after the call. No guard outlives
+the last listener of its topic pair.
+
 ## 2.11.26a2
 
 A namespace counterpart carries the sender's session verbatim. This includes

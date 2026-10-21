@@ -1488,6 +1488,9 @@ class MessageBusClient:
         if event_name is None:
             raise ValueError
         self.emitter.remove_all_listeners(event_name)
+        for func, regs in list(self._dedup_registrations.items()):
+            for ev, wrapped in [r for r in regs if r[0] == event_name]:
+                self._forget_dedup_entry(func, ev, wrapped)
 
     def run_forever(self):
         """
