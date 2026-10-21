@@ -1,7 +1,13 @@
 from unittest import TestCase, mock
 
+import pytest
+
 from ovos_bus_client.message import Message
 from ovos_bus_client.apis.ocp import ClassicAudioServiceInterface
+
+# ClassicAudioServiceInterface is a deprecated shim (use OCPInterface); this
+# module deliberately keeps exercising it for coverage, filtered per-test.
+pytestmark = pytest.mark.filterwarnings("ignore:use OCPInterface instead:DeprecationWarning")
 
 
 class TestAudioServiceControls(TestCase):

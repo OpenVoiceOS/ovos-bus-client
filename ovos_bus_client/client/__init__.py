@@ -11,4 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .client import MessageBusClient, MessageWaiter, MessageCollector
+from ovos_bus_client.client.client import MessageBusClient, MessageWaiter, MessageCollector
+try:
+    from ovos_bus_client.client.async_client import AsyncMessageBusClient, AsyncMessageWaiter, AsyncMessageCollector
+except ImportError:
+    AsyncMessageBusClient = None  # websockets not installed
+    AsyncMessageWaiter = None
+    AsyncMessageCollector = None
