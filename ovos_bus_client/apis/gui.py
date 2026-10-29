@@ -12,7 +12,7 @@ from ovos_config.locations import get_xdg_cache_save_path
 from ovos_utils.gui import can_use_gui
 from ovos_utils.log import LOG
 
-from ovos_bus_client.message import Message
+from ovos_bus_client.message import Message, dig_for_message
 from ovos_bus_client.util import get_mycroft_bus
 
 
@@ -315,6 +315,24 @@ class GUIInterface:
         self.on_gui_changed_callback = callback
 
     # internals
+    def _gui_message(self, msg_type: str, data: dict) -> Message:
+        """A GUI Message of this namespace (OVOS-GUI-1 4.1).
+
+        The namespace is ``skill_id`` in the context, as on every other
+        skill Message. The context is forwarded from the message being
+        handled, so the session it names routes the GUI Message (5.1);
+        with no such message the context names only the skill.
+
+        ``__from`` stays in ``data`` for one release cycle, for a GUI
+        service that predates GUI-1 (appendix/divergences 5.7). A GUI-1
+        service reads the context and keeps ``__from`` out of session data.
+        """
+        source = dig_for_message()
+        message = source.forward(msg_type, data) if source else Message(msg_type, data)
+        message.context["skill_id"] = self.skill_id
+        message.data["__from"] = self.skill_id
+        return message
+
     def gui_set(self, message: Message):
         """
         Handler catching variable changes from the GUI.
@@ -332,9 +350,7 @@ class GUIInterface:
             return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
-        data = self.__session_data.copy()
-        data.update({'__from': self.skill_id})
-        self.bus.emit(Message("gui.value.set", data))
+        self.bus.emit(self._gui_message("gui.value.set", self.__session_data.copy()))
 
     def __setitem__(self, key, value):
         """Implements set part of dict-like behaviour with named keys."""
@@ -380,8 +396,7 @@ class GUIInterface:
             return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
-        self.bus.emit(Message("gui.clear.namespace",
-                              {"__from": self.skill_id}))
+        self.bus.emit(self._gui_message("gui.clear.namespace", {}))
 
     def send_event(self, event_name: str,
                    params: Union[dict, list, str, int, float, bool] = None):
@@ -398,10 +413,9 @@ class GUIInterface:
         params = params or {}
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
-        self.bus.emit(Message("gui.event.send",
-                              {"__from": self.skill_id,
-                               "event_name": event_name,
-                               "params": params}))
+        self.bus.emit(self._gui_message("gui.event.send",
+                                        {"event_name": event_name,
+                                         "params": params}))
 
     @staticmethod
     def _normalize_page_name(page_name: str) -> str:
@@ -471,23 +485,21 @@ class GUIInterface:
             return
         # First sync any data...
         data = self.__session_data.copy()
-        data.update({'__from': self.skill_id})
         LOG.debug(f"Updating gui data: {data}")
-        self.bus.emit(Message("gui.value.set", data))
+        self.bus.emit(self._gui_message("gui.value.set", data))
 
-        # finally tell gui what to show
-        # OVOS-GUI-1 §3.3 / §4.1 allows an omitted __idle to mean "use the
-        # namespace default" (§4.3), but every released and dev ovos-gui
-        # reads message.data["__idle"] with no default and raises KeyError
-        # on an omitted key (ovos-gui#112, #117 add the .get() read and are
-        # not merged yet). Keep sending the key, null when unset, until a
-        # receiver that tolerates its absence ships.
-        self.bus.emit(Message("gui.page.show",
-                              {"page_names": page_names,
-                               "index": index,
-                               "__from": self.skill_id,
-                               "__idle": override_idle,
-                               "__animations": override_animations}))
+        # finally tell gui what to show. OVOS-GUI-1 4.2 names the
+        # persistence `persist`, omitted when unset (3.3). Every released
+        # ovos-gui reads data["__idle"] with no default and raises KeyError
+        # on an omitted key, so the predecessor key goes too, null when
+        # unset, for one release cycle (appendix/divergences 5.7).
+        show = {"page_names": page_names,
+                "index": index,
+                "__idle": override_idle,
+                "__animations": override_animations}
+        if override_idle is not None:
+            show["persist"] = override_idle
+        self.bus.emit(self._gui_message("gui.page.show", show))
 
     def remove_page(self, page: str):
         """
@@ -514,9 +526,7 @@ class GUIInterface:
                         "this has been deprecated in ovos-gui and may stop working anytime")
             page_names = [self._normalize_page_name(n) for n in page_names]
 
-        self.bus.emit(Message("gui.page.delete",
-                              {"page_names": page_names,
-                               "__from": self.skill_id}))
+        self.bus.emit(self._gui_message("gui.page.delete", {"page_names": page_names}))
 
     def remove_all_pages(self, except_pages=None):
         """
@@ -527,9 +537,8 @@ class GUIInterface:
             return
         if not self.bus:
             raise RuntimeError("bus not set, did you call self.bind() ?")
-        self.bus.emit(Message("gui.page.delete.all",
-                              {"__from": self.skill_id,
-                               "except": except_pages or []}))
+        self.bus.emit(self._gui_message("gui.page.delete.all",
+                                        {"except": except_pages or []}))
 
     # Utils / Templates
 
