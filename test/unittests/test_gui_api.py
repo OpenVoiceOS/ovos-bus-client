@@ -550,3 +550,86 @@ class TestGUI1ImageWireShape(TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _gui_messages(bus):
+    return [c.args[0] for c in bus.emit.call_args_list
+            if c.args[0].msg_type.startswith("gui.")]
+
+
+class TestGUI1ProducingNamespace(TestCase):
+    """OVOS-GUI-1 4.1: the namespace is the context's skill_id. The predecessor
+    `__from` stays in data for one release cycle (appendix/divergences 5.7)."""
+
+    def setUp(self):
+        self.bus = MagicMock()
+        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+
+    def test_every_gui_message_names_the_skill_in_its_context(self):
+        self.gui.show_page("SYSTEM_text", override_idle=True)
+        self.gui.send_event("clicked")
+        self.gui.remove_page("SYSTEM_text")
+        self.gui.remove_all_pages()
+        self.gui.clear()
+        messages = _gui_messages(self.bus)
+        self.assertEqual({m.msg_type for m in messages},
+                         {"gui.value.set", "gui.page.show", "gui.event.send",
+                          "gui.page.delete", "gui.page.delete.all", "gui.clear.namespace"})
+        for message in messages:
+            self.assertEqual(message.context["skill_id"], "t.skill", message.msg_type)
+            self.assertEqual(message.data["__from"], "t.skill", message.msg_type)
+
+    def test_context_is_forwarded_from_the_message_being_handled(self):
+        def intent_handler(message):
+            self.gui.show_page("SYSTEM_text")
+
+        intent_handler(Message("recognizer_loop:utterance", {},
+                               {"session": {"session_id": "kitchen"},
+                                "skill_id": "the.intent.service"}))
+        for message in _gui_messages(self.bus):
+            self.assertEqual(message.context["session"]["session_id"], "kitchen")
+            # the producing namespace is this interface, whoever handled the message
+            self.assertEqual(message.context["skill_id"], "t.skill")
+
+    def test_without_a_handled_message_the_context_names_only_the_skill(self):
+        self.gui.show_page("SYSTEM_text")
+        for message in _gui_messages(self.bus):
+            self.assertEqual(message.context, {"skill_id": "t.skill"})
+
+    def test_the_handled_message_is_not_stamped(self):
+        source = Message("recognizer_loop:utterance", {}, {"session": {"session_id": "kitchen"}})
+
+        def intent_handler(message):
+            self.gui.show_page("SYSTEM_text")
+
+        intent_handler(source)
+        self.assertNotIn("skill_id", source.context)
+
+
+class TestGUI1PersistField(TestCase):
+    """OVOS-GUI-1 4.2: persistence is the `persist` field of gui.page.show,
+    omitted when unset (3.3). `__idle` goes beside it for one release cycle."""
+
+    def setUp(self):
+        self.bus = MagicMock()
+        self.gui = GUIInterface(skill_id="t.skill", bus=self.bus)
+
+    def test_persist_is_omitted_when_unset(self):
+        self.gui.show_page("SYSTEM_text")
+        self.assertNotIn("persist", _page_shows(self.bus)[-1].data)
+
+    def test_persist_carries_true(self):
+        self.gui.show_page("SYSTEM_text", override_idle=True)
+        data = _page_shows(self.bus)[-1].data
+        self.assertIs(data["persist"], True)
+        self.assertIs(data["__idle"], True)
+
+    def test_persist_carries_seconds(self):
+        self.gui.show_pages(["SYSTEM_text", "SYSTEM_image"], override_idle=45)
+        data = _page_shows(self.bus)[-1].data
+        self.assertEqual(data["persist"], 45)
+        self.assertEqual(data["__idle"], 45)
+
+    def test_persist_carries_false(self):
+        self.gui.show_page("SYSTEM_text", override_idle=False)
+        self.assertIs(_page_shows(self.bus)[-1].data["persist"], False)
